@@ -274,3 +274,19 @@ def test_lakes_overflow_when_humid_and_close_when_arid() -> None:
     assert evaporation <= inflow * 1.2
     # Its water never reaches the sea; the humid lake passes its surplus on.
     assert arid.discharge_m3_s[land & (arid.lake < 0)].max() < humid.discharge_m3_s[land].max()
+
+
+def test_ice_sheets_hold_no_young_lakes() -> None:
+    from dmtools.terrain.pipeline.planet_lakes import young_depressions
+
+    mesh = build_mesh(8_000, RADIUS, 2)
+    land = np.ones(mesh.size, dtype=bool)
+    coast = np.full(mesh.size, 1e6)
+    flat = np.full(mesh.size, 200.0)
+    ice_free = young_depressions(mesh, land, coast, None, np.full(mesh.size, 10.0), flat, 1)
+    ice = young_depressions(mesh, land, coast, None, np.full(mesh.size, -5.0), flat, 1)
+    assert ice_free.max() > 0
+    # Under permanent ice only non-glacial sags remain; scour adds nothing.
+    no_scour = young_depressions(mesh, land, coast, None, None, flat, 1)
+    assert np.all(ice <= no_scour + 1e-9)
+    assert np.all(ice <= ice_free + 1e-9)

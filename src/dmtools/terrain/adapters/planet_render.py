@@ -41,6 +41,7 @@ SEA_STOPS = (
 )
 ROCK_STOPS = ((0, (0, 0, 0)), (1500, (0, 0, 0)), (3200, (150, 130, 115)), (5000, (245, 245, 245)))
 RIVER_COLOUR = (52, 96, 160)
+ICE_BIOME = 1
 LAKE_COLOUR = (78, 130, 182)
 SALT_LAKE_COLOUR = (150, 170, 176)
 SECONDS_PER_YEAR = 365.25 * 86400
@@ -187,6 +188,14 @@ def scalar_image(
     return Image.fromarray(rgb.astype(np.uint8))
 
 
+def ice_covered(result: PlanetResult) -> B:
+    """Nodes under permanent ice (no surface rivers or lakes are drawn there)."""
+    climate = result.climate
+    if climate is None:
+        return np.zeros(result.mesh.size, dtype=bool)
+    return climate.biome == ICE_BIOME
+
+
 def river_threshold_m3_s(result: PlanetResult, area_km2: float) -> float:
     """Discharge equivalent to ``area_km2`` at the planet's mean land runoff."""
     land = result.land
@@ -211,7 +220,8 @@ def draw_rivers(
     y = (90 - np.rad2deg(mesh.lat)) / 180 * rows
     water = ~result.land
     nodes = np.flatnonzero(
-        (~water) & ~on_lake & (flow.receiver >= 0) & (discharge >= threshold_m3_s)
+        (~water) & ~on_lake & ~ice_covered(result) & (flow.receiver >= 0)
+        & (discharge >= threshold_m3_s)
     )
     if not len(nodes):
         return 0

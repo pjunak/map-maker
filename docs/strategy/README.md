@@ -79,9 +79,12 @@ M6 has an early experimental product slice: parent-calibrated regional detail fr
 window-independent blended tiles ([ADR-0086](../adr/0086-regional-planet-detail-from-blended-tiles.md),
 [evidence](../research/2026-10-06-regional-enrichment-tiles.md)), with a World-tab zoom.
 
+The first authored world (9 continents, 185 shapes) ran end to end
+([report](../research/2026-10-06-first-authored-world-planet.md)); ice-sheet lakes and
+rivers were fixed.
+
 Next:
-1. Run the planet on real authored worlds and record what breaks: scale, shape
-   count, thin straits, polar land.
+1. Authored geology for real worlds; optional derived coast refinement for zoom.
 2. Consume the bathymetry product for the ocean floor, or record why not.
 3. Expose planet climate assumptions (obliquity, temperatures, winds) in the panel.
 

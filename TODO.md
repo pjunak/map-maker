@@ -92,7 +92,8 @@ Update them with the affected milestone and evidence in every substantive batch.
     manifest-last build, schema and ADR-0085.
   - [x] World-tab Planet stage: generate, cancel, atlas/relief/rainfall/temperature
     layers, hover inspection, export; stale results discarded on edit.
-  - [ ] Real authored worlds; bathymetry product as the ocean floor.
+  - [x] First real authored world end to end (9 continents; ice-sheet fix).
+  - [ ] Bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.
   - [x] Research-harness climate v0, runoff-weighted erosion coupling, atlas render and

@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [First authored world through the planet — 2026-10-06](2026-10-06-first-authored-world-planet.md)
+  runs a private 9-continent world at 200k/800k nodes and regional zoom, fixes lakes and
+  rivers on ice sheets, and records staircase-coast and placeholder-geology findings.
+
 - [Regional enrichment and blended tiles — 2026-10-06](2026-10-06-regional-enrichment-tiles.md)
   regenerates planet regions at 5 km with parent-calibrated uplift. Overlapping windows
   disagree (238 m RMS), so fixed blended tiles give window-independent detail.

@@ -89,11 +89,14 @@ def young_depressions(
     sag = _smoothstep(fbm3(p, seed + 606, 3, 4.0), 0.25, 0.55) * _smoothstep(coast_m, 300e3, 800e3)
     depth += np.where(automatic, INTERIOR_SAG_DEPTH_M * sag, 0.0)
     if warm_season_c is not None:
-        # Recently glaciated lowlands: cool summers (below ~14-19 °C), below 1,500 m.
+        # Recently de-glaciated lowlands: cool but ice-free summers, below 1,500 m.
         lowland = 1 - _smoothstep(elevation_m, 900, 1500)
         glaciated = _smoothstep(-warm_season_c, -19.0, -14.0) * lowland
         scour = np.maximum(0.0, fbm3(p, seed + 707, 3, 32.0) - 0.1) / 0.9
         depth += GLACIAL_SCOUR_DEPTH_M * glaciated * scour
+    if warm_season_c is not None:
+        # Land still under ice has no open water: its depressions hold ice, not lakes.
+        depth *= _smoothstep(warm_season_c, -1.0, 2.0)
     # Coastal scour would make fjords (sea), not lakes; keep depressions inland.
     return np.where(land, depth * _smoothstep(coast_m, 30e3, 100e3), 0.0)
 

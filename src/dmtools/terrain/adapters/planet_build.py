@@ -26,6 +26,7 @@ from rasterio.crs import CRS
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
+    ice_covered,
     planet_rasters,
     preview_images,
     river_threshold_m3_s,
@@ -91,7 +92,9 @@ def river_features(result: PlanetResult, threshold_m3_s: float) -> dict[str, obj
     discharge = result.lakes.discharge_m3_s
     on_lake = result.lakes.lake >= 0
     water = ~result.land | on_lake
-    major = (~water) & (flow.receiver >= 0) & (discharge >= threshold_m3_s)
+    major = (~water) & ~ice_covered(result) & (flow.receiver >= 0) & (
+        discharge >= threshold_m3_s
+    )
     donors = np.zeros(mesh.size, dtype=np.int64)
     np.add.at(donors, flow.receiver[major], 1)
     lon = np.rad2deg(mesh.lon)
