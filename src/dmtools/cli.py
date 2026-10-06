@@ -134,6 +134,29 @@ def create_parser() -> argparse.ArgumentParser:
     inspect_bathymetry.add_argument(
         "result", type=Path, help="Result directory or bathymetry.json.")
     inspect_bathymetry.set_defaults(_handler=_run_world_bathymetry_inspect)
+    planet = world_commands.add_parser(
+        "planet",
+        help="Experimental: whole-planet relief by uplift and erosion, with climate and biomes.",
+    )
+    planet.add_argument("project", type=Path, help="Portable .dmworld.json project.")
+    planet.add_argument("--output", type=Path, required=True, help="New build directory.")
+    planet.add_argument("--geology", type=Path, help="Optional matching .dmgeology.json recipe.")
+    planet.add_argument("--seed", type=int, default=20261006)
+    planet.add_argument("--nodes", type=int, default=200_000,
+                        help="Sphere mesh nodes (200,000 ~ 50 km spacing on an Earth-size world).")
+    planet.add_argument("--duration-myr", type=float, default=30.0)
+    planet.add_argument("--erodibility", type=float, default=4e-6,
+                        help="Base erodibility; lower values give higher relief.")
+    planet.add_argument("--process-km2", type=float, default=10_000.0,
+                        help="Smallest resolved drainage area (keeps relief mesh-independent).")
+    planet.add_argument("--calibrate", type=int, default=3,
+                        help="Geology target corrections (only with --geology).")
+    planet.add_argument("--climate-passes", type=int, default=1,
+                        help="Climate/erosion couplings; 0 disables climate and biomes.")
+    planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")
+    planet.add_argument("--river-km2", type=float, default=25_000.0,
+                        help="Contributing area for drawn and exported rivers.")
+    planet.set_defaults(_handler=_run_world_planet)
     return parser
 
 
@@ -169,6 +192,40 @@ def _run_world_terrain(arguments: argparse.Namespace) -> int:
           if created.loaded.project.world_context else "not supplied; local coastal distance."))
     print(f"Landform regions: {len(created.loaded.project.constraints)}. "
           "World climate and aging are not applied yet.")
+    return 0
+
+
+def _run_world_planet(arguments: argparse.Namespace) -> int:
+    from dmtools.terrain.application.planet import build_planet
+    from dmtools.terrain.domain.planet import PlanetSettings
+
+    last = [-1]
+
+    def progress(fraction: float, message: str) -> None:
+        percent = int(fraction * 100)
+        if percent != last[0]:
+            last[0] = percent
+            print(f"{percent:3d}% {message}", file=sys.stderr, flush=True)
+
+    try:
+        settings = PlanetSettings(
+            seed=arguments.seed,
+            nodes=arguments.nodes,
+            duration_myr=arguments.duration_myr,
+            erodibility=arguments.erodibility,
+            process_area_km2=arguments.process_km2,
+            calibration_iterations=arguments.calibrate,
+            climate_passes=arguments.climate_passes,
+        )
+        path = build_planet(
+            arguments.project, arguments.output, arguments.geology, settings,
+            width=arguments.width, river_km2=arguments.river_km2, progress=progress,
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"Planet generation failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Planet build complete: {path}")
+    print("Experimental relief and provisional climate; see relief.png / atlas.png.")
     return 0
 
 

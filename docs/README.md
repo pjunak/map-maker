@@ -3,6 +3,8 @@
 ## Where to start
 
 1. To import and review a whole world, read the [world guide](terrain-worlds.md).
+   To generate whole-planet relief, climate and biomes from it, read the
+   [planet guide](world-planet.md).
    To generate local terrain, read the
    [terrain tool guide](../src/dmtools/terrain/README.md).
    For stopping work safely, read [generation cancellation](terrain-generation-control.md).

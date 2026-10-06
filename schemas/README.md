@@ -28,6 +28,10 @@ Only the current formats are supported:
   samples, numerical error/support, a retained verified geographic dependency and
   result hashes. Neither a land DEM nor physical transport/heat capacity.
 
+- [Planet build v1](world/planet-build-v1.schema.json): experimental whole-planet relief
+  (`sphere-mesh-stream-power-v1`) and provisional climate. Node elevation on the sphere
+  mesh is authoritative; world-frame GeoTIFF/images are derived. Not a world parent.
+
 - [Terrain context v1](terrain/context-v1.schema.json): bounded geographic support
   serialized as a verified compressed sample binding, plus the metadata report
   retained by a completed terrain build. It does not redefine the terrain land mask.

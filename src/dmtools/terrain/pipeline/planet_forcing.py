@@ -1,0 +1,282 @@
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+"""World inputs on the sphere mesh and their conversion to erosion forcing.
+
+* Land is the exact vector point-in-polygon of prepared world land at each node.
+* Coast distance is graph distance from land/water edge midpoints.
+* Without geology a procedural forcing places ridged orogenic belts, active
+  margins and weak inland craton uplift.
+* With a geology recipe each resolved region gets a setting erodibility and a
+  soft elevation target, from its landform or a setting default. Calibration
+  later rescales its uplift towards that target.
+"""
+
+from dataclasses import dataclass
+from math import exp
+
+import numpy as np
+import shapely
+from numpy.typing import NDArray
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+
+from dmtools.terrain.domain.models import LandformSettings
+from dmtools.terrain.domain.world import WorldFrame
+from dmtools.terrain.domain.world_geology import GeologyProfile, WorldGeologyRecipe
+from dmtools.terrain.pipeline.planet_kernels import multi_source_distance
+from dmtools.terrain.pipeline.planet_mesh import SphereMesh
+from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.world import WorldMap
+from dmtools.terrain.pipeline.world_geology import resolve_geology
+
+type F64 = NDArray[np.float64]
+type I64 = NDArray[np.int64]
+type B = NDArray[np.bool_]
+
+# Setting -> (landform character, base elevation m, relief m, transition km) when
+# a profile has no explicit landform. Unspecified settings stay procedural.
+SETTING_INTENT: dict[str, tuple[str, float, float, float]] = {
+    "active-belt": ("mountains", 900.0, 3200.0, 120.0),
+    "volcanic": ("mountains", 700.0, 1800.0, 80.0),
+    "stable-interior": ("plain", 380.0, 180.0, 150.0),
+    "rift": ("hills", 250.0, 500.0, 60.0),
+    "sedimentary-basin": ("plain", 120.0, 60.0, 120.0),
+}
+SETTING_ERODIBILITY = {
+    "active-belt": 1.0,
+    "volcanic": 0.8,
+    "stable-interior": 0.5,
+    "rift": 1.4,
+    "sedimentary-basin": 2.5,
+    "unspecified": 1.0,
+}
+OROGEN_DECAY_MYR = 120.0
+OLD_CRUST_MA = 1000.0
+OLD_CRUST_ERODIBILITY = 0.7
+PLATEAU_PULSE_FRACTION = 0.2
+REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
+
+
+def node_source_xy(frame: WorldFrame, mesh: SphereMesh) -> tuple[F64, F64]:
+    """Node positions in the world SVG frame (respecting the central meridian)."""
+    lon, lat = np.rad2deg(mesh.lon), np.rad2deg(mesh.lat)
+    offset = (lon - frame.central_meridian_deg + 180) % 360
+    return (
+        frame.bounds[0] + offset / 360 * frame.width,
+        frame.bounds[1] + (90 - lat) / 180 * frame.height,
+    )
+
+
+def land_on_mesh(world: WorldMap, mesh: SphereMesh) -> B:
+    land = unary_union(
+        [Polygon(c.exterior, c.holes) for view in world.land for c in view.components]
+    )
+    shapely.prepare(land)
+    x, y = node_source_xy(world.project.frame, mesh)
+    return np.asarray(shapely.contains_xy(land, x, y), dtype=bool)
+
+
+def coast_distance(mesh: SphereMesh, land: B) -> F64:
+    """Graph distance (m) from every node to the nearest land/water edge midpoint."""
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    crossing = land[src] != land[mesh.nbr]
+    if not np.any(crossing):
+        return np.full(mesh.size, np.inf)
+    return multi_source_distance(
+        src[crossing], mesh.length_m[crossing] / 2, mesh.ptr, mesh.nbr, mesh.length_m
+    )
+
+
+def _smoothstep(x: F64, a: float, b: float) -> F64:
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+@dataclass(frozen=True, slots=True)
+class ProceduralForcing:
+    uplift: F64  # m/yr
+    texture: F64  # dimensionless rock-erodibility variation (median ~1)
+
+
+def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> ProceduralForcing:
+    """Ridged-noise orogens, noise-gated active margins and weak inland cratons."""
+    p = mesh.xyz
+    warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
+    ridged = 1 - np.abs(fbm3(p + 0.35 * warp, seed + 101, 4, 1.4))
+    belts = _smoothstep(ridged, 0.80, 0.97) * _smoothstep(coast_m, 0.0, 150e3)
+    gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
+    margins = gate * _smoothstep(coast_m, 30e3, 120e3) * (1 - _smoothstep(coast_m, 250e3, 500e3))
+    interior = _smoothstep(coast_m, 0.0, 600e3)
+    uplift = 2e-5 * (1 + 2 * interior) + 1.2e-3 * belts + 6e-4 * margins
+    texture = np.exp(1.1 * fbm3(p, seed + 404, 5, 3.0))
+    return ProceduralForcing(np.where(land, uplift, 0.0), texture)
+
+
+@dataclass(frozen=True, slots=True)
+class RegionIntent:
+    """Soft elevation target and rock behaviour for one resolved geology region."""
+
+    name: str
+    character: str
+    target_m: float
+    statistic: str  # "mean", "median" or "p90"
+    transition_km: float
+    erodibility: float
+    age_factor: float
+
+
+def region_intent(profile: GeologyProfile, name: str) -> RegionIntent | None:
+    landform: LandformSettings | None = profile.landform
+    if landform is not None:
+        character, base, relief, transition = (
+            landform.character, landform.elevation_m, landform.relief_m, landform.transition_km
+        )
+    elif profile.setting in SETTING_INTENT:
+        character, base, relief, transition = SETTING_INTENT[profile.setting]
+    else:
+        return None
+    age_factor = 1.0
+    if profile.rejuvenation_age_ma is not None and character in ("mountains", "hills"):
+        # Older mountain building leaves lower, smoother residual relief.
+        age_factor = max(0.12, exp(-profile.rejuvenation_age_ma / OROGEN_DECAY_MYR))
+    relief *= age_factor
+    statistic, target = {
+        "plain": ("mean", base),
+        "hills": ("mean", base + 0.4 * relief),
+        "plateau": ("median", base),
+        "mountains": ("p90", base + 0.75 * relief),
+    }[character]
+    erodibility = SETTING_ERODIBILITY.get(profile.setting, 1.0)
+    if profile.crust_age_ma is not None and profile.crust_age_ma > OLD_CRUST_MA:
+        erodibility *= OLD_CRUST_ERODIBILITY
+    return RegionIntent(name, character, target, statistic, transition, erodibility, age_factor)
+
+
+@dataclass(frozen=True, slots=True)
+class GeologyRegions:
+    region: I64  # index per node; -1 for water or land outside every region
+    intents: tuple[RegionIntent | None, ...]
+    names: tuple[str, ...]
+    ids: tuple[str, ...]
+
+
+def geology_regions(
+    world: WorldMap, recipe: WorldGeologyRecipe, mesh: SphereMesh, land: B
+) -> GeologyRegions:
+    coverage = resolve_geology(world, recipe)
+    x, y = node_source_xy(world.project.frame, mesh)
+    region = np.full(mesh.size, -1, dtype=np.int64)
+    for index, item in enumerate(coverage.regions):
+        shapely.prepare(item.geometry)
+        inside = land & (region < 0) & np.asarray(shapely.contains_xy(item.geometry, x, y))
+        region[inside] = index
+    # Land nodes exactly on region boundaries take a neighbour's region.
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    for _ in range(4):
+        missing = land & (region < 0)
+        if not missing.any():
+            break
+        donor = np.full(mesh.size, -1, dtype=np.int64)
+        candidate = missing[src] & (region[mesh.nbr] >= 0)
+        donor[src[candidate]] = region[mesh.nbr[candidate]]
+        region = np.where(missing & (donor >= 0), donor, region)
+    return GeologyRegions(
+        region,
+        tuple(region_intent(r.profile, r.name) for r in coverage.regions),
+        tuple(r.name for r in coverage.regions),
+        tuple(r.id for r in coverage.regions),
+    )
+
+
+def smooth_over_land(mesh: SphereMesh, values: F64, land: B, length_m: float) -> F64:
+    """Graph diffusion over land, spreading roughly ``length_m``."""
+    steps = min(400, max(0, round((length_m / mesh.spacing_m) ** 2)))
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    valid = land[src] & land[mesh.nbr]
+    degree = np.bincount(src[valid], minlength=mesh.size).astype(np.float64)
+    out = values.copy()
+    for _ in range(steps):
+        total = np.bincount(src[valid], weights=out[mesh.nbr[valid]], minlength=mesh.size)
+        mean = np.divide(total, degree, out=out.copy(), where=degree > 0)
+        out = np.where(land, 0.5 * out + 0.5 * mean, out)
+    return out
+
+
+@dataclass(frozen=True, slots=True)
+class Forcing:
+    """Per-node erosion forcing for one evolution (SI units)."""
+
+    steady_uplift: F64  # m/yr over the whole history
+    pulse_uplift: F64  # m/yr added in the final pulse window
+    erodibility: F64
+    procedural: B
+
+
+def build_forcing(
+    mesh: SphereMesh,
+    land: B,
+    coast_m: F64,
+    regions: GeologyRegions | None,
+    scale: F64,
+    seed: int,
+    base_erodibility: float,
+    duration_yr: float,
+) -> Forcing:
+    """Combine procedural and authored forcing; ``scale`` multiplies each region's uplift."""
+    procedural = procedural_forcing(mesh, land, coast_m, seed)
+    steady = np.zeros(mesh.size)
+    pulse = np.zeros(mesh.size)
+    factor = np.ones(mesh.size)
+    transition = np.zeros(mesh.size)
+    automatic = land.copy() if regions is None else land & (regions.region < 0)
+    pulse_years = PLATEAU_PULSE_FRACTION * duration_yr
+    for index, intent in enumerate(() if regions is None else regions.intents):
+        assert regions is not None
+        nodes = regions.region == index
+        if intent is None:
+            automatic |= nodes
+            continue
+        target = max(intent.target_m, 20.0)
+        if intent.character == "plateau":
+            # Late block uplift leaves a little-dissected surface with incised edges.
+            steady[nodes] = 2e-5 * scale[index]
+            pulse[nodes] = target / pulse_years * scale[index]
+        else:
+            steady[nodes] = target / REFERENCE_RELIEF_M_PER_MM_YR * 1e-3 * scale[index]
+        factor[nodes] = intent.erodibility
+        transition[nodes] = intent.transition_km * 1e3
+    steady = np.where(automatic, procedural.uplift, steady)
+    authored = land & ~automatic
+    if np.any(authored):
+        half = float(np.median(transition[authored])) / 2
+        steady = smooth_over_land(mesh, steady, land, half)
+        pulse = smooth_over_land(mesh, pulse, land, half)
+        factor = smooth_over_land(mesh, factor, land, half)
+    erodibility = base_erodibility * factor * procedural.texture
+    return Forcing(steady, pulse, erodibility, automatic)
+
+
+def measure_regions(h: F64, regions: GeologyRegions) -> tuple[float | None, ...]:
+    values: list[float | None] = []
+    for index, intent in enumerate(regions.intents):
+        z = h[regions.region == index]
+        if intent is None or not len(z):
+            values.append(None)
+        elif intent.statistic == "p90":
+            values.append(float(np.percentile(z, 90)))
+        elif intent.statistic == "median":
+            values.append(float(np.median(z)))
+        else:
+            values.append(float(np.mean(z)))
+    return tuple(values)
+
+
+def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
+    """Display bathymetry (m, negative): shelf, slope, abyss, ridges and hills."""
+    shelf = _smoothstep(coast_m, 0, 120e3)
+    slope = _smoothstep(coast_m, 120e3, 450e3)
+    depth = 150 * shelf + 3800 * slope
+    hills = fbm3(mesh.xyz, seed + 909, 6, 6.0)
+    ridge = 1 - np.abs(fbm3(mesh.xyz, seed + 808, 3, 1.0))
+    depth -= slope * (900 * _smoothstep(ridge, 0.75, 0.98) - 250 * hills)
+    return np.where(water, -depth, 0.0)

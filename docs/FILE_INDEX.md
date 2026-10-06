@@ -79,6 +79,7 @@ Current user workflows and numeric/file semantics, with future limits labelled i
 | [docs/terrain-water-budget.md](terrain-water-budget.md) | Forecast water-sampling demand |
 | [docs/terrain-water.md](terrain-water.md) | Authored lakes and dry basins |
 | [docs/terrain-worlds.md](terrain-worlds.md) | Import, map, validate and save retained world sources; geographic and workflow limits. |
+| [docs/world-planet.md](world-planet.md) | Experimental whole-planet relief, climate and biomes: command, options, outputs, alignment with the SVG and limits. |
 | [docs/world-bathymetry.md](world-bathymetry.md) | Explicit ocean selection, shelf/slope/basin hypotheses, numerical depth/error/support and portable input/result workflow. |
 | [docs/world-context.md](world-context.md) | Generate spherical geography, inspect water/resolution support and export context products. |
 | [docs/world-geology.md](world-geology.md) | Author continent defaults and independent province hypotheses; priority, time, coverage and portable recipe contracts. |
@@ -189,6 +190,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0081-blend-adjoining-landform-regions.md](adr/0081-blend-adjoining-landform-regions.md) | Shared regional weighting, blank holes, established interiors and matching probe/cut support. |
 | [docs/adr/0082-own-structure-profiles.md](adr/0082-own-structure-profiles.md) | Explicit line profile ownership, sampling support, editor and current-format contracts. |
 | [docs/adr/0083-preserve-shared-ridge-crests.md](adr/0083-preserve-shared-ridge-crests.md) | Preserved ridge contacts, compatible heights, centreline ownership and remaining graph limits. |
+| [docs/adr/0085-generate-planet-relief-on-a-sphere-mesh.md](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) | Whole-planet relief by uplift/stream-power erosion on an irregular sphere mesh; node+TIN authority; Numba runtime. |
 | [docs/adr/0084-bind-geographic-context-to-rough-terrain.md](adr/0084-bind-geographic-context-to-rough-terrain.md) | Bounded immutable geographic context, conservative coastal-distance consumption and explicit unsupported M1 fields. |
 
 ## Dated research reports (81)
@@ -197,6 +199,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 
 | File | Purpose or document title |
 |---|---|
+| [docs/research/2026-10-06-planet-climate-v0.md](research/2026-10-06-planet-climate-v0.md) | Planet climate v0 (temperature, winds, moisture, runoff, provisional biomes), erosion coupling, failed calibration steps and limits. |
 | [docs/research/2026-10-06-whole-planet-erosion-relief.md](research/2026-10-06-whole-planet-erosion-relief.md) | Whole-planet uplift/erosion on an irregular sphere mesh: resolution sweep, isotropy, Hack exponent and limits. |
 | [docs/research/2026-09-28-context-bound-rough-terrain.md](research/2026-09-28-context-bound-rough-terrain.md) | M1 context binding, continuous conservative shoreline support, paired public control and validation limits. |
 | [docs/research/2026-09-27-shared-landform-blending.md](research/2026-09-27-shared-landform-blending.md) | Replacement of background seams, rejected enclave-leaking kernel, paired evidence and remaining slope limits. |
@@ -311,6 +314,7 @@ are included for a complete route from plans to the current usable formats.
 | [schemas/terrain/project-v9.schema.json](../schemas/terrain/project-v9.schema.json) | Current authored local terrain project format with optional bounded world context. |
 | [schemas/terrain/regional-samples-v3.schema.json](../schemas/terrain/regional-samples-v3.schema.json) | Current bounded unchanged-field sampling artifact contract. |
 | [schemas/world/bathymetry-inputs-v1.schema.json](../schemas/world/bathymetry-inputs-v1.schema.json) | Retained-world ocean selection and explicit physical shelf/slope/basin assumptions. |
+| [schemas/world/planet-build-v1.schema.json](../schemas/world/planet-build-v1.schema.json) | Experimental planet build manifest: settings, stage seeds, inputs, mesh/raster mapping, calibration, metrics and output hashes. |
 | [schemas/world/bathymetry-v1.schema.json](../schemas/world/bathymetry-v1.schema.json) | Completed depth/error arrays, verified geography dependency and source/runtime/product identity. |
 | [schemas/world/context-v4.schema.json](../schemas/world/context-v4.schema.json) | Spherical context products, source/runtime identity, coverage/topology/support, shared-edge widths, water-piece incidence/unresolved support, shore distance, exposure and hashes. |
 | [schemas/world/geology-v2.schema.json](../schemas/world/geology-v2.schema.json) | Authored continent profiles, explicit landform controls and priority polygons with retained world identity and a common present. |

@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dmtools.local/schemas/world/planet-build-v1.schema.json",
+  "title": "DM Tools experimental whole-planet relief build v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "status",
+    "algorithms",
+    "settings",
+    "seed_policy",
+    "stage_seeds",
+    "inputs",
+    "runtime",
+    "compiled_kernels",
+    "world_frame",
+    "mesh",
+    "raster",
+    "calibration",
+    "metrics",
+    "climate",
+    "rivers",
+    "outputs",
+    "build_sha256"
+  ],
+  "properties": {
+    "schema": { "const": "dmtools.planet-build" },
+    "version": { "type": "integer", "const": 1 },
+    "status": { "const": "experimental" },
+    "algorithms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relief", "climate"],
+      "properties": {
+        "relief": { "const": "sphere-mesh-stream-power-v1" },
+        "climate": { "enum": ["planet-climate-v0", null] }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "required": [
+        "seed", "nodes", "duration_myr", "step_kyr", "erodibility", "area_exponent",
+        "process_area_km2", "calibration_iterations", "climate_passes", "climate"
+      ],
+      "properties": {
+        "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "nodes": { "type": "integer", "minimum": 2000, "maximum": 4000000 },
+        "duration_myr": { "type": "number", "exclusiveMinimum": 0 },
+        "step_kyr": { "type": "number", "exclusiveMinimum": 0 },
+        "erodibility": { "type": "number", "exclusiveMinimum": 0 },
+        "area_exponent": { "type": "number" },
+        "process_area_km2": { "type": "number", "minimum": 0 },
+        "calibration_iterations": { "type": "integer", "minimum": 0 },
+        "climate_passes": { "type": "integer", "minimum": 0 },
+        "climate": { "type": "object" }
+      }
+    },
+    "seed_policy": { "const": "named-stage-sha256@1" },
+    "stage_seeds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planet.mesh", "planet.forcing", "planet.initial"],
+      "properties": {
+        "planet.mesh": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "planet.forcing": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "planet.initial": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world_sha256", "geology_sha256"],
+      "properties": {
+        "world_sha256": { "$ref": "#/$defs/sha256" },
+        "geology_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+      }
+    },
+    "runtime": { "type": "object" },
+    "compiled_kernels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numba", "llvmlite"],
+      "properties": { "numba": { "type": "string" }, "llvmlite": { "type": "string" } }
+    },
+    "world_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bounds", "radius_km", "central_meridian_deg"],
+      "properties": {
+        "bounds": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+        "radius_km": { "type": "number", "exclusiveMinimum": 0 },
+        "central_meridian_deg": { "type": "number" }
+      }
+    },
+    "mesh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "triangles", "spacing_km", "authority"],
+      "properties": {
+        "nodes": { "type": "integer" },
+        "triangles": { "type": "integer" },
+        "spacing_km": { "type": "number" },
+        "authority": { "type": "string" }
+      }
+    },
+    "raster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "registration", "maps_to", "crs_wkt"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 64 },
+        "height": { "type": "integer", "minimum": 32 },
+        "registration": { "const": "PixelIsArea" },
+        "maps_to": { "type": "string" },
+        "crs_wkt": { "type": "string" }
+      }
+    },
+    "calibration": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "target_m", "measured_m", "scale"],
+          "properties": {
+            "name": { "type": "string" },
+            "target_m": { "type": ["number", "null"] },
+            "measured_m": { "type": ["number", "null"] },
+            "scale": { "type": "number" }
+          }
+        }
+      }
+    },
+    "metrics": { "type": "object" },
+    "climate": { "type": ["object", "null"] },
+    "rivers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threshold_km2", "features"],
+      "properties": {
+        "threshold_km2": { "type": "number", "exclusiveMinimum": 0 },
+        "features": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "required": ["world.dmworld.json", "planet.npz", "elevation.tif", "relief.png", "rivers.geojson"],
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sha256", "bytes"],
+        "properties": {
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "build_sha256": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

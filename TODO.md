@@ -88,9 +88,15 @@ Update them with the affected milestone and evidence in every substantive batch.
     resolution sweep ([evidence](docs/research/2026-10-06-whole-planet-erosion-relief.md)).
   - [x] Geology settings/ages/landform intent → uplift and erodibility with calibrated
     elevation targets (research harness).
-  - [ ] Promote to `src` with stage seeds, cancellation, CLI, manifest and ADR.
+  - [x] Promote to `src` with stage seeds, cancellation, CLI (`dmtools world planet`),
+    manifest-last build, schema and ADR-0085.
+  - [ ] World-tab Planet stage (generate, cancel, view atlas/layers).
+  - [ ] Real authored worlds; bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.
+  - [x] Research-harness climate v0, runoff-weighted erosion coupling, atlas render and
+    windward/leeward control ([evidence](docs/research/2026-10-06-planet-climate-v0.md)).
+  - [ ] Monthly/seasonal outputs, lakes and endorheic basins, energy-balance check.
 - [ ] **M4 / WC3-WC4:** runoff-weighted erosion with bounded climate feedback, lakes,
   World-tab stage, comparison, cancellation and stale-result handling.
 - [ ] **M5 / adoption:** reference-world quality gates, accepted planet parent, native

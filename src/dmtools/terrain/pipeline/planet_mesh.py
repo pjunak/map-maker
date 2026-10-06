@@ -6,8 +6,6 @@ A whole-planet grid without poles, seams or eight preferred flow directions.
 The convex hull of points on a sphere is their spherical Delaunay triangulation.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from math import pi, sqrt
 
@@ -78,7 +76,8 @@ def _cot(u: F64, v: F64) -> F64:
     return np.einsum("ij,ij->i", u, v) / np.linalg.norm(np.cross(u, v), axis=1)
 
 
-def build_mesh(count: int, radius_m: float, seed: int = 0, jitter: float = 0.35) -> SphereMesh:
+def build_mesh(count: int, radius_m: float, seed: int, jitter: float = 0.35) -> SphereMesh:
+    """Deterministic mesh: ``seed`` is the ``planet.mesh`` stage seed."""
     xyz = fibonacci_nodes(count, seed, jitter)
     triangles = ConvexHull(xyz).simplices.astype(np.int64)
     a, b, c = xyz[triangles[:, 0]], xyz[triangles[:, 1]], xyz[triangles[:, 2]]

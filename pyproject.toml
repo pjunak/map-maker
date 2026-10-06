@@ -22,12 +22,12 @@ dependencies = [
   "svgelements>=1.9.6,<2",
   "rasterio>=1.5.1,<2",
   "affine>=3.0.1,<4",
+  "numba>=0.68,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
   "jsonschema>=4.25,<5",
-  "numba>=0.68,<1",
   "pyright>=1.1",
   "pytest>=8",
   "ruff>=0.12",

@@ -10,8 +10,20 @@ interface should call the same engine rather than replacing it.
 
 ## Status
 
-The [ordered implementation plan](docs/strategy/README.md) now prioritizes M2
-climate/runoff after completing the experimental M1 context-bound rough-terrain slice.
+**New (2026-10-06): whole-planet maps.** `dmtools world planet` turns a saved world
+into whole-planet relief made by uplift and river erosion on an irregular sphere
+mesh: poles, seam and ocean floor included, with rivers that always run downhill.
+It can also produce a provisional climate and biome atlas. Your coastline is never
+changed, and an optional geology recipe sets where ranges, plateaus and basins
+stand. It is experimental. See the [planet guide](docs/world-planet.md) and the
+world-first [implementation plan](docs/strategy/README.md).
+
+```powershell
+dmtools world planet examples/world/four-shores.dmworld.json --output artifacts/four-shores-planet
+```
+
+The earlier local-terrain status follows. The [ordered implementation plan](docs/strategy/README.md)
+now puts whole-planet relief (M2) first, with climate (M3) on the same mesh.
 The [research decision catalog](docs/research/decision-catalog.md) records what was
 evaluated, why it was used or deferred, and when to revisit it. The capabilities
 below describe what actually runs today; M1 is experimental rather than accepted

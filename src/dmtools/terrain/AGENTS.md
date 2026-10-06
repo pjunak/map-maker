@@ -35,7 +35,9 @@ dictionaries or global settings.
 - Vector constraints express coastlines, water levels, spot heights, ridges,
   valleys, divides, breaklines, and terrain-character regions.
 - A Float32 raster DEM in metres is the authoritative generated elevation
-  surface for a build.
+  surface for a local terrain build. Whole-planet builds instead use node
+  elevation on the sphere mesh with triangle-linear interpolation (ADR-0085);
+  their rasters and images are derived.
 - Contours, hillshade, colour relief, drainage, catchments, and meshes are
   derived outputs and must identify their source DEM.
 - Editing changes authored generation inputs only. A generated map may remain

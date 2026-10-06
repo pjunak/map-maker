@@ -18,9 +18,9 @@ while measuring them, and avoid concurrent tests or other heavy workloads.
 
 ## Whole-planet relief
 
-The [planet harness](planet/README.md) evolves all land of a saved world on an
-irregular sphere mesh (uplift + implicit stream power) and writes previews,
-metrics and a mesh archive. It also generates realistic synthetic test worlds.
+The product command is `dmtools world planet` ([guide](../docs/world-planet.md)).
+The [planet tools](planet/README.md) generate realistic synthetic test worlds and
+sample geology, and run resolution sweeps of the planet relief.
 
 ## Landscape evolution
 

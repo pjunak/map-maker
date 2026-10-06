@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Planet climate v0 and coupling — 2026-10-06](2026-10-06-planet-climate-v0.md)
+  adds explainable temperature, winds, moisture transport, runoff and provisional
+  biomes on the planet mesh, couples runoff to erosion and retains the failed
+  calibration steps; windward/leeward control test.
+
 - [Whole-planet erosion relief — 2026-10-06](2026-10-06-whole-planet-erosion-relief.md)
   evolves a whole synthetic world on an irregular sphere mesh with implicit stream
   power; resolution sweep, isotropy, Hack exponent and zero non-descending rivers.

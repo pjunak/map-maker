@@ -5,8 +5,11 @@
 all land of a saved world on an irregular sphere mesh. It produces strictly
 descending, direction-unbiased river networks whose relief statistics converge
 with mesh density. It uses procedural forcing only. It is not yet a product
-command or an accepted parent. M2 (active) promotes it and connects geology;
-climate is M3. The text below describes the state before this change.
+accepted parent. It is now the experimental product command `dmtools world planet`
+([guide](../world-planet.md), ADR-0085). Geology recipes drive calibrated forcing, and
+[climate v0](2026-10-06-planet-climate-v0.md) adds temperature, winds, precipitation,
+runoff-weighted erosion and provisional biomes. Next: the World-tab stage and runs on
+real authored worlds. The text below describes the state before this change.
 
 Reconciled on 2026-09-28 through experimental M1 context-bound rough terrain.
 Geographic context now has one bounded numerical terrain consumer; climate, runoff,

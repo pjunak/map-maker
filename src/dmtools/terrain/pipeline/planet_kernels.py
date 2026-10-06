@@ -3,10 +3,9 @@
 """Compiled graph kernels for flow routing and landscape evolution on any mesh.
 
 All kernels take CSR adjacency (``ptr``, ``nbr``) so the same code serves the
-irregular sphere mesh and later regional meshes or rasters.
+irregular sphere mesh and later regional meshes or rasters. Kernels are compiled
+by Numba on first use and cached beside the package.
 """
-
-from __future__ import annotations
 
 import heapq
 from collections.abc import Callable

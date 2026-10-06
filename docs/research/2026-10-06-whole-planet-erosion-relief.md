@@ -1,7 +1,12 @@
 # Whole-planet erosion relief on an irregular sphere mesh — 2026-10-06
 
-Status: **experimental research harness** (`benchmarks/planet/`). Not a product
-command, not an accepted world parent, and no change to local terrain builds.
+Status: **experimental research harness** (`benchmarks/planet/`), not an accepted
+world parent, and no change to local terrain builds.
+
+> Later the same day the harness was promoted to `dmtools world planet`
+> ([ADR-0085](../adr/0085-generate-planet-relief-on-a-sphere-mesh.md)) and its
+> modules were removed. The commands and module paths below are historical; see
+> Git history for the harness.
 
 ## Question
 

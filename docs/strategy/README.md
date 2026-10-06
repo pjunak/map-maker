@@ -27,9 +27,14 @@ not competing queues. [TODO](../../TODO.md) retains the complete feature backlog
 
 - World import, geographic context, geology recipes and bathymetry have their own
   usable workflows.
-- **M2 research harness:** `python -m benchmarks.planet` evolves the whole planet
-  from a saved world with procedural forcing. `benchmarks.planet.synthetic_world`
-  writes realistic fractal test worlds.
+- **M2 experimental product:** `dmtools world planet` ([guide](../world-planet.md),
+  [ADR-0085](../adr/0085-generate-planet-relief-on-a-sphere-mesh.md)) evolves the
+  whole planet from a saved world. It uses procedural forcing, or a geology recipe
+  as calibrated forcing, and runs the provisional
+  [climate v0](../research/2026-10-06-planet-climate-v0.md) with runoff-weighted
+  erosion and biomes. It publishes a world-aligned GeoTIFF, atlas images, river
+  vectors and the authoritative mesh archive. `benchmarks.planet` keeps synthetic
+  test worlds, sample geology and resolution sweeps.
 - **Local terrain path (unchanged):** World → Terrain, the composed generator/editor,
   builds, profiles and saved-parent experiments. M1 context binding is experimental.
   The local path remains available until M5 decides what replaces it.
@@ -64,12 +69,15 @@ flowchart LR
 
 ## Concrete next batch: M2
 
-1. Map geology settings, ages and landform intent to uplift/erodibility with a
-   documented table; keep the procedural default when no recipe exists.
-2. Promote mesh, kernels, forcing and evolution into `src/dmtools/terrain` with
-   named stage seeds, typed results, cancellation and progress.
-3. Add `dmtools world relief` and published outputs (manifest last).
-4. Record an ADR for whole-planet surface authority (mesh nodes + TIN; rasters derived).
+Done: the geology mapping, promotion to `src` with stage seeds, cancellation and
+progress, `dmtools world planet` with manifest-last outputs, and ADR-0085.
+
+Next:
+1. A World-tab **Planet** stage: generate, cancel, progress, and view the atlas and
+   layers.
+2. Run the planet on real authored worlds and record what breaks: scale, shape
+   count, thin straits, polar land.
+3. Consume the bathymetry product for the ocean floor, or record why not.
 
 ## Integration checks and adoption checks
 
