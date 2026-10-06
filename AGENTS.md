@@ -26,10 +26,8 @@ Use focused tests during development. Run the three checks for Python or public
 schema behavior changes; inspect the changed workbench flow for visible UI work.
 For numeric algorithms, add the relevant reproducibility/invariant or benchmark
 evidence without turning performance measurements into fragile timing assertions.
-For prose or agent-guidance-only changes, review the diff, check local links,
-and verify changed commands or contract claims. Runtime builds and operational
-acceptance are required only for the affected behavior below. Reuse successful
-checks on unchanged inputs; preserve complete CI and release gates.
+Documentation-only changes need a diff review, link check and verification of
+changed claims.
 
 ## Purpose
 
