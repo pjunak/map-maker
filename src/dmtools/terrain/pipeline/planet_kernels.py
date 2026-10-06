@@ -29,7 +29,10 @@ else:
 
 @njit(cache=True)
 def priority_flood(h: F64, water: B, ptr: I64, nbr: I64, eps: float) -> tuple[F64, I64]:
-    """Fill land depressions from the water boundary (Barnes et al. 2014).
+    """Fill land depressions from fixed boundary nodes (Barnes et al. 2014).
+
+    ``water`` marks fixed nodes (sea, lakes, regional boundaries); their ``h`` is
+    their base level and is never changed.
 
     Returns the filled surface (land >= every flood path; each step up by at
     least ``eps``) and the flood parent of every land node (-1 for water and
@@ -45,7 +48,7 @@ def priority_flood(h: F64, water: B, ptr: I64, nbr: I64, eps: float) -> tuple[F6
         if water[i]:
             for k in range(ptr[i], ptr[i + 1]):
                 if not water[nbr[k]]:
-                    heapq.heappush(heap, (0.0, np.int64(i)))
+                    heapq.heappush(heap, (h[i], np.int64(i)))
                     break
     while heap:
         level, c = heapq.heappop(heap)
@@ -66,7 +69,7 @@ def priority_flood(h: F64, water: B, ptr: I64, nbr: I64, eps: float) -> tuple[F6
 def steepest_receivers(
     z: F64, water: B, ptr: I64, nbr: I64, length: F64, parent: I64
 ) -> tuple[I64, F64]:
-    """Steepest strictly-descending neighbour on ``z``; water nodes are sea level."""
+    """Steepest strictly-descending neighbour on ``z``; fixed nodes keep their own ``z``."""
     n = z.size
     receiver = np.full(n, -1, np.int64)
     distance = np.zeros(n)
@@ -76,7 +79,7 @@ def steepest_receivers(
         best = 0.0
         for k in range(ptr[i], ptr[i + 1]):
             j = nbr[k]
-            zj = 0.0 if water[j] else z[j]
+            zj = z[j]
             slope = (z[i] - zj) / length[k]
             if slope > best:
                 best = slope
@@ -138,7 +141,7 @@ def stream_power_implicit(
     for idx in range(order.size):
         i = order[idx]
         r = receiver[i]
-        base = 0.0 if (r < 0 or water[r]) else out[r]
+        base = h[i] if r < 0 else out[r]
         if r < 0:
             out[i] = h[i] + dt * uplift[i]
             continue

@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Regional enrichment and blended tiles — 2026-10-06](2026-10-06-regional-enrichment-tiles.md)
+  regenerates planet regions at 5 km with parent-calibrated uplift. Overlapping windows
+  disagree (238 m RMS), so fixed blended tiles give window-independent detail.
+
 - [Planet cratons and lakes — 2026-10-06](2026-10-06-planet-lakes-and-cratons.md)
   replaces central-dome cratons with marginal swells and interior sags, and adds young
   depressions with climate-balanced open/closed lakes and discharge-based rivers.

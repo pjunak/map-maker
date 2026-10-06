@@ -53,7 +53,9 @@ class EvolutionRun:
     mean_change_m_per_yr: float
 
 
-def route(mesh: SphereMesh, h: F64, water: B, runoff: F64 | None = None) -> FlowState:
+def route(
+    mesh: SphereMesh, h: F64, water: B, runoff: F64 | None = None, inflow_m2: F64 | None = None
+) -> FlowState:
     filled, parent = priority_flood(h, water, mesh.ptr, mesh.nbr, FILL_EPS_M)
     receiver, distance = steepest_receivers(
         filled, water, mesh.ptr, mesh.nbr, mesh.length_m, parent
@@ -61,6 +63,8 @@ def route(mesh: SphereMesh, h: F64, water: B, runoff: F64 | None = None) -> Flow
     land_nodes = np.flatnonzero(~water)
     order = land_nodes[np.argsort(filled[land_nodes], kind="stable")]
     source = mesh.area_m2 if runoff is None else mesh.area_m2 * runoff
+    if inflow_m2 is not None:
+        source = source + inflow_m2
     area = accumulate(order, receiver, water, np.where(water, 0.0, source))
     return FlowState(filled, receiver, distance, order, area)
 
@@ -76,16 +80,24 @@ def evolve(
     area_exponent: float,
     process_area_m2: float,
     runoff: F64 | None = None,
+    fixed_level: F64 | None = None,
+    inflow_m2: F64 | None = None,
     cancellation: CancellationToken | None = None,
     on_step: StepCallback | None = None,
 ) -> EvolutionRun:
-    h = np.where(water, 0.0, np.maximum(initial, LAND_FLOOR_M))
+    """``water`` marks fixed nodes held at ``fixed_level`` (default: sea level).
+
+    ``inflow_m2`` adds drainage area entering from outside the domain (regional
+    boundaries), at the nodes where those rivers enter.
+    """
+    base = np.zeros(mesh.size) if fixed_level is None else fixed_level
+    h = np.where(water, base, np.maximum(initial, LAND_FLOOR_M))
     pulse_from = round(steps * (1 - PLATEAU_PULSE_FRACTION))
     pulsed = forcing.steady_uplift + forcing.pulse_uplift
     change = 0.0
     for step in range(steps):
         check_cancelled(cancellation)
-        state = route(mesh, h, water, runoff)
+        state = route(mesh, h, water, runoff, inflow_m2)
         before = state.filled
         h = stream_power_implicit(
             before,
@@ -99,12 +111,12 @@ def evolve(
             forcing.steady_uplift if step < pulse_from else pulsed,
             step_yr,
         )
-        h = np.where(water, 0.0, np.maximum(h, LAND_FLOOR_M))
+        h = np.where(water, base, np.maximum(h, LAND_FLOOR_M))
         if step == steps - 1:
             change = float(np.mean(np.abs(h[~water] - before[~water]))) / step_yr
         if on_step is not None:
             on_step(step + 1, steps)
-    state = route(mesh, h, water, runoff)
+    state = route(mesh, h, water, runoff, inflow_m2)
     return EvolutionRun(state.filled, state, change)
 
 

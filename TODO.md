@@ -107,6 +107,9 @@ Update them with the affected milestone and evidence in every substantive batch.
   Connected ranges/spurs/passes, junction editing, cross-sections and transition
   support follow measured needs here rather than leading integration.
 - [ ] **M6 / WC5/LE6:** same-present regional enrichment, inherited hydrology and zoom.
+  - [x] Research: parent-calibrated regional enrichment on fine meshes and
+    window-independent blended tiles ([evidence](docs/research/2026-10-06-regional-enrichment-tiles.md)).
+  - [ ] Product: planet build reader, tile cache, window exports, viewer zoom action.
   See M7/M8 for selected materials, specialized landforms and ecological extensions.
 
 ### Generation-quality evidence retained

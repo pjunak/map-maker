@@ -36,7 +36,8 @@ class SphereMesh:
 
     @property
     def spacing_m(self) -> float:
-        return sqrt(4 * pi * self.radius_m**2 / self.size)
+        """Typical node spacing: square root of the mean node area."""
+        return sqrt(float(self.area_m2.sum()) / self.size)
 
     @property
     def lon(self) -> F64:
@@ -79,7 +80,14 @@ def _cot(u: F64, v: F64) -> F64:
 def build_mesh(count: int, radius_m: float, seed: int, jitter: float = 0.35) -> SphereMesh:
     """Deterministic mesh: ``seed`` is the ``planet.mesh`` stage seed."""
     xyz = fibonacci_nodes(count, seed, jitter)
-    triangles = ConvexHull(xyz).simplices.astype(np.int64)
+    return mesh_from_triangles(xyz, ConvexHull(xyz).simplices.astype(np.int64), radius_m)
+
+
+def mesh_from_triangles(xyz: F64, triangles: I64, radius_m: float) -> SphereMesh:
+    """Assemble neighbours, lengths, areas and Laplacian weights for any spherical
+    triangulation of unit vectors (whole sphere or a region with a boundary)."""
+    count = len(xyz)
+    triangles = triangles.copy()
     a, b, c = xyz[triangles[:, 0]], xyz[triangles[:, 1]], xyz[triangles[:, 2]]
     outward = np.einsum("ij,ij->i", np.cross(b - a, c - a), a) > 0
     triangles[~outward] = triangles[~outward][:, [0, 2, 1]]
