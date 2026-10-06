@@ -16,6 +16,12 @@ outputs/diagnostics and that generator source, dependencies and benchmark code
 have not changed during the run. Do not edit engine or benchmark Python files
 while measuring them, and avoid concurrent tests or other heavy workloads.
 
+## Whole-planet relief
+
+The [planet harness](planet/README.md) evolves all land of a saved world on an
+irregular sphere mesh (uplift + implicit stream power) and writes previews,
+metrics and a mesh archive. It also generates realistic synthetic test worlds.
+
 ## Landscape evolution
 
 The [isolated evolution reference](evolution/README.md) compares prescribed

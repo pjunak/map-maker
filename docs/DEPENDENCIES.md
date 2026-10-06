@@ -39,6 +39,15 @@ needed by the build command or desktop runtime. Its `referencing` dependency
 provides the offline schema registry used by those tests.
 See the [validator documentation](https://python-jsonschema.readthedocs.io/en/stable/validate/).
 
+## Development and research kernels
+
+`numba >=0.68,<1` (BSD-2-Clause) with its `llvmlite` dependency (BSD-2-Clause with
+LLVM's Apache-2.0-with-LLVM-exception notices) compiles the graph kernels of the
+[planet relief harness](../benchmarks/planet/README.md). Numba 0.68.0 / llvmlite
+0.50.0 were installed from Windows x64 CPython 3.14 wheels and exercised with
+NumPy 2.5.2. It is in the `dev` extra only; promoting the planet core to the
+application will move it to runtime dependencies with this entry updated.
+
 ## Vendored data assets
 
 | Asset | Version | Purpose | License |

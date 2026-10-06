@@ -1,5 +1,13 @@
 # Current terrain research status
 
+**2026-10-06 update:** the plan is world-first. An experimental
+[whole-planet erosion harness](2026-10-06-whole-planet-erosion-relief.md) evolves
+all land of a saved world on an irregular sphere mesh. It produces strictly
+descending, direction-unbiased river networks whose relief statistics converge
+with mesh density. It uses procedural forcing only. It is not yet a product
+command or an accepted parent. M2 (active) promotes it and connects geology;
+climate is M3. The text below describes the state before this change.
+
 Reconciled on 2026-09-28 through experimental M1 context-bound rough terrain.
 Geographic context now has one bounded numerical terrain consumer; climate, runoff,
 bathymetry coupling and application aging remain unimplemented.

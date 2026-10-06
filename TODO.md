@@ -33,15 +33,16 @@ records attempted methods, measured failures, causes, retained work and revisit
 gates. Update it alongside dated evidence and this backlog after each substantial
 experiment; do not mark a desired feature complete merely because its trial ended.
 
-## Current execution focus — 2026-09-28
+## Current execution focus — 2026-10-06
 
-**M2 is next: connect rough relief to declared climate and runoff.** Follow the single
+**M2 is active: whole-planet relief by uplift and erosion on a sphere mesh.** The
+plan is now world-first; follow the single
 [M1-M8 implementation order](docs/strategy/README.md#next-implementation-order).
-M1 now supplies the experimental context → rough-relief edge. M2-M4 must complete
-the runoff → aging workflow before
-further isolated ridge/bank refinements. M5 governs quality/default adoption and
-an accepted world parent; existing hard correctness checks apply throughout.
-Climate, runoff, aging and bathymetry coupling remain unimplemented.
+The [research harness](benchmarks/planet/README.md) already evolves a whole world
+with converged, isotropic, strictly descending rivers
+([evidence](docs/research/2026-10-06-whole-planet-erosion-relief.md)). Climate
+moves to M3 on the same mesh. Further isolated local ridge/bank refinements stay
+deferred; existing hard correctness checks apply throughout.
 
 The [research decision catalog](docs/research/decision-catalog.md) is the first
 lookup for evaluated tools/math, conclusions and revisit triggers. The
@@ -79,14 +80,21 @@ Update them with the affected milestone and evidence in every substantive batch.
   domain, immutable context support, context-consuming coastal relief and portable
   application/CLI/build provenance. Experimental; see
   [evidence](docs/research/2026-09-28-context-bound-rough-terrain.md).
-- [ ] **M2 / WC3 — ACTIVE:** declared ocean/wind/temperature/moisture model and budgeted runoff
-  consuming the same geography and rough relief; retain diagnostic support limits.
-- [ ] **M3 / LE3/basic LE5:** explicit epoch uplift/resistance/runoff driving bounded
-  aging from M1 initial ground; one evolved ground/drainage result, no double carving.
-- [ ] **M4 / WC3-WC4 candidate:** bounded climate/history feedback, inspectable stages,
-  comparison, cancellation, stale-result handling and world result correspondence.
-- [ ] **M5 / adoption:** fix dominant integrated failures, wider connected domains
-  with shared boundaries, verified global placement and an accepted coarse parent.
+- [ ] **M2 / WC2 / R01 / R02 / R07 — ACTIVE:** whole-planet relief on an irregular
+  sphere mesh: uplift + implicit stream power with the coast as base level, fixed
+  process scale, ocean floor, geology-driven forcing, product command and
+  world-placed exports.
+  - [x] Research harness, synthetic fractal test worlds, realism metrics and
+    resolution sweep ([evidence](docs/research/2026-10-06-whole-planet-erosion-relief.md)).
+  - [x] Geology settings/ages/landform intent → uplift and erodibility with calibrated
+    elevation targets (research harness).
+  - [ ] Promote to `src` with stage seeds, cancellation, CLI, manifest and ADR.
+- [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
+  mesh, consuming its relief; provisional biome labels.
+- [ ] **M4 / WC3-WC4:** runoff-weighted erosion with bounded climate feedback, lakes,
+  World-tab stage, comparison, cancellation and stale-result handling.
+- [ ] **M5 / adoption:** reference-world quality gates, accepted planet parent, native
+  core port of the stabilised kernels, and a decision on the local composed generator.
   Connected ranges/spurs/passes, junction editing, cross-sections and transition
   support follow measured needs here rather than leading integration.
 - [ ] **M6 / WC5/LE6:** same-present regional enrichment, inherited hydrology and zoom.

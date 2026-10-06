@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Whole-planet erosion relief — 2026-10-06](2026-10-06-whole-planet-erosion-relief.md)
+  evolves a whole synthetic world on an irregular sphere mesh with implicit stream
+  power; resolution sweep, isotropy, Hack exponent and zero non-descending rivers.
+
 - [Context-bound rough terrain — 2026-09-28](2026-09-28-context-bound-rough-terrain.md)
   records the experimental M1 world/context binding, conservative continuous
   coastal-distance consumer, public paired control, failed discontinuous bound and

@@ -92,6 +92,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 |---|---|
 | [benchmarks/README.md](../benchmarks/README.md) | Public performance/quality probes, commands and measurement boundaries. |
 | [benchmarks/evolution/README.md](../benchmarks/evolution/README.md) | Isolated evolution setup, runnable comparisons and current limits. |
+| [benchmarks/planet/README.md](../benchmarks/planet/README.md) | Whole-planet sphere-mesh erosion harness, synthetic test worlds and metrics. |
 | [examples/README.md](../examples/README.md) | Public example projects and their supported behaviors. |
 | [schemas/README.md](../schemas/README.md) | Current world-source, geographic-context and local-terrain formats. |
 | [src/dmtools/terrain/adapters/README.md](../src/dmtools/terrain/adapters/README.md) | File-format/render/export adapter responsibilities. |
@@ -196,6 +197,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 
 | File | Purpose or document title |
 |---|---|
+| [docs/research/2026-10-06-whole-planet-erosion-relief.md](research/2026-10-06-whole-planet-erosion-relief.md) | Whole-planet uplift/erosion on an irregular sphere mesh: resolution sweep, isotropy, Hack exponent and limits. |
 | [docs/research/2026-09-28-context-bound-rough-terrain.md](research/2026-09-28-context-bound-rough-terrain.md) | M1 context binding, continuous conservative shoreline support, paired public control and validation limits. |
 | [docs/research/2026-09-27-shared-landform-blending.md](research/2026-09-27-shared-landform-blending.md) | Replacement of background seams, rejected enclave-leaking kernel, paired evidence and remaining slope limits. |
 | [docs/research/2026-09-27-shared-ridge-crests.md](research/2026-09-27-shared-ridge-crests.md) | Paired crest-height and corner-gap improvements, failed assumptions and graph/process limits. |
