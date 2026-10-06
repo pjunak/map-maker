@@ -6,6 +6,7 @@ map. It produces:
 - an ocean floor;
 - a provisional climate (temperature, rain, runoff);
 - provisional biome labels;
+- lakes, both open and closed basins;
 - river lines.
 
 Your coastline is never changed. An optional geology recipe (`.dmgeology.json`)
@@ -39,7 +40,7 @@ leaves no `manifest.json`, so it never looks complete.
 | `--duration-myr` | 30 | Simulated history length. |
 | `--seed` | 20261006 | Master seed. Mesh, forcing and initial noise each use a named stage seed. |
 | `--width` | 4,096 | Width of the GeoTIFF and images. Height follows your SVG frame's aspect. |
-| `--river-km2` | 25,000 | Contributing area above which rivers are drawn and exported. |
+| `--river-km2` | 25,000 | River size threshold, as a catchment area at the planet's mean runoff. Rivers are selected by discharge, so dry regions show fewer. |
 
 Typical times on a 16-thread desktop:
 
@@ -56,7 +57,8 @@ Typical times on a 16-thread desktop:
 | `relief.png` | Hypsometric shaded relief with rivers. |
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
 | `elevation.tif` | Float32 elevation (land and display ocean floor) in metres, on a geographic CRS for your world's sphere radius. |
-| `rivers.geojson` | River polylines in world longitude/latitude, with contributing area. |
+| `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
+| `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
 | `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields. |
 | `world.dmworld.json`, `geology.dmgeology.json` | Snapshots of the inputs used. |
 | `manifest.json` | Settings, stage seeds, input hashes, runtime, calibration, metrics and output hashes ([schema](../schemas/world/planet-build-v1.schema.json)). |
@@ -84,11 +86,18 @@ SVG's size and it lies under your coastline drawing.
    - **Runoff** is rain minus evaporation. It makes wet regions erode more in the
      next pass.
    - **Biomes** come from temperature and dryness.
+5. **Lakes.**
+   - **Young depressions** are added where geology or climate says they belong:
+     rifts, sedimentary basins, interior sags, and recently glaciated lowlands.
+   - **Open lakes:** where inflow beats evaporation, the depression fills and
+     overflows.
+   - **Closed (endorheic) lakes:** otherwise the lake shrinks until evaporation
+     balances inflow, and rivers end there. The previews show them in grey.
 
 ## Limits
 
-- **Water.** There are no lakes or inland drainage basins yet; dry basins fill
-  to their outlets.
+- **Lakes.** Levels are a steady annual balance. Small lake districts are mostly
+  below world resolution, and basins below sea level are not modelled yet.
 - **Climate.** It is an explainable annual-mean model, not a weather or ocean
   simulation. Its constants are tuned to look Earth-like; change the planet
   assumptions in code until UI controls exist.

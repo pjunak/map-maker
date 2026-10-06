@@ -19,6 +19,7 @@ from typing import Any, cast
 
 import numpy as np
 import rasterio
+import rasterio.features
 from numpy.typing import NDArray
 from rasterio.crs import CRS
 
@@ -29,8 +30,11 @@ from dmtools.terrain.adapters.planet_render import (
     biome_rgb,
     draw_rivers,
     elevation_raster,
+    lake_raster,
     land_mask,
+    paint_lakes,
     relief_image,
+    river_threshold_m3_s,
     scalar_image,
 )
 from dmtools.terrain.adapters.world_geology import geology_document
@@ -82,11 +86,13 @@ def _write_geotiff(
         os.fsync(stream.fileno())
 
 
-def river_features(result: PlanetResult, threshold_m2: float) -> dict[str, object]:
+def river_features(result: PlanetResult, threshold_m3_s: float) -> dict[str, object]:
     """River polylines in world longitude/latitude, one chain per tributary segment."""
     flow, mesh = result.flow, result.mesh
-    water = ~result.land
-    major = (~water) & (flow.receiver >= 0) & (flow.area_m2 >= threshold_m2)
+    discharge = result.lakes.discharge_m3_s
+    on_lake = result.lakes.lake >= 0
+    water = ~result.land | on_lake
+    major = (~water) & (flow.receiver >= 0) & (discharge >= threshold_m3_s)
     donors = np.zeros(mesh.size, dtype=np.int64)
     np.add.at(donors, flow.receiver[major], 1)
     lon = np.rad2deg(mesh.lon)
@@ -123,9 +129,38 @@ def river_features(result: PlanetResult, threshold_m2: float) -> dict[str, objec
             "geometry": {"type": "MultiLineString", "coordinates": lines},
             "properties": {
                 "contributing_area_km2": round(float(flow.area_m2[end]) / 1e6, 1),
-                "reaches_sea": bool(water[chain[-1]]),
+                "discharge_m3_s": round(float(discharge[end]), 2),
+                "mouth": (
+                    "lake" if bool(on_lake[chain[-1]])
+                    else "sea" if not bool(result.land[chain[-1]])
+                    else "inland"
+                ),
             },
         })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def lake_features(
+    result: PlanetResult, raster: FrameRaster, lakes_px: NDArray[np.int64]
+) -> dict[str, object]:
+    """Lake polygons in world longitude/latitude from the lake raster."""
+    lakes = result.lakes
+    features: list[dict[str, object]] = []
+    if len(lakes.level_m):
+        for geometry, value in rasterio.features.shapes(
+            lakes_px.astype(np.int32), mask=lakes_px >= 0, transform=raster.lonlat_transform()
+        ):
+            lake_id = int(value)
+            features.append({
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": {
+                    "lake": lake_id,
+                    "surface_m": round(float(lakes.level_m[lake_id]), 1),
+                    "endorheic": bool(lakes.endorheic[lake_id]),
+                    "area_km2": round(float(lakes.area_m2[lake_id]) / 1e6, 1),
+                },
+            })
     return {"type": "FeatureCollection", "features": features}
 
 
@@ -169,6 +204,13 @@ def write_planet_build(
             result.forcing.steady_uplift + result.forcing.pulse_uplift
         ).astype("<f4"),
         "erodibility": result.forcing.erodibility.astype("<f4"),
+        "lake": result.lakes.lake.astype("<i4"),
+        "lake_level_m": result.lakes.level_m.astype("<f4"),
+        "lake_endorheic": result.lakes.endorheic,
+        "water_surface_m": np.where(
+            result.land, result.lakes.surface_m, result.elevation_m
+        ).astype("<f4"),
+        "discharge_m3_s": result.lakes.discharge_m3_s.astype("<f4"),
     }
     if result.regions is not None:
         arrays["geology_region"] = result.regions.region.astype("<i4")
@@ -197,14 +239,17 @@ def write_planet_build(
     )
     names.append("elevation.tif")
     verify()
-    threshold = river_km2 * 1e6
+    threshold = river_threshold_m3_s(result, river_km2)
+    lakes_px = lake_raster(result, raster, land_px)
     image = relief_image(z, land_px, raster)
+    paint_lakes(image, result, lakes_px)
     draw_rivers(image, result, raster, threshold)
     image.save(target / "relief.png")
     names.append("relief.png")
     if climate is not None:
         verify()
         atlas = atlas_image(z, land_px, raster, biome_rgb(result, raster))
+        paint_lakes(atlas, result, lakes_px)
         draw_rivers(atlas, result, raster, threshold)
         atlas.save(target / "atlas.png")
         names.append("atlas.png")
@@ -221,6 +266,8 @@ def write_planet_build(
     verify()
     rivers = river_features(result, threshold)
     save_bytes("rivers.geojson", json.dumps(rivers, separators=(",", ":")).encode("utf-8"))
+    lakes = lake_features(result, raster, lakes_px)
+    save_bytes("lakes.geojson", json.dumps(lakes, separators=(",", ":")).encode("utf-8"))
     outputs = {
         name: {"sha256": file_sha256(target / name), "bytes": (target / name).stat().st_size}
         for name in names
@@ -263,7 +310,16 @@ def write_planet_build(
         ],
         "metrics": result.metrics,
         "climate": None if climate is None else _climate_summary(result),
-        "rivers": {"threshold_km2": river_km2, "features": len(rivers["features"])},  # type: ignore[arg-type]
+        "rivers": {
+            "threshold_km2": river_km2,
+            "threshold_m3_s": threshold,
+            "features": len(cast(list[object], rivers["features"])),
+        },
+        "lakes": {
+            "count": len(result.lakes.level_m),
+            "endorheic": int(result.lakes.endorheic.sum()),
+            "features": len(cast(list[object], lakes["features"])),
+        },
         "outputs": outputs,
     }
     manifest["build_sha256"] = sha256(canonical_json(manifest)).hexdigest()

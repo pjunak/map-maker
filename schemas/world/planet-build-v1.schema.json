@@ -22,6 +22,7 @@
     "metrics",
     "climate",
     "rivers",
+    "lakes",
     "outputs",
     "build_sha256"
   ],
@@ -139,15 +140,29 @@
     "rivers": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["threshold_km2", "features"],
+      "required": ["threshold_km2", "threshold_m3_s", "features"],
       "properties": {
         "threshold_km2": { "type": "number", "exclusiveMinimum": 0 },
+        "threshold_m3_s": { "type": "number", "exclusiveMinimum": 0 },
+        "features": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "lakes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "endorheic", "features"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "endorheic": { "type": "integer", "minimum": 0 },
         "features": { "type": "integer", "minimum": 0 }
       }
     },
     "outputs": {
       "type": "object",
-      "required": ["world.dmworld.json", "planet.npz", "elevation.tif", "relief.png", "rivers.geojson"],
+      "required": [
+        "world.dmworld.json", "planet.npz", "elevation.tif", "relief.png",
+        "rivers.geojson", "lakes.geojson"
+      ],
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,

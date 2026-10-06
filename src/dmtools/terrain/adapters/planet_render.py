@@ -41,6 +41,9 @@ SEA_STOPS = (
 )
 ROCK_STOPS = ((0, (0, 0, 0)), (1500, (0, 0, 0)), (3200, (150, 130, 115)), (5000, (245, 245, 245)))
 RIVER_COLOUR = (52, 96, 160)
+LAKE_COLOUR = (78, 130, 182)
+SALT_LAKE_COLOUR = (150, 170, 176)
+SECONDS_PER_YEAR = 365.25 * 86400
 
 
 def raster_shape(frame: WorldFrame, width: int) -> tuple[int, int]:
@@ -111,6 +114,24 @@ def elevation_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> F
     return np.where(land_px, np.maximum(on_land, 0.0), np.minimum(at_sea, 0.0))
 
 
+def lake_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> NDArray[np.int64]:
+    """Lake id per pixel (-1 none), from triangle-interpolated lake membership."""
+    lakes = result.lakes
+    on_lake = raster.interpolate(result.mesh, (lakes.lake >= 0).astype(np.float64)) > 0.5
+    nearest = lakes.lake[raster.nearest.reshape(raster.shape)]
+    return np.where(on_lake & land_px & (nearest >= 0), nearest, -1)
+
+
+def paint_lakes(image: Image.Image, result: PlanetResult, lakes_px: NDArray[np.int64]) -> None:
+    if not len(result.lakes.level_m):
+        return
+    rgb = np.asarray(image).copy()
+    closed = result.lakes.endorheic[np.maximum(lakes_px, 0)] & (lakes_px >= 0)
+    rgb[(lakes_px >= 0) & ~closed] = LAKE_COLOUR
+    rgb[closed] = SALT_LAKE_COLOUR
+    image.paste(Image.fromarray(rgb))
+
+
 def _ramp(z: F64, stops: tuple[tuple[int, tuple[int, int, int]], ...]) -> F64:
     xs = np.array([s[0] for s in stops], dtype=np.float64)
     return np.stack([np.interp(z, xs, [s[1][c] for s in stops]) for c in range(3)], axis=-1)
@@ -166,30 +187,44 @@ def scalar_image(
     return Image.fromarray(rgb.astype(np.uint8))
 
 
+def river_threshold_m3_s(result: PlanetResult, area_km2: float) -> float:
+    """Discharge equivalent to ``area_km2`` at the planet's mean land runoff."""
+    land = result.land
+    climate = result.climate
+    runoff_mm = 250.0 if climate is None else float(
+        np.average(climate.runoff_mm[land], weights=result.mesh.area_m2[land])
+    )
+    return area_km2 * 1e6 * runoff_mm / 1000 / SECONDS_PER_YEAR
+
+
 def draw_rivers(
-    image: Image.Image, result: PlanetResult, raster: FrameRaster, threshold_m2: float
+    image: Image.Image, result: PlanetResult, raster: FrameRaster, threshold_m3_s: float
 ) -> int:
-    """Rivers whose (runoff-weighted) contributing area exceeds ``threshold_m2``."""
+    """Rivers whose net discharge exceeds ``threshold_m3_s``; none across lake surfaces."""
     rows, columns = raster.shape
     frame = raster.frame
     mesh, flow = result.mesh, result.flow
+    discharge = result.lakes.discharge_m3_s
+    on_lake = result.lakes.lake >= 0
     lon = np.rad2deg(mesh.lon)
     x = ((lon - frame.central_meridian_deg + 180) % 360) / 360 * columns
     y = (90 - np.rad2deg(mesh.lat)) / 180 * rows
     water = ~result.land
-    nodes = np.flatnonzero((~water) & (flow.receiver >= 0) & (flow.area_m2 >= threshold_m2))
+    nodes = np.flatnonzero(
+        (~water) & ~on_lake & (flow.receiver >= 0) & (discharge >= threshold_m3_s)
+    )
     if not len(nodes):
         return 0
     draw = ImageDraw.Draw(image)
-    top = float(np.log(flow.area_m2[nodes].max() / threshold_m2)) or 1.0
+    top = float(np.log(discharge[nodes].max() / threshold_m3_s)) or 1.0
     scale = max(1.0, columns / 2048)
     drawn = 0
-    for i in nodes[np.argsort(flow.area_m2[nodes])].tolist():
+    for i in nodes[np.argsort(discharge[nodes])].tolist():
         r = int(flow.receiver[i])
         x0, y0, x1, y1 = float(x[i]), float(y[i]), float(x[r]), float(y[r])
         if abs(x1 - x0) > columns / 2:
             continue
-        strength = float(np.log(flow.area_m2[i] / threshold_m2)) / top
+        strength = float(np.log(discharge[i] / threshold_m3_s)) / top
         width = max(1, round(scale * (1 + 2.2 * strength)))
         draw.line((x0, y0, x1, y1), fill=RIVER_COLOUR, width=width)
         drawn += 1

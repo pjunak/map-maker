@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Planet cratons and lakes — 2026-10-06](2026-10-06-planet-lakes-and-cratons.md)
+  replaces central-dome cratons with marginal swells and interior sags, and adds young
+  depressions with climate-balanced open/closed lakes and discharge-based rivers.
+
 - [Planet climate v0 and coupling — 2026-10-06](2026-10-06-planet-climate-v0.md)
   adds explainable temperature, winds, moisture transport, runoff and provisional
   biomes on the planet mesh, couples runoff to erosion and retains the failed

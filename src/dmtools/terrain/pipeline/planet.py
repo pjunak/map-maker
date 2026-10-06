@@ -42,6 +42,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
     land_on_mesh,
     ocean_floor,
 )
+from dmtools.terrain.pipeline.planet_lakes import Lakes, balance_lakes, young_depressions
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
 from dmtools.terrain.pipeline.world import WorldMap
@@ -77,6 +78,7 @@ class PlanetResult:
     calibration: tuple[tuple[RegionRecord, ...], ...]
     climate: Climate | None
     runoff_weight: F64 | None
+    lakes: Lakes  # lake state and the final routing on the water surface
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
@@ -197,14 +199,31 @@ def generate_planet(
         # Relative runoff weights drainage area; a floor keeps rare floods in deserts.
         runoff = np.maximum(climate.runoff_mm / max(mean_runoff, 1e-9), RUNOFF_WEIGHT_FLOOR)
     assert result is not None
-    say(0.96, "Measuring relief")
+    say(0.94, "Filling lakes")
+    evolved = result.run.elevation
+    depressions = young_depressions(
+        mesh, land, coast, regions, None if climate is None else climate.warm_c, evolved,
+        seeds[PLANET_FORCING_STAGE_ID],
+    )
+    # Land stays at least 1 m above sea level (no below-sea-level basins yet).
+    lakes = balance_lakes(
+        mesh, land, np.where(land, np.maximum(evolved - depressions, 1.0), 0.0),
+        None if climate is None else climate.runoff_mm,
+        None if climate is None else climate.pet_mm,
+    )
+    say(0.97, "Measuring relief")
     bathymetry = ocean_floor(mesh, coast, water, seeds[PLANET_FORCING_STAGE_ID])
-    elevation = np.where(water, bathymetry, result.run.elevation)
-    metrics = relief_metrics(mesh, result.run.elevation, water, result.run.flow)
+    elevation = np.where(water, bathymetry, lakes.ground_m)
+    metrics = relief_metrics(mesh, lakes.surface_m, water | (lakes.lake >= 0), lakes.flow)
+    metrics["lakes"] = {
+        "count": len(lakes.level_m),
+        "endorheic": int(lakes.endorheic.sum()),
+        "area_share_of_land": float(lakes.area_m2.sum() / mesh.area_m2[land].sum()),
+    }
     check_cancelled(cancellation)
     say(1.0, "Planet relief ready")
     return PlanetResult(
-        world, settings, geology, mesh, land, coast, elevation, result.run.flow, result.forcing,
-        regions, calibration, climate, runoff, seeds, metrics,
+        world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
+        regions, calibration, climate, runoff, lakes, seeds, metrics,
     )
 

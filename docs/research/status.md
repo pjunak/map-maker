@@ -9,7 +9,9 @@ accepted parent. It is now the experimental product command `dmtools world plane
 ([guide](../world-planet.md), ADR-0085). Geology recipes drive calibrated forcing, and
 [climate v0](2026-10-06-planet-climate-v0.md) adds temperature, winds, precipitation,
 runoff-weighted erosion and provisional biomes. Next: the World-tab stage and runs on
-real authored worlds. The text below describes the state before this change.
+real authored worlds. Stable continents now erode into marginal swells and interior
+basins, and [lakes](2026-10-06-planet-lakes-and-cratons.md) fill young depressions by
+climate water balance (open or endorheic). The text below describes the state before this change.
 
 Reconciled on 2026-09-28 through experimental M1 context-bound rough terrain.
 Geographic context now has one bounded numerical terrain consumer; climate, runoff,

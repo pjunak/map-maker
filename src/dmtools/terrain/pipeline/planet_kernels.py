@@ -103,6 +103,20 @@ def accumulate(order: I64, receiver: I64, water: B, source: F64) -> F64:
 
 
 @njit(cache=True)
+def accumulate_nonnegative(order: I64, receiver: I64, sink: B, source: F64) -> F64:
+    """Like ``accumulate`` but losses (negative sources) cannot pass negative flow on."""
+    total = source.copy()
+    for idx in range(order.size - 1, -1, -1):
+        i = order[idx]
+        if total[i] < 0:
+            total[i] = 0.0
+        r = receiver[i]
+        if r >= 0 and not sink[r]:
+            total[r] += total[i]
+    return total
+
+
+@njit(cache=True)
 def stream_power_implicit(
     h: F64,
     order: I64,

@@ -199,6 +199,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 
 | File | Purpose or document title |
 |---|---|
+| [docs/research/2026-10-06-planet-lakes-and-cratons.md](research/2026-10-06-planet-lakes-and-cratons.md) | Craton marginal-swell profile, uplift texture, young depressions and climate-balanced lakes with controls and limits. |
 | [docs/research/2026-10-06-planet-climate-v0.md](research/2026-10-06-planet-climate-v0.md) | Planet climate v0 (temperature, winds, moisture, runoff, provisional biomes), erosion coupling, failed calibration steps and limits. |
 | [docs/research/2026-10-06-whole-planet-erosion-relief.md](research/2026-10-06-whole-planet-erosion-relief.md) | Whole-planet uplift/erosion on an irregular sphere mesh: resolution sweep, isotropy, Hack exponent and limits. |
 | [docs/research/2026-09-28-context-bound-rough-terrain.md](research/2026-09-28-context-bound-rough-terrain.md) | M1 context binding, continuous conservative shoreline support, paired public control and validation limits. |

@@ -96,7 +96,9 @@ Update them with the affected milestone and evidence in every substantive batch.
   mesh, consuming its relief; provisional biome labels.
   - [x] Research-harness climate v0, runoff-weighted erosion coupling, atlas render and
     windward/leeward control ([evidence](docs/research/2026-10-06-planet-climate-v0.md)).
-  - [ ] Monthly/seasonal outputs, lakes and endorheic basins, energy-balance check.
+  - [x] Young depressions and climate-balanced open/closed lakes; discharge-based rivers
+    ([evidence](docs/research/2026-10-06-planet-lakes-and-cratons.md)).
+  - [ ] Monthly/seasonal outputs, below-sea-level basins, energy-balance check.
 - [ ] **M4 / WC3-WC4:** runoff-weighted erosion with bounded climate feedback, lakes,
   World-tab stage, comparison, cancellation and stale-result handling.
 - [ ] **M5 / adoption:** reference-world quality gates, accepted planet parent, native

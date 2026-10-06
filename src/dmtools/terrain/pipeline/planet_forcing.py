@@ -54,6 +54,7 @@ OROGEN_DECAY_MYR = 120.0
 OLD_CRUST_MA = 1000.0
 OLD_CRUST_ERODIBILITY = 0.7
 PLATEAU_PULSE_FRACTION = 0.2
+UPLIFT_TEXTURE = 0.6
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
 
@@ -92,10 +93,23 @@ def _smoothstep(x: F64, a: float, b: float) -> F64:
     return t * t * (3 - 2 * t)
 
 
+def cratonic_profile(coast_m: F64) -> F64:
+    """Relative stable-continent uplift: marginal swell and a broad interior sag.
+
+    Passive margins flex up a few hundred kilometres inland while old interiors
+    subside into broad basins. Interior drainage therefore gathers into a few
+    trunk rivers that breach the rim, instead of radiating from a central dome.
+    """
+    swell = np.exp(-(((coast_m - 250e3) / 220e3) ** 2))
+    sag = _smoothstep(coast_m, 500e3, 1500e3)
+    return np.maximum(0.15, 0.55 + 0.9 * swell - 0.35 * sag)
+
+
 @dataclass(frozen=True, slots=True)
 class ProceduralForcing:
     uplift: F64  # m/yr
     texture: F64  # dimensionless rock-erodibility variation (median ~1)
+    uplift_texture: F64  # dimensionless uplift variation within regions (median ~1)
 
 
 def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> ProceduralForcing:
@@ -106,10 +120,13 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     belts = _smoothstep(ridged, 0.80, 0.97) * _smoothstep(coast_m, 0.0, 150e3)
     gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
     margins = gate * _smoothstep(coast_m, 30e3, 120e3) * (1 - _smoothstep(coast_m, 250e3, 500e3))
-    interior = _smoothstep(coast_m, 0.0, 600e3)
-    uplift = 2e-5 * (1 + 2 * interior) + 1.2e-3 * belts + 6e-4 * margins
+    # Uniform uplift erodes into a smooth dome with radial drainage. Inherited
+    # structure (warps, faults, lithology) breaks that symmetry at 500-2000 km.
+    uplift_texture = np.exp(UPLIFT_TEXTURE * fbm3(p, seed + 505, 4, 3.0))
+    craton = 6e-5 * cratonic_profile(coast_m) * uplift_texture
+    uplift = craton + 1.2e-3 * belts + 6e-4 * margins
     texture = np.exp(1.1 * fbm3(p, seed + 404, 5, 3.0))
-    return ProceduralForcing(np.where(land, uplift, 0.0), texture)
+    return ProceduralForcing(np.where(land, uplift, 0.0), texture, uplift_texture)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +175,7 @@ class GeologyRegions:
     intents: tuple[RegionIntent | None, ...]
     names: tuple[str, ...]
     ids: tuple[str, ...]
+    settings: tuple[str, ...]
 
 
 def geology_regions(
@@ -185,6 +203,7 @@ def geology_regions(
         tuple(region_intent(r.profile, r.name) for r in coverage.regions),
         tuple(r.name for r in coverage.regions),
         tuple(r.id for r in coverage.regions),
+        tuple(r.profile.setting for r in coverage.regions),
     )
 
 
@@ -243,9 +262,11 @@ def build_forcing(
             pulse[nodes] = target / pulse_years * scale[index]
         else:
             steady[nodes] = target / REFERENCE_RELIEF_M_PER_MM_YR * 1e-3 * scale[index]
+            if intent.character in ("plain", "hills"):
+                steady[nodes] *= cratonic_profile(coast_m[nodes])
         factor[nodes] = intent.erodibility
         transition[nodes] = intent.transition_km * 1e3
-    steady = np.where(automatic, procedural.uplift, steady)
+    steady = np.where(automatic, procedural.uplift, steady * procedural.uplift_texture)
     authored = land & ~automatic
     if np.any(authored):
         half = float(np.median(transition[authored])) / 2

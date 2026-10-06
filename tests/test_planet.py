@@ -239,3 +239,34 @@ def test_large_meshes_calibrate_on_a_coarse_mesh_then_run_once(
     ]
     assert np.median(errors) < 0.2
     assert result.metrics["non_descending_receivers"] == 0
+
+
+def test_lakes_overflow_when_humid_and_close_when_arid() -> None:
+    from dmtools.terrain.pipeline.planet_lakes import balance_lakes
+
+    mesh = build_mesh(30_000, RADIUS, 5)
+    lat, lon = np.rad2deg(mesh.lat), np.rad2deg(mesh.lon)
+    land = (np.abs(lat) < 30) & (np.abs(lon) < 30)
+    coast = coast_distance(mesh, land)
+    # A 500 m plateau behind a coastal ramp, with a 300 m deep central basin.
+    pit = np.exp(-((lat / 5) ** 2 + (lon / 5) ** 2))
+    plateau = 1 + 499 * np.clip(coast / 3e5, 0, 1)
+    ground = np.where(land, plateau - 300 * pit, 0.0)
+    humid = balance_lakes(mesh, land, ground, np.full(mesh.size, 1500.0), np.full(mesh.size, 900.0))
+    arid = balance_lakes(mesh, land, ground, np.full(mesh.size, 15.0), np.full(mesh.size, 2200.0))
+    centre = int(np.argmin(np.where(land, lat**2 + lon**2, np.inf)))
+    for lakes in (humid, arid):
+        assert lakes.lake[centre] >= 0
+        assert np.all(lakes.lake[~land] == -1)
+        sink = ~land | (lakes.lake >= 0)
+        assert non_descending_receivers(lakes.surface_m, lakes.flow.receiver, sink) == 0
+    wet, dry = humid.lake[centre], arid.lake[centre]
+    assert not humid.endorheic[wet] and arid.endorheic[dry]
+    assert arid.area_m2[dry] < humid.area_m2[wet]
+    assert arid.level_m[dry] < humid.level_m[wet]
+    # A closed lake balances its inflow with evaporation (to one node of area).
+    evaporation = 2.2 * arid.area_m2[dry]
+    inflow = 0.015 * mesh.area_m2[(arid.flow.receiver >= -1) & land].sum()
+    assert evaporation <= inflow * 1.2
+    # Its water never reaches the sea; the humid lake passes its surplus on.
+    assert arid.discharge_m3_s[land & (arid.lake < 0)].max() < humid.discharge_m3_s[land].max()
