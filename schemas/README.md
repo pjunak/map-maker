@@ -32,6 +32,10 @@ Only the current formats are supported:
   (`sphere-mesh-stream-power-v1`) and provisional climate. Node elevation on the sphere
   mesh is authoritative; world-frame GeoTIFF/images are derived. Not a world parent.
 
+- [Planet region v1](world/planet-region-v1.schema.json): experimental regional detail
+  window (`planet-blended-tiles-v1`) from cached tiles of a planet build; local
+  azimuthal-equidistant GeoTIFF and previews.
+
 - [Terrain context v1](terrain/context-v1.schema.json): bounded geographic support
   serialized as a verified compressed sample binding, plus the metadata report
   retained by a completed terrain build. It does not redefine the terrain land mask.

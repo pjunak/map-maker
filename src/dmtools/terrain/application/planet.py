@@ -1,6 +1,7 @@
 """Generate, preview and publish whole-planet relief from a world (experimental M2)."""
 
-from dataclasses import dataclass
+import os
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
 
@@ -43,6 +44,24 @@ def input_identity(
         "geology_sha256": None if geology is None
         else sha256(canonical_json(geology_document(geology))).hexdigest(),
     }
+
+
+def planet_identity(run: PlanetRun) -> str:
+    """Identity of an in-memory planet: inputs, settings and runtime (for tile caches)."""
+    return sha256(
+        canonical_json({
+            "inputs": run.inputs,
+            "settings": asdict(run.result.settings),
+            "runtime": run.runtime,
+        })
+    ).hexdigest()
+
+
+def user_tile_cache() -> Path:
+    """Per-user cache for regional detail tiles of planets that were not exported."""
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_CACHE_HOME")
+    root = Path(base) if base else Path.home() / ".cache"
+    return root / "dmtools" / "planet-tiles"
 
 
 def generate_planet_run(

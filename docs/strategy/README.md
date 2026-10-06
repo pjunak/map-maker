@@ -75,8 +75,9 @@ progress, `dmtools world planet` with manifest-last outputs, and ADR-0085.
 Also done: lakes (open and closed), craton marginal swells, and the World-tab
 **Planet** stage with layers, hover inspection and export.
 
-M6 research has started early: parent-calibrated regional enrichment and
-window-independent blended tiles ([evidence](../research/2026-10-06-regional-enrichment-tiles.md)).
+M6 has an early experimental product slice: parent-calibrated regional detail from
+window-independent blended tiles ([ADR-0086](../adr/0086-regional-planet-detail-from-blended-tiles.md),
+[evidence](../research/2026-10-06-regional-enrichment-tiles.md)), with a World-tab zoom.
 
 Next:
 1. Run the planet on real authored worlds and record what breaks: scale, shape

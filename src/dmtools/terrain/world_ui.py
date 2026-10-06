@@ -27,7 +27,14 @@ from dmtools.terrain.adapters.world_geology import world_fingerprint
 from dmtools.terrain.adapters.world_project import WORLD_EXTENSION
 from dmtools.terrain.adapters.world_render import OCEAN, render_world_source
 from dmtools.terrain.adapters.world_svg import load_world_svg
-from dmtools.terrain.application.planet import PlanetRun, export_planet, generate_planet_run
+from dmtools.terrain.application.planet import (
+    PlanetRun,
+    export_planet,
+    generate_planet_run,
+    planet_identity,
+    user_tile_cache,
+)
+from dmtools.terrain.application.planet_region import RegionRun, export_region, region_window
 from dmtools.terrain.application.world import (
     continent_from_name,
     open_world,
@@ -63,8 +70,10 @@ from dmtools.terrain.domain.world_context import (
     exposure_steps,
 )
 from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from dmtools.terrain.pipeline.planet_regional import RegionalParent
 from dmtools.terrain.pipeline.world import WorldMap, prepare_world_map
 from dmtools.terrain.planet_ui import PlanetPanel, PlanetProbe
+from dmtools.terrain.region_ui import RegionViewer
 from dmtools.terrain.viewport import MapViewport
 from dmtools.terrain.world_bathymetry_ui import BathymetryEditor
 from dmtools.terrain.world_geology_ui import GeologyEditor
@@ -129,6 +138,16 @@ class _PlanetExported:
     path: Path
 
 
+@dataclass(frozen=True)
+class _RegionReady:
+    run: RegionRun
+
+
+@dataclass(frozen=True)
+class _RegionExported:
+    path: Path
+
+
 def frame_view(
     image: Image.Image,
     rect: tuple[float, float, float, float],
@@ -168,6 +187,8 @@ type _Event = (
     | _TerrainReady
     | _PlanetReady
     | _PlanetExported
+    | _RegionReady
+    | _RegionExported
     | _Progress
     | Exception
 )
@@ -193,6 +214,8 @@ class WorldWorkspace(ttk.Frame):
         self.context_run: WorldContextRun | None = None
         self.planet_run: PlanetRun | None = None
         self._planet_probe: PlanetProbe | None = None
+        self.region_viewers: list[RegionViewer] = []
+        self.region_workers: int | None = None
         self._context_cancellation: CancellationToken | None = None
         self.continents: tuple[WorldContinent, ...] = ()
         self.assignments: tuple[WorldAssignment, ...] = ()
@@ -431,7 +454,8 @@ class WorldWorkspace(ttk.Frame):
         self.context_page = ttk.Frame(pages, style="Panel.TFrame", padding=10)
         pages.add(self.context_page, text="Context")
         self.planet_panel = PlanetPanel(
-            pages, self.generate_planet, self.export_planet, self.cancel_context
+            pages, self.generate_planet, self.export_planet, self.cancel_context,
+            self.zoom_region,
         )
         pages.add(self.planet_panel, text="Planet")
         self.context_page.columnconfigure(0, weight=1)
@@ -670,6 +694,15 @@ class WorldWorkspace(ttk.Frame):
                 self.status.set(
                     "Planet ready. Inspect the layers; export to keep a reproducible build."
                 )
+            elif isinstance(event, _RegionReady):
+                viewer = RegionViewer(self, event.run, self.export_region)
+                self.region_viewers.append(viewer)
+                self.status.set(
+                    f"Regional detail ready from {len(event.run.window.tiles)} tiles; tiles are "
+                    "cached for later zooms."
+                )
+            elif isinstance(event, _RegionExported):
+                self.status.set(f"Region exported: {event.path}")
             elif isinstance(event, _PlanetExported):
                 self.status.set(f"Planet exported: {event.path}. Inputs and outputs are hashed.")
             elif isinstance(event, _GeologyReady):
@@ -926,6 +959,44 @@ class WorldWorkspace(ttk.Frame):
         self._work(
             "Exporting the planet build…",
             lambda: _PlanetExported(export_planet(run, destination, cancellation=cancellation)),
+        )
+
+    def zoom_region(self, radius_km: float | None = None) -> None:
+        run = self.planet_run
+        if self.busy or run is None:
+            return
+        frame = run.result.world.project.frame
+        x = frame.bounds[0] + self.viewport.centre[0] * frame.width
+        y = frame.bounds[1] + self.viewport.centre[1] * frame.height
+        longitude, latitude = frame.source_to_lonlat((x, y))
+        if radius_km is None:
+            # About the half-width of the visible map, clamped to a sensible window.
+            radius_km = 3.1416 * frame.radius_km / 2 / self.viewport.zoom
+            radius_km = min(1200.0, max(150.0, radius_km))
+        parent = RegionalParent.from_result(run.result)
+        identity = planet_identity(run)
+        cancellation = CancellationToken()
+        self._context_cancellation = cancellation
+        workers = self.region_workers
+
+        def progress(fraction: float, message: str) -> None:
+            self._events.put(_Progress(f"{fraction:.0%} · {message}"))
+
+        self._work(
+            "Generating regional detail…",
+            lambda: _RegionReady(
+                region_window(
+                    parent, identity, user_tile_cache(), (longitude, latitude), radius_km,
+                    pixels=900, workers=workers, progress=progress, cancellation=cancellation,
+                )
+            ),
+        )
+
+    def export_region(self, run: RegionRun, destination: Path) -> None:
+        if self.busy:
+            return
+        self._work(
+            "Exporting the region…", lambda: _RegionExported(export_region(run, destination))
         )
 
     def show_terrain(self) -> None:
@@ -1714,6 +1785,10 @@ class WorldWorkspace(ttk.Frame):
             self.geology_editor.close()
         if self.bathymetry_editor is not None:
             self.bathymetry_editor.close()
+        for viewer in self.region_viewers:
+            if viewer.winfo_exists():
+                viewer.destroy()
+        self.region_viewers.clear()
         if self._context_cancellation is not None:
             self._context_cancellation.cancel()
         for identifier in (self._poll_id, self._draw_id):

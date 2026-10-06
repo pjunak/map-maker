@@ -157,6 +157,20 @@ def create_parser() -> argparse.ArgumentParser:
     planet.add_argument("--river-km2", type=float, default=25_000.0,
                         help="Contributing area for drawn and exported rivers.")
     planet.set_defaults(_handler=_run_world_planet)
+    region = world_commands.add_parser(
+        "region",
+        help="Experimental: finer eroded detail for part of a planet build (cached tiles).",
+    )
+    region.add_argument("planet", type=Path, help="Planet build folder or its manifest.json.")
+    region.add_argument("--lon", type=float, required=True, help="Window centre longitude.")
+    region.add_argument("--lat", type=float, required=True, help="Window centre latitude.")
+    region.add_argument("--radius-km", type=float, default=500.0)
+    region.add_argument("--spacing-km", type=float, default=5.0, help="Regional node spacing.")
+    region.add_argument("--output", type=Path, required=True, help="New region folder.")
+    region.add_argument("--cache", type=Path, help="Tile cache (default: beside the planet).")
+    region.add_argument("--pixels", type=int, default=1024)
+    region.add_argument("--workers", type=int, default=0, help="Tile processes (0 = auto).")
+    region.set_defaults(_handler=_run_world_region)
     return parser
 
 
@@ -226,6 +240,29 @@ def _run_world_planet(arguments: argparse.Namespace) -> int:
         return 1
     print(f"Planet build complete: {path}")
     print("Experimental relief and provisional climate; see relief.png / atlas.png.")
+    return 0
+
+
+def _run_world_region(arguments: argparse.Namespace) -> int:
+    from dmtools.terrain.application.planet_region import build_region
+    from dmtools.terrain.domain.planet import RegionalSettings
+
+    def progress(fraction: float, message: str) -> None:
+        print(f"{int(fraction * 100):3d}% {message}", file=sys.stderr, flush=True)
+
+    try:
+        spacing = arguments.spacing_km
+        settings = RegionalSettings(spacing_km=spacing, process_area_km2=24 * spacing * spacing)
+        path = build_region(
+            arguments.planet, arguments.output, (arguments.lon, arguments.lat),
+            arguments.radius_km, settings, cache=arguments.cache, pixels=arguments.pixels,
+            workers=arguments.workers or None, progress=progress,
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        print(f"Region generation failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Region complete: {path}")
+    print("Experimental detail; tiles are cached and reused by later regions.")
     return 0
 
 

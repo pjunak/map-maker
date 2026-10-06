@@ -1,8 +1,19 @@
 # Parent-conditioned regional enrichment and blended tiles — 2026-10-06
 
-Status: **experimental research harness** (`benchmarks/planet/regional.py`,
-`benchmarks/planet/tiles.py`) for milestone M6 and ADR-0048. It is not yet a
-product command.
+Status: **experimental**, first built as a research harness for M6 and ADR-0048.
+
+> Later the same day this was promoted to `dmtools world region` and the World-tab
+> zoom ([ADR-0086](../adr/0086-regional-planet-detail-from-blended-tiles.md)). The
+> harness modules were removed; module paths below are historical.
+> - **Product additions:**
+>   - a verified build reader;
+>   - a tile cache beside builds or per user;
+>   - the exact tile selection: every centre within the window radius plus the support;
+>   - blending only inside the window circle;
+>   - biomes re-derived per pixel with the lapse rate.
+> - **Live timing:** a 1,200 km zoom over the fractal world's young belt took 84 s
+>   and used 25 tiles at 5 km, generated in parallel on first use. Repeat zooms
+>   reuse the cached tiles.
 
 ## Question
 

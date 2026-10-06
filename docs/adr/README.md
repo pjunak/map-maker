@@ -114,3 +114,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0083: Preserve shared ridge crests and authored contacts](0083-preserve-shared-ridge-crests.md)
 - [ADR-0084: Bind geographic context to bounded rough terrain](0084-bind-geographic-context-to-rough-terrain.md)
 - [ADR-0085: Generate whole-planet relief by erosion on an irregular sphere mesh](0085-generate-planet-relief-on-a-sphere-mesh.md)
+- [ADR-0086: Generate regional planet detail from blended fixed tiles](0086-regional-planet-detail-from-blended-tiles.md)

@@ -109,7 +109,9 @@ Update them with the affected milestone and evidence in every substantive batch.
 - [ ] **M6 / WC5/LE6:** same-present regional enrichment, inherited hydrology and zoom.
   - [x] Research: parent-calibrated regional enrichment on fine meshes and
     window-independent blended tiles ([evidence](docs/research/2026-10-06-regional-enrichment-tiles.md)).
-  - [ ] Product: planet build reader, tile cache, window exports, viewer zoom action.
+  - [x] Product: verified planet build reader, tile cache, `dmtools world region`,
+    World-tab zoom viewer and export, lapse-corrected regional biomes (ADR-0086).
+  - [ ] Tile boundary exchange (domain decomposition), regional lakes and climate.
   See M7/M8 for selected materials, specialized landforms and ecological extensions.
 
 ### Generation-quality evidence retained

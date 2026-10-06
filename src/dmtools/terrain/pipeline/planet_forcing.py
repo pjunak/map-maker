@@ -60,7 +60,13 @@ REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
 def node_source_xy(frame: WorldFrame, mesh: SphereMesh) -> tuple[F64, F64]:
     """Node positions in the world SVG frame (respecting the central meridian)."""
-    lon, lat = np.rad2deg(mesh.lon), np.rad2deg(mesh.lat)
+    return source_xy(frame, mesh.xyz)
+
+
+def source_xy(frame: WorldFrame, xyz: F64) -> tuple[F64, F64]:
+    """Unit vectors to world SVG frame coordinates (respecting the central meridian)."""
+    lon = np.rad2deg(np.arctan2(xyz[:, 1], xyz[:, 0]))
+    lat = np.rad2deg(np.arcsin(np.clip(xyz[:, 2], -1, 1)))
     offset = (lon - frame.central_meridian_deg + 180) % 360
     return (
         frame.bounds[0] + offset / 360 * frame.width,

@@ -68,6 +68,7 @@ class PlanetPanel(ttk.Frame):
         generate: Callable[[PlanetSettings, Path | None], None],
         export: Callable[[Path], None],
         cancel: Callable[[], None],
+        zoom: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame", padding=12)
         self._generate = generate
@@ -127,6 +128,11 @@ class PlanetPanel(ttk.Frame):
             state="disabled",
         )
         self.export_button.pack(fill="x")
+        self.zoom_button = ttk.Button(
+            self, text="Zoom detail at map centre", style="Quiet.TButton",
+            command=zoom if zoom is not None else (lambda: None), state="disabled",
+        )
+        self.zoom_button.pack(fill="x", pady=(6, 0))
         ttk.Separator(self).pack(fill="x", pady=12)
         ttk.Label(self, textvariable=self.detail, style="Muted.TLabel", wraplength=340).pack(
             anchor="w"
@@ -163,6 +169,9 @@ class PlanetPanel(ttk.Frame):
         )
         self.cancel_button.configure(state="normal" if busy and cancellable else "disabled")
         self.export_button.configure(
+            state="normal" if self.run is not None and not busy else "disabled"
+        )
+        self.zoom_button.configure(
             state="normal" if self.run is not None and not busy else "disabled"
         )
 

@@ -116,3 +116,44 @@ def test_planet_probe_describes_sea_land_climate_and_lakes(app: ui.TerrainApp) -
     assert probe.describe(float(lon[sea]), float(lat[sea])).startswith("Sea")
     text = probe.describe(float(lon[land]), float(lat[land]))
     assert text.startswith("Ground") and "mm/yr" in text and "°C" in text
+
+
+def test_zoom_detail_opens_a_region_viewer_and_reuses_cached_tiles(
+    app: ui.TerrainApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dmtools.terrain import world_ui
+    from dmtools.terrain.domain.planet import RegionalSettings
+
+    monkeypatch.setattr(world_ui, "user_tile_cache", lambda: tmp_path / "cache")
+    coarse = RegionalSettings(
+        spacing_km=40, process_area_km2=4_000, calibration_iterations=1, tile_km=1500,
+        halo_km=200,
+    )
+    original = world_ui.region_window
+
+    def coarse_window(*args: object, **kwargs: object) -> object:
+        kwargs["pixels"] = 160
+        return original(*args, settings=coarse, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(world_ui, "region_window", coarse_window)
+    view = app.world_workspace
+    view.region_workers = 1
+    view.load_world(EXAMPLES / "four-shores.dmworld.json")
+    wait(app)
+    view.generate_planet(SMALL, None)
+    wait(app)
+    assert str(view.planet_panel.zoom_button["state"]) == "normal"
+    view.zoom_region(radius_km=600)
+    wait(app)
+    assert len(view.region_viewers) == 1
+    viewer = view.region_viewers[0]
+    assert viewer.run.window.tiles and viewer._photo is not None
+    tiles = sorted((tmp_path / "cache").rglob("tile-*.npz"))
+    assert tiles
+    stamps = [p.stat().st_mtime_ns for p in tiles]
+    view.zoom_region(radius_km=600)
+    wait(app)
+    assert [p.stat().st_mtime_ns for p in tiles] == stamps
+    view.export_region(viewer.run, tmp_path / "region")
+    wait(app)
+    assert (tmp_path / "region" / "manifest.json").exists()

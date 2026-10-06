@@ -190,6 +190,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0081-blend-adjoining-landform-regions.md](adr/0081-blend-adjoining-landform-regions.md) | Shared regional weighting, blank holes, established interiors and matching probe/cut support. |
 | [docs/adr/0082-own-structure-profiles.md](adr/0082-own-structure-profiles.md) | Explicit line profile ownership, sampling support, editor and current-format contracts. |
 | [docs/adr/0083-preserve-shared-ridge-crests.md](adr/0083-preserve-shared-ridge-crests.md) | Preserved ridge contacts, compatible heights, centreline ownership and remaining graph limits. |
+| [docs/adr/0086-regional-planet-detail-from-blended-tiles.md](adr/0086-regional-planet-detail-from-blended-tiles.md) | Window-independent regional detail from fixed blended tiles, tile cache, lapse-corrected biomes and limits. |
 | [docs/adr/0085-generate-planet-relief-on-a-sphere-mesh.md](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) | Whole-planet relief by uplift/stream-power erosion on an irregular sphere mesh; node+TIN authority; Numba runtime. |
 | [docs/adr/0084-bind-geographic-context-to-rough-terrain.md](adr/0084-bind-geographic-context-to-rough-terrain.md) | Bounded immutable geographic context, conservative coastal-distance consumption and explicit unsupported M1 fields. |
 
@@ -316,6 +317,7 @@ are included for a complete route from plans to the current usable formats.
 | [schemas/terrain/project-v9.schema.json](../schemas/terrain/project-v9.schema.json) | Current authored local terrain project format with optional bounded world context. |
 | [schemas/terrain/regional-samples-v3.schema.json](../schemas/terrain/regional-samples-v3.schema.json) | Current bounded unchanged-field sampling artifact contract. |
 | [schemas/world/bathymetry-inputs-v1.schema.json](../schemas/world/bathymetry-inputs-v1.schema.json) | Retained-world ocean selection and explicit physical shelf/slope/basin assumptions. |
+| [schemas/world/planet-region-v1.schema.json](../schemas/world/planet-region-v1.schema.json) | Experimental regional detail window: parent identity, tiles, settings, local CRS and output hashes. |
 | [schemas/world/planet-build-v1.schema.json](../schemas/world/planet-build-v1.schema.json) | Experimental planet build manifest: settings, stage seeds, inputs, mesh/raster mapping, calibration, metrics and output hashes. |
 | [schemas/world/bathymetry-v1.schema.json](../schemas/world/bathymetry-v1.schema.json) | Completed depth/error arrays, verified geography dependency and source/runtime/product identity. |
 | [schemas/world/context-v4.schema.json](../schemas/world/context-v4.schema.json) | Spherical context products, source/runtime identity, coverage/topology/support, shared-edge widths, water-piece incidence/unresolved support, shore distance, exposure and hashes. |

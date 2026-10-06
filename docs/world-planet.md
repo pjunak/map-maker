@@ -41,6 +41,18 @@ Open or import a world in the **World** tab, then choose **Planet…** (or the
 Editing the world (names, frame, assignments) discards the generated planet, so
 a stale planet is never shown as current.
 
+### Zoom into regional detail
+
+With a planet shown, pan and zoom the map to the area you care about and click
+**Zoom detail at map centre** on the Planet page.
+- A window opens with that region at about 5 km detail: ridges, valley networks,
+  altitude zones and rivers.
+- Its radius follows how far you zoomed in, from 150 to 1,200 km.
+- **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
+
+The region is built from fixed, cached tiles. Zooming the same place again is
+quick and gives identical values, whichever window you choose.
+
 ## Run it from the command line
 
 ```powershell
@@ -70,6 +82,15 @@ Typical times on a 16-thread desktop:
 |---|---:|
 | 100k nodes, geology and one climate pass | about 50 s |
 | 800k nodes | several minutes |
+
+Regional detail for an exported planet:
+
+```powershell
+dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-region
+```
+
+Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
+Use `--spacing-km` for a different detail spacing.
 
 ## Outputs
 
@@ -125,5 +146,6 @@ SVG's size and it lies under your coastline drawing.
   assumptions in code until UI controls exist.
 - **Ocean floor.** It is display only and does not yet use the separate
   bathymetry product.
-- **Local terrain.** It does not yet start from this planet. That is planned
-  (regional enrichment and zoom).
+- **Regional detail.** It blends overlapping tiles. Inside the blend zones, river
+  lines may jog slightly, and regional lakes and climate are not regenerated.
+- **Local terrain.** The Terrain workspace does not yet start from this planet.

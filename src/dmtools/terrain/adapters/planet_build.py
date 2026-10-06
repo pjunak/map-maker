@@ -202,7 +202,9 @@ def write_planet_build(
         "uplift_m_per_yr": (
             result.forcing.steady_uplift + result.forcing.pulse_uplift
         ).astype("<f4"),
-        "erodibility": result.forcing.erodibility.astype("<f4"),
+        "erodibility": result.forcing.erodibility.astype("<f8"),
+        "steady_uplift_m_per_yr": result.forcing.steady_uplift.astype("<f8"),
+        "pulse_uplift_m_per_yr": result.forcing.pulse_uplift.astype("<f8"),
         "lake": result.lakes.lake.astype("<i4"),
         "lake_level_m": result.lakes.level_m.astype("<f4"),
         "lake_endorheic": result.lakes.endorheic,
@@ -213,6 +215,8 @@ def write_planet_build(
     }
     if result.regions is not None:
         arrays["geology_region"] = result.regions.region.astype("<i4")
+    if result.runoff_weight is not None:
+        arrays["runoff_weight"] = result.runoff_weight.astype("<f8")
     if climate is not None:
         arrays |= {
             "temperature_c": climate.temperature_c.astype("<f4"),

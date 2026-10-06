@@ -14,9 +14,6 @@ development fixtures and measurements used to build and check it.
 # Resolution sweep: relief statistics should converge as the mesh is refined.
 .\.venv\Scripts\python.exe -m benchmarks.planet.sweep artifacts/planet/worlds/fractal-world.dmworld.json --nodes 50000 200000 800000
 
-# Regional enrichment research (M6): one window, or blended fixed tiles.
-.\.venv\Scripts\python.exe -m benchmarks.planet.regional artifacts/planet/worlds/fractal-world.dmworld.json --lon 61 --lat -39.6 --output artifacts/planet/region
-.\.venv\Scripts\python.exe -m benchmarks.planet.tiles artifacts/planet/worlds/fractal-world.dmworld.json --lon 61 --lat -39.6 --output artifacts/planet/tiles
 ```
 
 Generated worlds and recipes are development fixtures, not authored canon. Keep

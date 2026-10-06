@@ -99,3 +99,36 @@ class PlanetSettings:
     @property
     def steps(self) -> int:
         return max(1, round(self.duration_myr * 1e3 / self.step_kyr))
+
+
+REGIONAL_ALGORITHM = "planet-blended-tiles-v1"
+TILE_STAGE_PREFIX = "planet.tile."
+
+
+@dataclass(frozen=True, slots=True)
+class RegionalSettings:
+    """Fine detail inside a planet: fixed blended tiles enriched from the parent.
+
+    Tiles are centred on a fixed Fibonacci lattice about ``tile_km`` apart; each is
+    generated over its blend support plus ``halo_km``. ``process_area_km2`` is the
+    smallest resolved drainage area at this detail.
+    """
+
+    spacing_km: float = 5.0
+    process_area_km2: float = 600.0
+    calibration_iterations: int = 3
+    tile_km: float = 600.0
+    halo_km: float = 150.0
+    support_factor: float = 0.8
+
+    def __post_init__(self) -> None:
+        _finite(self.spacing_km, "Regional spacing", 0.5, 100)
+        _finite(self.process_area_km2, "Regional process area", 1, 1e5)
+        _finite(self.tile_km, "Tile spacing", 50, 5000)
+        _finite(self.halo_km, "Tile halo", 0, 2000)
+        _finite(self.support_factor, "Tile support factor", 0.7, 2.0)
+        if self.tile_km < 20 * self.spacing_km:
+            raise ValueError("Tiles must span at least 20 node spacings.")
+        iterations = self.calibration_iterations
+        if type(iterations) is not int or not 0 <= iterations <= 10:
+            raise ValueError("Regional calibration iterations must be an integer from 0 to 10.")
