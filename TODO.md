@@ -90,7 +90,8 @@ Update them with the affected milestone and evidence in every substantive batch.
     elevation targets (research harness).
   - [x] Promote to `src` with stage seeds, cancellation, CLI (`dmtools world planet`),
     manifest-last build, schema and ADR-0085.
-  - [ ] World-tab Planet stage (generate, cancel, view atlas/layers).
+  - [x] World-tab Planet stage: generate, cancel, atlas/relief/rainfall/temperature
+    layers, hover inspection, export; stale results discarded on edit.
   - [ ] Real authored worlds; bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.

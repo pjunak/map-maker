@@ -19,7 +19,29 @@ terrain. See [ADR-0085](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) and
 evidence for [relief](research/2026-10-06-whole-planet-erosion-relief.md) and
 [climate](research/2026-10-06-planet-climate-v0.md).
 
-## Run it
+## In the desktop app
+
+Open or import a world in the **World** tab, then choose **Planet…** (or the
+**Planet** page in the sidebar):
+
+1. **Choose the detail.**
+   - Quick: 50k nodes, about 100 km apart.
+   - Standard: 200k nodes, about 50 km.
+   - Detailed: 800k nodes, about 25 km.
+2. **Set the options.** Keep **Climate, lakes and biomes** on for the atlas,
+   rainfall and temperature layers. Optionally choose a geology recipe; a
+   recipe saved from the Geology editor is picked up automatically.
+3. **Click Generate planet.** Progress shows below the map, and **Cancel planet
+   job** stops at the next checkpoint without installing a result.
+4. **Pick a layer** above the map: **Planet atlas**, **Planet relief**, **Planet
+   rainfall** or **Planet temperature**. Hovering shows the ground height,
+   lake, river discharge, temperature, rainfall and biome under the cursor.
+5. **Click Export planet…** to write the same build folder as the command line.
+
+Editing the world (names, frame, assignments) discards the generated planet, so
+a stale planet is never shown as current.
+
+## Run it from the command line
 
 ```powershell
 dmtools world planet my-world.dmworld.json --output my-planet

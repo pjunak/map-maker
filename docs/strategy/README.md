@@ -72,12 +72,14 @@ flowchart LR
 Done: the geology mapping, promotion to `src` with stage seeds, cancellation and
 progress, `dmtools world planet` with manifest-last outputs, and ADR-0085.
 
+Also done: lakes (open and closed), craton marginal swells, and the World-tab
+**Planet** stage with layers, hover inspection and export.
+
 Next:
-1. A World-tab **Planet** stage: generate, cancel, progress, and view the atlas and
-   layers.
-2. Run the planet on real authored worlds and record what breaks: scale, shape
+1. Run the planet on real authored worlds and record what breaks: scale, shape
    count, thin straits, polar land.
-3. Consume the bathymetry product for the ocean floor, or record why not.
+2. Consume the bathymetry product for the ocean floor, or record why not.
+3. Expose planet climate assumptions (obliquity, temperatures, winds) in the panel.
 
 ## Integration checks and adoption checks
 

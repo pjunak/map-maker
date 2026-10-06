@@ -8,8 +8,8 @@ with mesh density. It uses procedural forcing only. It is not yet a product
 accepted parent. It is now the experimental product command `dmtools world planet`
 ([guide](../world-planet.md), ADR-0085). Geology recipes drive calibrated forcing, and
 [climate v0](2026-10-06-planet-climate-v0.md) adds temperature, winds, precipitation,
-runoff-weighted erosion and provisional biomes. Next: the World-tab stage and runs on
-real authored worlds. Stable continents now erode into marginal swells and interior
+runoff-weighted erosion and provisional biomes. The World tab has a Planet stage with layers,
+hover inspection and export. Next: runs on real authored worlds. Stable continents now erode into marginal swells and interior
 basins, and [lakes](2026-10-06-planet-lakes-and-cratons.md) fill young depressions by
 climate water balance (open or endorheic). The text below describes the state before this change.
 

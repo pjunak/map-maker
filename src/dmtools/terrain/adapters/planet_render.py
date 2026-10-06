@@ -229,3 +229,63 @@ def draw_rivers(
         draw.line((x0, y0, x1, y1), fill=RIVER_COLOUR, width=width)
         drawn += 1
     return drawn
+
+
+PREVIEW_LAYERS = ("Planet atlas", "Planet relief", "Planet rainfall", "Planet temperature")
+RAIN_COLOURS = ((150, 90, 40), (230, 210, 140), (120, 190, 90), (30, 120, 160), (20, 40, 140))
+TEMPERATURE_COLOURS = (
+    (60, 40, 160), (90, 160, 220), (240, 240, 200), (240, 160, 60), (180, 40, 30)
+)
+
+
+@dataclass(frozen=True, slots=True)
+class PlanetRasters:
+    """Frame-aligned rasters shared by previews and exports."""
+
+    raster: FrameRaster
+    land_px: B
+    elevation_m: F64
+    lakes_px: NDArray[np.int64]
+
+
+def planet_rasters(result: PlanetResult, width: int) -> PlanetRasters:
+    raster = FrameRaster.build(result.mesh, result.world.project.frame, width)
+    land_px = land_mask(result.world, raster)
+    z = elevation_raster(result, raster, land_px)
+    return PlanetRasters(raster, land_px, z, lake_raster(result, raster, land_px))
+
+
+def preview_images(
+    result: PlanetResult, rasters: PlanetRasters, threshold_m3_s: float
+) -> dict[str, Image.Image]:
+    """Named cartographic previews; climate layers only when climate exists."""
+    raster, land_px, z, lakes_px = (
+        rasters.raster, rasters.land_px, rasters.elevation_m, rasters.lakes_px
+    )
+    images: dict[str, Image.Image] = {}
+    relief = relief_image(z, land_px, raster)
+    paint_lakes(relief, result, lakes_px)
+    draw_rivers(relief, result, raster, threshold_m3_s)
+    climate = result.climate
+    if climate is not None:
+        atlas = atlas_image(z, land_px, raster, biome_rgb(result, raster))
+        paint_lakes(atlas, result, lakes_px)
+        draw_rivers(atlas, result, raster, threshold_m3_s)
+        images["Planet atlas"] = atlas
+    images["Planet relief"] = relief
+    if climate is not None:
+        mesh = result.mesh
+        images["Planet rainfall"] = scalar_image(
+            raster.interpolate(mesh, climate.precipitation_mm), land_px, 0.0, 2500.0, RAIN_COLOURS
+        )
+        images["Planet temperature"] = scalar_image(
+            raster.interpolate(mesh, climate.temperature_c), land_px, -25.0, 30.0,
+            TEMPERATURE_COLOURS,
+        )
+    return images
+
+
+def render_previews(result: PlanetResult, width: int, river_km2: float) -> dict[str, Image.Image]:
+    return preview_images(
+        result, planet_rasters(result, width), river_threshold_m3_s(result, river_km2)
+    )

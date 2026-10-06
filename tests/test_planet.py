@@ -16,7 +16,7 @@ from benchmarks.planet.sample_geology import sample_recipe
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
 from dmtools.terrain.adapters.build import file_sha256
 from dmtools.terrain.adapters.world_geology import write_geology
-from dmtools.terrain.application.planet import build_planet
+from dmtools.terrain.application.planet import build_planet, input_identity
 from dmtools.terrain.application.world import open_world
 from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
 from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
@@ -182,7 +182,11 @@ def test_planet_build_publishes_verified_world_aligned_products(
     assert {"atlas.png", "precipitation.png", "temperature.png", "geology.dmgeology.json"} <= set(
         manifest["outputs"]
     )
-    assert manifest["inputs"]["world_sha256"] == file_sha256(world_path)
+    recipe = sample_recipe(world_path)
+    assert manifest["inputs"] == input_identity(recipe.world, recipe)
+    assert {"atlas.png", "relief.png", "precipitation.png", "temperature.png"} <= set(
+        manifest["outputs"]
+    )
     assert not (target / "manifest.pending").exists()
     with np.load(target / "planet.npz", allow_pickle=False) as archive:
         land = archive["land"]

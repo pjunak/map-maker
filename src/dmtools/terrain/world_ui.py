@@ -14,9 +14,10 @@ from tkinter import filedialog, messagebox, ttk
 from typing import cast
 from uuid import uuid4
 
-from PIL import ImageTk
+from PIL import Image, ImageTk
 from shapely.geometry import Point, Polygon
 
+from dmtools.terrain.adapters.planet_render import PREVIEW_LAYERS
 from dmtools.terrain.adapters.world_context_render import (
     CONTEXT_LAYERS,
     ContextLayer,
@@ -26,6 +27,7 @@ from dmtools.terrain.adapters.world_geology import world_fingerprint
 from dmtools.terrain.adapters.world_project import WORLD_EXTENSION
 from dmtools.terrain.adapters.world_render import OCEAN, render_world_source
 from dmtools.terrain.adapters.world_svg import load_world_svg
+from dmtools.terrain.application.planet import PlanetRun, export_planet, generate_planet_run
 from dmtools.terrain.application.world import (
     continent_from_name,
     open_world,
@@ -44,6 +46,7 @@ from dmtools.terrain.application.world_terrain import (
     WorldTerrainCreated,
     create_world_terrain_project,
 )
+from dmtools.terrain.domain.planet import PlanetSettings
 from dmtools.terrain.domain.world import (
     WorldAssignment,
     WorldContinent,
@@ -61,6 +64,7 @@ from dmtools.terrain.domain.world_context import (
 )
 from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
 from dmtools.terrain.pipeline.world import WorldMap, prepare_world_map
+from dmtools.terrain.planet_ui import PlanetPanel, PlanetProbe
 from dmtools.terrain.viewport import MapViewport
 from dmtools.terrain.world_bathymetry_ui import BathymetryEditor
 from dmtools.terrain.world_geology_ui import GeologyEditor
@@ -114,6 +118,44 @@ class _Progress:
     message: str
 
 
+@dataclass(frozen=True)
+class _PlanetReady:
+    run: PlanetRun
+    signature: object
+
+
+@dataclass(frozen=True)
+class _PlanetExported:
+    path: Path
+
+
+def frame_view(
+    image: Image.Image,
+    rect: tuple[float, float, float, float],
+    size: tuple[int, int],
+    background: str,
+) -> Image.Image:
+    """Place a world-frame image into the canvas rectangle of the current viewport."""
+    width, height = size
+    canvas = Image.new("RGB", size, background)
+    left, top, right, bottom = rect
+    if right <= left or bottom <= top:
+        return canvas
+    x0, y0 = max(0.0, left), max(0.0, top)
+    x1, y1 = min(float(width), right), min(float(height), bottom)
+    if x1 - x0 < 1 or y1 - y0 < 1:
+        return canvas
+    sx, sy = image.width / (right - left), image.height / (bottom - top)
+    crop = image.crop(
+        (int((x0 - left) * sx), int((y0 - top) * sy),
+         max(int((x0 - left) * sx) + 1, int((x1 - left) * sx)),
+         max(int((y0 - top) * sy) + 1, int((y1 - top) * sy)))
+    )
+    resample = Image.Resampling.BILINEAR if sx < 1 else Image.Resampling.LANCZOS
+    canvas.paste(crop.resize((int(x1 - x0), int(y1 - y0)), resample), (int(x0), int(y0)))
+    return canvas
+
+
 type _Event = (
     WorldSource
     | WorldMap
@@ -124,6 +166,8 @@ type _Event = (
     | _ContextOpened
     | _ContextExported
     | _TerrainReady
+    | _PlanetReady
+    | _PlanetExported
     | _Progress
     | Exception
 )
@@ -147,6 +191,8 @@ class WorldWorkspace(ttk.Frame):
         self.bathymetry_editor: BathymetryEditor | None = None
         self._bathymetry_file: BathymetryFile | None = None
         self.context_run: WorldContextRun | None = None
+        self.planet_run: PlanetRun | None = None
+        self._planet_probe: PlanetProbe | None = None
         self._context_cancellation: CancellationToken | None = None
         self.continents: tuple[WorldContinent, ...] = ()
         self.assignments: tuple[WorldAssignment, ...] = ()
@@ -239,13 +285,14 @@ class WorldWorkspace(ttk.Frame):
             ("Save As…", lambda: self.save(save_as=True)),
             ("Geology…", self.edit_geology),
             ("Bathymetry…", self.edit_bathymetry),
+            ("Planet…", self.show_planet),
             ("Terrain…", self.show_terrain),
         ):
             self._button(header, label, action).pack(side="left", padx=(10, 0))
         ttk.Label(
             self,
-            text="1  WORLD SOURCE     →     2  CONTEXT     →     3  ROUGH TERRAIN"
-            "     →     4  REGIONAL DETAIL",
+            text="1  WORLD SOURCE     →     2  CONTEXT     →     3  PLANET"
+            "     →     4  REGIONAL TERRAIN",
             style="Eyebrow.TLabel",
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 12))
         sidebar = ttk.Frame(self, style="Panel.TFrame", padding=12)
@@ -383,6 +430,10 @@ class WorldWorkspace(ttk.Frame):
         self.adjustment_detail.grid(row=2, column=0, columnspan=2, sticky="ew", pady=12)
         self.context_page = ttk.Frame(pages, style="Panel.TFrame", padding=10)
         pages.add(self.context_page, text="Context")
+        self.planet_panel = PlanetPanel(
+            pages, self.generate_planet, self.export_planet, self.cancel_context
+        )
+        pages.add(self.planet_panel, text="Planet")
         self.context_page.columnconfigure(0, weight=1)
         self.context_page.rowconfigure(7, weight=1)
         ttk.Label(self.context_page, text="Geographic context", style="Value.TLabel").grid(
@@ -468,7 +519,7 @@ class WorldWorkspace(ttk.Frame):
         self.layer_input = ttk.Combobox(
             toolbar,
             textvariable=self.display_layer,
-            values=("Source", *CONTEXT_LAYERS),
+            values=("Source", *CONTEXT_LAYERS, *PREVIEW_LAYERS),
             state="readonly",
             width=20,
         )
@@ -511,6 +562,7 @@ class WorldWorkspace(ttk.Frame):
             return
         self.validated = None
         self._clear_context()
+        self._clear_planet()
         self.adjustment_tree.delete(*self.adjustment_tree.get_children())
         self.pages.tab(self.adjustments_page, text="Adjustments")
         self.adjustment_detail.configure(text="Validate the world to inspect import adjustments.")
@@ -559,6 +611,7 @@ class WorldWorkspace(ttk.Frame):
             state="normal" if busy and self._context_cancellation is not None else "disabled"
         )
         self.terrain_panel.set_busy(busy, self._context_cancellation is not None)
+        self.planet_panel.set_busy(busy, self._context_cancellation is not None)
         if busy:
             self.progress.start(12)
         else:
@@ -602,6 +655,23 @@ class WorldWorkspace(ttk.Frame):
                         f"World inputs changed. Prepared project retained separately: "
                         f"{event.created.loaded.path}"
                     )
+            elif isinstance(event, _PlanetReady):
+                if event.signature != self._signature():
+                    self.status.set("World inputs changed; generate the planet again.")
+                    continue
+                self.planet_run = event.run
+                self._planet_probe = PlanetProbe(event.run.result)
+                self.planet_panel.show(event.run)
+                self.pages.select(self.planet_panel)
+                self.display_layer.set(
+                    "Planet atlas" if "Planet atlas" in event.run.previews else "Planet relief"
+                )
+                self._layer_changed()
+                self.status.set(
+                    "Planet ready. Inspect the layers; export to keep a reproducible build."
+                )
+            elif isinstance(event, _PlanetExported):
+                self.status.set(f"Planet exported: {event.path}. Inputs and outputs are hashed.")
             elif isinstance(event, _GeologyReady):
                 self.validated = event.world
                 self._show_summary(event.world)
@@ -704,8 +774,26 @@ class WorldWorkspace(ttk.Frame):
         self._clear_context()
         self._schedule_draw()
 
+    def _clear_planet(self) -> None:
+        if self.planet_run is not None:
+            self.planet_run = None
+            self._planet_probe = None
+            self.planet_panel.clear("Inputs changed. Generate the planet again.")
+            if self.display_layer.get() in PREVIEW_LAYERS:
+                self.display_layer.set("Source")
+                self._layer_changed()
+
     def _layer_changed(self, _event: tk.Event[tk.Misc] | None = None) -> None:
-        if self.display_layer.get() != "Source" and self.context_run is None:
+        if self.display_layer.get() in PREVIEW_LAYERS:
+            run = self.planet_run
+            if run is None or self.display_layer.get() not in run.previews:
+                self.display_layer.set("Source")
+                self.status.set(
+                    "Generate the planet (with climate for atlas, rainfall and temperature) "
+                    "before choosing its layers."
+                )
+                self.pages.select(self.planet_panel)
+        elif self.display_layer.get() != "Source" and self.context_run is None:
             self.display_layer.set("Source")
             self.status.set("Generate context in the Context tab before choosing its layers.")
             self.pages.select(self.context_page)
@@ -742,9 +830,19 @@ class WorldWorkspace(ttk.Frame):
             "Exposure support": "Dark = 0%; gold = 100% of exposure weight falls in mixed "
             "coastal cells. This flags unresolved geography; it is not an error bound.",
         }
+        legends |= {
+            "Planet atlas": "Provisional biomes on shaded relief. Blue lines are rivers sized by "
+            "discharge; blue lakes overflow, grey lakes are closed basins.",
+            "Planet relief": "Elevation from uplift and river erosion; coast kept exactly.",
+            "Planet rainfall": "Brown = dry; green = moderate; blue = 2,500+ mm/yr (provisional).",
+            "Planet temperature": "Annual mean: violet = -25 °C; cream ≈ 5 °C; red = 30 °C.",
+        }
         self.context_legend.set(legends.get(layer, legends["Source"]))
+        planet = self.planet_run.result if self.planet_run else None
         self.viewer_note.set(
-            f"{context.grid.angular_step_deg:g}° cells"
+            f"{planet.mesh.spacing_m / 1000:,.0f} km planet mesh"
+            if planet and layer in PREVIEW_LAYERS
+            else f"{context.grid.angular_step_deg:g}° cells"
             if context and self.display_layer.get() != "Source"
             else "Retained source geography"
         )
@@ -789,6 +887,45 @@ class WorldWorkspace(ttk.Frame):
             f"{exposure_steps(result.grid)} samples per ray.\n"
             "Sampling may miss narrow features. Inspect Exposure support and compare "
             "grid resolutions before drawing conclusions."
+        )
+
+    def show_planet(self) -> None:
+        self.pages.select(self.planet_panel)
+
+    def generate_planet(self, settings: PlanetSettings, geology_path: Path | None) -> None:
+        if self.busy:
+            return
+        try:
+            project = self.project()
+        except ValueError as error:
+            messagebox.showerror("Planet needs a valid world", str(error), parent=self)
+            return
+        signature = self._signature()
+        cancellation = CancellationToken()
+        self._context_cancellation = cancellation
+
+        def progress(fraction: float, message: str) -> None:
+            self._events.put(_Progress(f"{fraction:.0%} · {message}"))
+
+        self._work(
+            "Generating the planet…",
+            lambda: _PlanetReady(
+                generate_planet_run(
+                    project, geology_path, settings, progress, cancellation=cancellation
+                ),
+                signature,
+            ),
+        )
+
+    def export_planet(self, destination: Path) -> None:
+        run = self.planet_run
+        if self.busy or run is None:
+            return
+        cancellation = CancellationToken()
+        self._context_cancellation = cancellation
+        self._work(
+            "Exporting the planet build…",
+            lambda: _PlanetExported(export_planet(run, destination, cancellation=cancellation)),
         )
 
     def show_terrain(self) -> None:
@@ -881,6 +1018,7 @@ class WorldWorkspace(ttk.Frame):
             self.status.set("Stopping the world job at the next checkpoint…")
             self.context_cancel.configure(state="disabled")
             self.terrain_panel.cancel_button.configure(state="disabled")
+            self.planet_panel.cancel_button.configure(state="disabled")
 
     def export_context(self) -> None:
         if self.busy:
@@ -1211,6 +1349,7 @@ class WorldWorkspace(ttk.Frame):
             self._geology_file = file
             if file is not None:
                 self.terrain_panel.set_geology(file.path)
+                self.planet_panel.set_geology(file.path)
             self.geology_editor = None
 
         self.geology_editor = GeologyEditor(
@@ -1372,7 +1511,15 @@ class WorldWorkspace(ttk.Frame):
             return
         bounds = self._bounds()
         try:
-            if self.context_run is not None and self.display_layer.get() in CONTEXT_LAYERS:
+            if self.planet_run is not None and self.display_layer.get() in PREVIEW_LAYERS:
+                world_size = (bounds[2] - bounds[0], bounds[3] - bounds[1])
+                preview = frame_view(
+                    self.planet_run.previews[self.display_layer.get()],
+                    self.viewport.rect((width, height), world_size),
+                    (width, height),
+                    OCEAN,
+                )
+            elif self.context_run is not None and self.display_layer.get() in CONTEXT_LAYERS:
                 preview = render_world_context(
                     self.context_run.context,
                     self.viewport,
@@ -1472,7 +1619,9 @@ class WorldWorkspace(ttk.Frame):
         try:
             longitude, latitude = self._frame().source_to_lonlat(position)
             detail = "Wheel: zoom · Middle/right drag: pan · F: fit"
-            if self.context_run is not None and self.display_layer.get() != "Source":
+            if self._planet_probe is not None and self.display_layer.get() in PREVIEW_LAYERS:
+                detail = self._planet_probe.describe(longitude, latitude)
+            elif self.context_run is not None and self.display_layer.get() != "Source":
                 context = self.context_run.context
                 frame = context.grid.frame
                 rows, columns = context.grid.shape

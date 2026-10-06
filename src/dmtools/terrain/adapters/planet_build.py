@@ -26,16 +26,9 @@ from rasterio.crs import CRS
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
-    atlas_image,
-    biome_rgb,
-    draw_rivers,
-    elevation_raster,
-    lake_raster,
-    land_mask,
-    paint_lakes,
-    relief_image,
+    planet_rasters,
+    preview_images,
     river_threshold_m3_s,
-    scalar_image,
 )
 from dmtools.terrain.adapters.world_geology import geology_document
 from dmtools.terrain.adapters.world_project import world_project_document
@@ -45,6 +38,12 @@ from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_climate import BIOMES
 
 PLANET_BUILD_SCHEMA = "dmtools.planet-build"
+PREVIEW_FILES = {
+    "Planet atlas": "atlas.png",
+    "Planet relief": "relief.png",
+    "Planet rainfall": "precipitation.png",
+    "Planet temperature": "temperature.png",
+}
 PLANET_BUILD_VERSION = 1
 MAX_RIVER_FEATURES = 200_000
 
@@ -230,9 +229,8 @@ def write_planet_build(
         np.savez_compressed(stream, allow_pickle=False, **arrays)
     names.append("planet.npz")
     verify()
-    raster = FrameRaster.build(mesh, result.world.project.frame, width)
-    land_px = land_mask(result.world, raster)
-    z = elevation_raster(result, raster, land_px)
+    rasters = planet_rasters(result, width)
+    raster, z, lakes_px = rasters.raster, rasters.elevation_m, rasters.lakes_px
     _write_geotiff(
         target / "elevation.tif", z.astype(np.float32), raster,
         {"manifest": "manifest.json", "authority": "planet.npz node elevation (derived raster)"},
@@ -240,29 +238,11 @@ def write_planet_build(
     names.append("elevation.tif")
     verify()
     threshold = river_threshold_m3_s(result, river_km2)
-    lakes_px = lake_raster(result, raster, land_px)
-    image = relief_image(z, land_px, raster)
-    paint_lakes(image, result, lakes_px)
-    draw_rivers(image, result, raster, threshold)
-    image.save(target / "relief.png")
-    names.append("relief.png")
-    if climate is not None:
+    for layer, image in preview_images(result, rasters, threshold).items():
         verify()
-        atlas = atlas_image(z, land_px, raster, biome_rgb(result, raster))
-        paint_lakes(atlas, result, lakes_px)
-        draw_rivers(atlas, result, raster, threshold)
-        atlas.save(target / "atlas.png")
-        names.append("atlas.png")
-        for name, values, low, high, colours in (
-            ("precipitation.png", climate.precipitation_mm, 0.0, 2500.0,
-             ((150, 90, 40), (230, 210, 140), (120, 190, 90), (30, 120, 160), (20, 40, 140))),
-            ("temperature.png", climate.temperature_c, -25.0, 30.0,
-             ((60, 40, 160), (90, 160, 220), (240, 240, 200), (240, 160, 60), (180, 40, 30))),
-        ):
-            scalar_image(raster.interpolate(mesh, values), land_px, low, high, colours).save(
-                target / name
-            )
-            names.append(name)
+        name = PREVIEW_FILES[layer]
+        image.save(target / name)
+        names.append(name)
     verify()
     rivers = river_features(result, threshold)
     save_bytes("rivers.geojson", json.dumps(rivers, separators=(",", ":")).encode("utf-8"))
