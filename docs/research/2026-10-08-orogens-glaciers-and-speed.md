@@ -103,7 +103,40 @@ and rejected (see below). Items 2 and 8 remain open.
     margins, and nunataks keep their own height.
   - **Scope.** Display only. Exported elevation stays at bedrock.
 
+## River counts measured like a gazetteer
+
+Earth's 230–250 rivers longer than 1,000 km (Grill et al. 2019) include major
+tributaries such as the Missouri, Madeira and Irtysh. Main stems that reach the
+sea undercount against that.
+
+- **New metric.** `scale_metrics` now also decomposes the network into rivers.
+  Each river follows its largest-area branch upstream and ends where it joins a
+  larger river.
+- **Result.** v10 has 332 / 118 / 34 / 13 rivers longer than 500 / 1,000 /
+  2,000 / 3,000 km. Earth, scaled to this land area, has about 180 longer than
+  1,000 km and about 47 longer than 2,000 km.
+- **Length correction.** Mesh paths at 12 km miss reach-scale meanders
+  (sinuosity 1.1–1.4), so true lengths would be about 20–30 % longer.
+- **Conclusion.** River counts are now within resolution of Earth's.
+- **Swell test.** Weakening, removing or moving the passive-margin swell inland
+  changed main stems over 1,000 km only between 75 and 86. The swell is not the
+  limit.
+
 ## Rejected trials
+
+- **Analytic steady-state solver** (Steer 2021; Tzathas et al. 2024).
+  - **Method.** Response times along the receiver tree, z_i = z_r + L U /
+    (K Ã^m), capped at the uneroded surface z₀ + U t where the erosion wave has
+    not arrived; eight route-and-rebuild iterations.
+  - **Speed.** About 3× faster at 800k nodes (8 s against 24.6 s).
+  - **Rivers.** The networks became regular herringbone trees with straight
+    trunks. Main stems longer than 500 km fell from 154 to 51.
+  - **Ranges.** Composite sub-ranges smoothed away.
+  - **Spikes.** Isolated nodes rose to 59 km.
+  - **Conclusion.** The time-stepped history (inherited drainage, growing
+    ranges) carries information the steady state lacks. Time-stepping on the
+    coupling mesh with an analytic refinement on the fine mesh remains a
+    candidate.
 
 - **Lifting isolated pits** to just above their lowest neighbour, with a
   fallback to Priority-Flood. The persistent pits are multi-node flats, so the

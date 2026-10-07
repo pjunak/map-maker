@@ -113,6 +113,10 @@ def rivers(build: Build, continent: I64) -> dict[str, object]:
         "rivers_longer_than_km": {
             str(limit): int(np.sum(length_km > limit)) for limit in (500, 1000, 2000, 3000)
         },
+        "all_rivers_longer_than_km": {
+            str(limit): int(np.sum(river_lengths_km(build) > limit))
+            for limit in (500, 1000, 2000, 3000)
+        },
         "largest_basins": [
             {
                 "area_km2": round(float(area_km2[i])),
@@ -125,6 +129,32 @@ def rivers(build: Build, continent: I64) -> dict[str, object]:
             for i in top
         ],
     }
+
+
+def river_lengths_km(build: Build) -> F64:
+    """Lengths of every river, tributaries included, as a gazetteer counts them.
+
+    Each river follows its largest-area branch upstream and ends where it joins
+    a larger river or the sea, so the Missouri and Madeira count separately from
+    the Mississippi and Amazon (Earth: about 230-250 rivers over 1,000 km).
+    """
+    mesh, land, receiver, area = build.mesh, build.land, build.receiver, build.area_m2
+    distance = receiver_distance(mesh, receiver)
+    order = downstream_first(receiver, land)
+    main_area = np.zeros(mesh.size)
+    main_donor = np.full(mesh.size, -1, dtype=np.int64)
+    for node in order[::-1].tolist():
+        r = int(receiver[node])
+        if r >= 0 and land[r] and area[node] > main_area[r]:
+            main_area[r], main_donor[r] = area[node], node
+    stem = np.zeros(mesh.size)
+    for node in order[::-1].tolist():
+        donor = int(main_donor[node])
+        if donor >= 0:
+            stem[node] = stem[donor] + distance[donor]
+    r = np.maximum(receiver, 0)
+    ends = land & (receiver >= 0) & (~land[r] | (main_donor[r] != np.arange(mesh.size)))
+    return (stem[ends] + distance[ends]) / 1e3
 
 
 def horton(build: Build, minimum_km2: float = 2_000.0) -> dict[str, object]:
