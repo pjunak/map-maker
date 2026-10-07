@@ -36,7 +36,7 @@ from scipy.spatial import KDTree
 from dmtools.terrain.domain.planet import PlanetClimateSettings
 from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
 from dmtools.terrain.pipeline.planet_kernels import neighbour_mix
-from dmtools.terrain.pipeline.planet_mesh import SphereMesh, vertex_triangles
+from dmtools.terrain.pipeline.planet_mesh import SphereMesh, sample_field, vertex_triangles
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -262,15 +262,59 @@ def simulate_climate(
             q = q - rain + recycling * rain
             seasonal = 0.9 * seasonal + 0.1 * rain
         precip += seasonal / 2
+    return _surface_climate(
+        mesh, elevation, land, coast_m, s, (temp, warm, cold), u_mean, v_mean, precip
+    )
+
+
+def _surface_climate(
+    mesh: SphereMesh,
+    elevation: F64,
+    land: B,
+    coast_m: F64,
+    s: PlanetClimateSettings,
+    temperature: tuple[F64, F64, F64],
+    wind_east: F64,
+    wind_north: F64,
+    precip: F64,
+) -> Climate:
+    """Scale precipitation to the land mean, then local PET, runoff and biomes."""
+    temp, warm, cold = temperature
     weight = mesh.area_m2 * land
     mean = float(np.sum(precip * weight) / np.sum(weight))
     precip_mm = precip * (s.mean_land_precip_mm / max(mean, 1e-12))
-    pet = potential_evapotranspiration(lat, temp, coast_m)
+    pet = potential_evapotranspiration(mesh.lat, temp, coast_m)
     ratio = pet / np.maximum(precip_mm, 1e-6)
     actual = precip_mm * (1 + ratio - (1 + ratio**BUDYKO_W) ** (1 / BUDYKO_W))
     runoff = np.where(land, np.maximum(precip_mm - actual, 0.0), 0.0)
     biome = classify(temp, warm, precip_mm, pet, elevation, land)
-    return Climate(temp, warm, cold, u_mean, v_mean, precip_mm, pet, runoff, biome)
+    return Climate(temp, warm, cold, wind_east, wind_north, precip_mm, pet, runoff, biome)
+
+
+def downscale_climate(
+    coarse_mesh: SphereMesh,
+    coarse: Climate,
+    mesh: SphereMesh,
+    elevation: F64,
+    land: B,
+    coast_m: F64,
+    settings: PlanetClimateSettings | None = None,
+) -> Climate:
+    """Climate on a fine mesh from moisture transport solved on a coarse one.
+
+    Precipitation and winds vary over hundreds of kilometres, so they are
+    interpolated. Temperature (with its lapse rate), PET, runoff and biomes are
+    local and are recomputed from the fine relief.
+    """
+    s = settings or PlanetClimateSettings()
+    temperature = temperatures(mesh, elevation, land, coast_m, s)
+    precip = np.maximum(sample_field(coarse_mesh, mesh.xyz, coarse.precipitation_mm), 0.0)
+    return _surface_climate(
+        mesh, elevation, land, coast_m, s, temperature,
+        sample_field(coarse_mesh, mesh.xyz, coarse.wind_east),
+        sample_field(coarse_mesh, mesh.xyz, coarse.wind_north),
+        precip,
+    )
 
 
 def classify(temp: F64, warm: F64, precip: F64, pet: F64, elevation: F64, land: B) -> I8:

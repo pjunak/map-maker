@@ -5,8 +5,8 @@ from math import isfinite
 
 from dmtools.terrain.domain.seeds import validate_master_seed
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v2"
-PLANET_CLIMATE_ALGORITHM = "planet-climate-v1"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v3"
+PLANET_CLIMATE_ALGORITHM = "planet-climate-v2"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"
 PLANET_INITIAL_STAGE_ID = "planet.initial"
@@ -65,7 +65,7 @@ class PlanetSettings:
     step_kyr: float = 100.0
     erodibility: float = 5e-6
     area_exponent: float = 0.45
-    process_area_km2: float = 2_500.0
+    process_area_km2: float = 600.0
     calibration_iterations: int = 3
     climate_passes: int = 1
     climate: PlanetClimateSettings = field(default_factory=PlanetClimateSettings)

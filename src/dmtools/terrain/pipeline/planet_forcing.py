@@ -23,6 +23,7 @@ from shapely.ops import unary_union
 from dmtools.terrain.domain.models import LandformSettings
 from dmtools.terrain.domain.world import WorldFrame
 from dmtools.terrain.domain.world_geology import GeologyProfile, WorldGeologyRecipe
+from dmtools.terrain.pipeline.planet_climate import surface_gradient, tangent_frame
 from dmtools.terrain.pipeline.planet_kernels import multi_source_distance
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
@@ -55,6 +56,21 @@ OLD_CRUST_MA = 1000.0
 OLD_CRUST_ERODIBILITY = 0.7
 PLATEAU_PULSE_FRACTION = 0.2
 UPLIFT_TEXTURE = 0.6
+# Procedural uplift rates (m/yr) where no geology recipe applies. Active belts
+# reach steady state; plateaus, swells and shields erode so slowly (see
+# SHIELD_ERODIBILITY) that their height is mostly accumulated uplift.
+BELT_UPLIFT = 2.2e-3
+PLATEAU_UPLIFT = 3e-4
+MINOR_UPLIFT = 1e-3
+HILL_UPLIFT = 8e-5
+MARGIN_UPLIFT = 1e-3
+CRATON_UPLIFT = 5e-5
+SWELL_UPLIFT = 8e-5
+# Erodibility outside active belts. Shields and plateaus erode so slowly that
+# uplift outpaces them: they stay smooth and high while rivers cut in from their
+# edges (the African plateau, the Colorado Plateau), instead of dissecting into
+# badlands at continental scale.
+SHIELD_ERODIBILITY = 0.25
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
 
@@ -102,13 +118,26 @@ def _smoothstep(x: F64, a: float | F64, b: float | F64) -> F64:
 def cratonic_profile(coast_m: F64) -> F64:
     """Relative stable-continent uplift: marginal swell and a broad interior sag.
 
-    Passive margins flex up a few hundred kilometres inland while old interiors
-    subside into broad basins. Interior drainage therefore gathers into a few
-    trunk rivers that breach the rim, instead of radiating from a central dome.
+    Passive margins flex up into an escarpment 30-200 km inland (Wang and Willett
+    2021) while old interiors subside into broad basins. Interior drainage
+    therefore gathers into a few trunk rivers that breach the rim, instead of
+    radiating from a central dome.
     """
-    swell = np.exp(-(((coast_m - 250e3) / 220e3) ** 2))
+    swell = np.exp(-(((coast_m - 150e3) / 150e3) ** 2))
     sag = _smoothstep(coast_m, 500e3, 1500e3)
     return np.maximum(0.15, 0.55 + 0.9 * swell - 0.35 * sag)
+
+
+def crest_distance(mesh: SphereMesh, field: F64) -> F64:
+    """Approximate distance (m) to the zero line of a smooth field: |f| / |grad f|."""
+    east, north = tangent_frame(mesh.xyz)
+    gradient_east, gradient_north = surface_gradient(mesh, field, east, north)
+    return np.abs(field) / np.maximum(np.hypot(gradient_east, gradient_north), 1e-12)
+
+
+def ridge_profile(distance_m: F64, half_width_m: F64) -> F64:
+    """Uplift across a range: a broad axial zone falling to a defined front."""
+    return 1 - _smoothstep(distance_m, 0.25 * half_width_m, half_width_m)
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,13 +156,33 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     into a handful of huge, uniform plains and plateaus.
     """
     p = mesh.xyz
+    # Belts follow the zero lines of smooth noise, with explicit half-widths from
+    # Earth's ranges: great orogens 60-175 km (Himalaya 150-350 km wide, Andes
+    # ~200 km, Alps ~200 km), minor ranges and fold belts 20-60 km, broken into
+    # segments 1,000-3,000 km long instead of one continent-spanning network.
     warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
-    ridged = 1 - np.abs(fbm3(p + 0.35 * warp, seed + 101, 4, 1.4))
-    belts = _smoothstep(ridged, 0.80, 0.97) * _smoothstep(coast_m, 0.0, 150e3)
+    major = fbm3(p + 0.35 * warp, seed + 101, 4, 1.4)
+    major_half = 60e3 + 115e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4)
+    major_distance = crest_distance(mesh, major)
+    segments = _smoothstep(fbm3(p, seed + 151, 3, 3.5), -0.15, 0.25)
+    inland_fade = _smoothstep(coast_m, 0.0, 150e3)
+    belts = ridge_profile(major_distance, major_half) * segments * inland_fade
+    # A few great orogens carry a high plateau behind the range (Tibet 1,000 km
+    # wide, Altiplano 350-400 km).
+    plateau = (
+        ridge_profile(major_distance, 4.0 * major_half)
+        * segments
+        * _smoothstep(fbm3(p, seed + 171, 3, 2.0), 0.05, 0.35)
+        * _smoothstep(coast_m, 100e3, 400e3)
+    )
+    # Broad swells and basins (dynamic topography, old uplifted shields) lift
+    # whole regions by hundreds of metres over 1,000-3,000 km.
+    swell = _smoothstep(fbm3(p, seed + 181, 3, 2.0), -0.05, 0.45)
     fine_warp = np.stack([fbm3(p, seed + 310 + k, 3, 4.0) for k in range(3)], axis=1)
-    minor_ridged = 1 - np.abs(fbm3(p + 0.12 * fine_warp, seed + 111, 4, 4.5))
+    minor_field = fbm3(p + 0.12 * fine_warp, seed + 111, 4, 4.5)
+    minor_half = 20e3 + 40e3 * _smoothstep(fbm3(p, seed + 161, 3, 8.0), -0.4, 0.4)
     minor = (
-        _smoothstep(minor_ridged, 0.84, 0.97)
+        ridge_profile(crest_distance(mesh, minor_field), minor_half)
         * _smoothstep(fbm3(p, seed + 212, 3, 2.5), -0.1, 0.3)
         * _smoothstep(coast_m, 0.0, 80e3)
     )
@@ -142,23 +191,35 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         fbm3(p, seed + 222, 3, 3.5), -0.1, 0.4
     )
     gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
-    # Active margins vary along strike; a uniform coastal band erodes into a comb
-    # of identical parallel valleys.
+    # Active-margin ranges are 100-300 km wide (Andes, Coast Mountains) and vary
+    # along strike; a uniform coastal band erodes into a comb of identical valleys.
     strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
     margins = (
         gate
         * (0.35 + 0.65 * strike)
-        * _smoothstep(coast_m, 30e3, 120e3)
-        * (1 - _smoothstep(coast_m, 250e3, 500e3))
+        * _smoothstep(coast_m, 20e3, 60e3)
+        * (1 - _smoothstep(coast_m, 120e3, 250e3))
     )
     # Uniform uplift erodes into a smooth dome with radial drainage. Inherited
     # structure (warps, faults, lithology) breaks that symmetry from 100 to 2000 km.
     uplift_texture = np.exp(UPLIFT_TEXTURE * fbm3(p, seed + 505, 6, 3.0, 0.6))
     # The marginal swell sits a varying distance inland, not on a ring.
     inland = coast_m * np.exp(0.4 * fbm3(p, seed + 606, 3, 4.0))
-    craton = 6e-5 * cratonic_profile(inland) * uplift_texture
-    uplift = craton + 1.2e-3 * belts + 4e-4 * minor + 1.2e-4 * hills + 6e-4 * margins
-    texture = np.exp(1.1 * fbm3(p, seed + 404, 5, 3.0))
+    craton = CRATON_UPLIFT * cratonic_profile(inland) * uplift_texture
+    uplift = (
+        craton
+        + SWELL_UPLIFT * swell * uplift_texture
+        + PLATEAU_UPLIFT * plateau
+        + BELT_UPLIFT * belts
+        + MINOR_UPLIFT * minor
+        + HILL_UPLIFT * hills
+        + MARGIN_UPLIFT * margins
+    )
+    active = np.clip(np.maximum(np.maximum(belts, minor), margins), 0.0, 1.0)
+    # Lithology varies down to ~30 km; without it rivers run straight and parallel
+    # down every uniform slope.
+    lithology = np.exp(1.1 * fbm3(p, seed + 404, 7, 3.0, 0.6))
+    texture = lithology * (SHIELD_ERODIBILITY + (1 - SHIELD_ERODIBILITY) * active)
     return ProceduralForcing(np.where(land, uplift, 0.0), texture, uplift_texture)
 
 

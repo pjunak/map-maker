@@ -14,6 +14,8 @@ development fixtures and measurements used to build and check it.
 # Resolution sweep: relief statistics should converge as the mesh is refined.
 .\.venv\Scripts\python.exe -m benchmarks.planet.sweep artifacts/planet/worlds/fractal-world.dmworld.json --nodes 50000 200000 800000
 
+# Landform scales of a build (range widths, valley spacing, river lengths vs Earth).
+.\.venv\Scripts\python.exe -m benchmarks.planet.scale_metrics my-planet --json scales.json
 ```
 
 Generated worlds and recipes are development fixtures, not authored canon. Keep

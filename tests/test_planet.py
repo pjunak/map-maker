@@ -293,3 +293,46 @@ def test_ice_sheets_hold_no_young_lakes() -> None:
     no_scour = young_depressions(mesh, land, coast, None, None, flat, 1)
     assert np.all(ice <= no_scour + 1e-9)
     assert np.all(ice <= ice_free + 1e-9)
+
+
+def test_fine_meshes_couple_climate_on_coarser_meshes(
+    world_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import dmtools.terrain.pipeline.planet as planet
+
+    # Scaled-down stand-ins for the 200k climate and 800k coupling meshes.
+    monkeypatch.setattr(planet, "CLIMATE_NODES", 3_000)
+    monkeypatch.setattr(planet, "COUPLING_NODES", 6_000)
+    settings = replace(FAST, nodes=12_000, climate_passes=2)
+    result = generate_planet(open_world(world_path), settings)
+    climate = result.climate
+    assert climate is not None and result.runoff_weight is not None
+    assert result.runoff_weight.shape == (result.mesh.size,)
+    for field in (climate.temperature_c, climate.precipitation_mm, climate.runoff_mm):
+        assert field.shape == (result.mesh.size,) and np.all(np.isfinite(field))
+    land = result.land
+    mean = np.average(climate.precipitation_mm[land], weights=result.mesh.area_m2[land])
+    assert mean == pytest.approx(settings.climate.mean_land_precip_mm, rel=1e-6)
+    # Temperature is recomputed on the full mesh, so it keeps the fine relief's lapse rate.
+    high = land & (result.elevation_m > 1500)
+    low = land & (result.elevation_m < 300)
+    if high.any() and low.any():
+        assert climate.temperature_c[high].mean() < climate.temperature_c[low].mean()
+    assert result.metrics["non_descending_receivers"] == 0
+
+
+def test_scale_metrics_measure_rivers_and_mountain_belts(world_path: Path) -> None:
+    from benchmarks.planet.scale_metrics import Build, report
+
+    result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
+    surface = np.where(result.land, result.lakes.surface_m, result.elevation_m)
+    metrics = report(
+        Build(result.mesh, result.land, surface, result.flow.receiver, result.flow.area_m2)
+    )
+    rivers = metrics["rivers"]
+    assert isinstance(rivers, dict) and rivers["largest_basins"]
+    for basin in rivers["largest_basins"]:
+        # Main stems are at least as long as a compact basin is wide.
+        assert basin["main_stem_km"] >= 0.5 * basin["area_km2"] ** 0.5
+    mountains = metrics["mountains"]
+    assert isinstance(mountains, dict) and 0 <= mountains["mountain_share_of_land"] <= 1

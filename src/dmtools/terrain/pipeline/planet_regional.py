@@ -27,8 +27,7 @@ from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_evolution import EvolutionRun, evolve
 from dmtools.terrain.pipeline.planet_forcing import Forcing, land_on_mesh, smooth_over_land
-from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
-from dmtools.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles, vertex_triangles
+from dmtools.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles, sample_field
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.world import WorldMap
 
@@ -81,13 +80,7 @@ class RegionalParent:
 
     def sample(self, xyz: F64, values: F64) -> F64:
         """Triangle-linear interpolation of a parent node field at unit vectors."""
-        mesh = self.mesh
-        nearest = np.asarray(KDTree(mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
-        vt_ptr, vt_idx = vertex_triangles(mesh)
-        return interpolate_to_lonlat(
-            np.ascontiguousarray(values, dtype=np.float64), mesh.xyz, mesh.triangles, vt_ptr,
-            vt_idx, mesh.ptr, mesh.nbr, nearest, np.ascontiguousarray(xyz),
-        )
+        return sample_field(self.mesh, xyz, values)
 
 
 def inverse_aeqd(x: F64, y: F64, lon0: float, lat0: float, radius_m: float) -> F64:

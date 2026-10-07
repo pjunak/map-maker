@@ -26,7 +26,7 @@ from dmtools.terrain.pipeline.control import (
     cancellable_progress,
     check_cancelled,
 )
-from dmtools.terrain.pipeline.planet_climate import Climate, simulate_climate
+from dmtools.terrain.pipeline.planet_climate import Climate, downscale_climate, simulate_climate
 from dmtools.terrain.pipeline.planet_evolution import (
     CalibratedRelief,
     FlowState,
@@ -43,8 +43,9 @@ from dmtools.terrain.pipeline.planet_forcing import (
     ocean_floor,
 )
 from dmtools.terrain.pipeline.planet_lakes import Lakes, balance_lakes, young_depressions
-from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
+from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_field
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
+from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -52,6 +53,14 @@ type B = NDArray[np.bool_]
 
 RUNOFF_WEIGHT_FLOOR = 0.05
 CALIBRATION_NODES = 100_000
+# Moisture transport varies over hundreds of kilometres and its explicit eddy
+# diffusion costs grow faster than the node count, so it runs on at most this
+# many nodes; local climate fields are recomputed on the full mesh.
+CLIMATE_NODES = 200_000
+COUPLING_NODES = 800_000
+INITIAL_RELIEF_M = 300.0
+# Gentle rise of the inherited surface away from the coast (0.2 m/km).
+INITIAL_COAST_SLOPE = 2e-4
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,7 +121,14 @@ def generate_planet(
         regions = None if geology is None else geology_regions(world, geology, mesh, land)
         rng = np.random.default_rng(seeds[PLANET_INITIAL_STAGE_ID])
         coast = coast_distance(mesh, land)
-        initial = 1 + 5 * rng.random(mesh.size) + 0.002 * coast
+        # An inherited, multi-scale land surface: slowly eroding shields keep its
+        # drainage, so a smooth dome would leave straight radial rivers.
+        texture = fbm3(mesh.xyz, seeds[PLANET_INITIAL_STAGE_ID], 7, 4.0, 0.6)
+        inherited = INITIAL_RELIEF_M * (1 + texture)
+        initial = (
+            1 + 5 * rng.random(mesh.size) + INITIAL_COAST_SLOPE * coast
+            + np.where(land, inherited, 0.0)
+        )
         return _MeshInputs(mesh, land, coast, regions, initial)
 
     say(0.0, f"Building a {settings.nodes:,}-node sphere mesh")
@@ -127,22 +143,55 @@ def generate_planet(
     coarse = (
         sample(CALIBRATION_NODES) if calibrating and settings.nodes > CALIBRATION_NODES else None
     )
-    to_coarse = (
-        None if coarse is None
-        else np.asarray(
-            KDTree(mesh.xyz).query(coarse.mesh.xyz, workers=-1)[1],  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    # Climate coupling passes only feed runoff to the next pass, so they run on at
+    # most COUPLING_NODES; only the final relief uses the full mesh.
+    passes = settings.climate_passes
+    coupling = sample(COUPLING_NODES) if passes > 0 and settings.nodes > COUPLING_NODES else None
+    climate_inputs = (
+        sample(CLIMATE_NODES) if passes > 0 and settings.nodes > CLIMATE_NODES else None
+    )
+
+    def on_mesh(target: _MeshInputs, field: tuple[SphereMesh, F64] | None) -> F64 | None:
+        """A node field carried over to another mesh (triangle-linear interpolation)."""
+        if field is None:
+            return None
+        source, values = field
+        return values if source is target.mesh else sample_field(source, target.mesh.xyz, values)
+
+    def simulate(inputs: _MeshInputs, elevation: F64) -> Climate:
+        if climate_inputs is None:
+            return simulate_climate(
+                inputs.mesh, elevation, inputs.land, inputs.coast_m, settings.climate,
+                cancellation=cancellation,
+            )
+        target, coarse_mesh = inputs.mesh, climate_inputs.mesh
+        nearest = np.asarray(
+            KDTree(coarse_mesh.xyz).query(target.xyz, workers=-1)[1],  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
             dtype=np.int64,
         )
-    )
+        # Area-weighted mean of the land relief around each coarse node.
+        weight = target.area_m2 * inputs.land
+        total = np.bincount(nearest, weight * elevation, coarse_mesh.size)
+        share = np.bincount(nearest, weight, coarse_mesh.size)
+        coarse_elevation = np.where(climate_inputs.land, total / np.maximum(share, 1e-9), 0.0)
+        transport = simulate_climate(
+            coarse_mesh, coarse_elevation, climate_inputs.land, climate_inputs.coast_m,
+            settings.climate, cancellation=cancellation,
+        )
+        return downscale_climate(
+            coarse_mesh, transport, target, elevation, inputs.land, inputs.coast_m,
+            settings.climate,
+        )
+
     check_cancelled(cancellation)
-    passes = settings.climate_passes
     phases = passes + 1
     relief_share, climate_share = (0.9, 0.0) if passes == 0 else (0.7, 0.2)
     climate: Climate | None = None
-    runoff: F64 | None = None
+    runoff_field: tuple[SphereMesh, F64] | None = None
     scale: F64 | None = None
     calibration: tuple[tuple[RegionRecord, ...], ...] = ()
     result = None
+    runoff: F64 | None = None
 
     def relief(
         inputs: _MeshInputs,
@@ -163,6 +212,9 @@ def generate_planet(
     for phase in range(phases):
         start = 0.05 + (relief_share + climate_share) * phase / phases
         label = "" if phases == 1 else f" ({phase + 1}/{phases})"
+        final = phase == phases - 1
+        inputs = fine if final or coupling is None else coupling
+        runoff = on_mesh(inputs, runoff_field)
 
         def on_step(done: int, total: int, start: float = start, label: str = label) -> None:
             if done % 10 == 0 or done == total:
@@ -171,33 +223,36 @@ def generate_planet(
                     f"Eroding relief{label}: step {done:,} of {total:,}",
                 )
 
-        if coarse is not None and to_coarse is not None:
-            coarse_runoff = None if runoff is None else runoff[to_coarse]
-            tuned = relief(coarse, settings.calibration_iterations, coarse_runoff, scale, None)
+        if coarse is not None:
+            tuned = relief(
+                coarse, settings.calibration_iterations, on_mesh(coarse, runoff_field), scale,
+                None,
+            )
             scale = tuned.scale
             say(start + relief_share / phases * 0.3, f"Calibrated geology targets{label}")
 
             def fine_step(done: int, total: int, on: StepCallback = on_step) -> None:
                 on(round(0.3 * total + 0.7 * done), total)
 
-            result = relief(fine, 0, runoff, scale, fine_step)
+            result = relief(inputs, 0, runoff, scale, fine_step)
             calibration = (*tuned.iterations[:-1], *result.iterations)
         else:
-            result = relief(fine, settings.calibration_iterations, runoff, scale, on_step)
+            result = relief(inputs, settings.calibration_iterations, runoff, scale, on_step)
             scale = result.scale
             calibration = result.iterations
         if passes == 0:
             break
         say(start + relief_share / phases, "Simulating climate")
-        climate = simulate_climate(
-            mesh, np.where(water, 0.0, result.run.elevation), land, coast, settings.climate,
-            cancellation=cancellation,
-        )
-        if phase == phases - 1:
+        climate = simulate(inputs, np.where(inputs.land, result.run.elevation, 0.0))
+        if final:
             break
-        mean_runoff = float(np.average(climate.runoff_mm[land], weights=mesh.area_m2[land]))
+        weights = inputs.mesh.area_m2[inputs.land]
+        mean_runoff = float(np.average(climate.runoff_mm[inputs.land], weights=weights))
         # Relative runoff weights drainage area; a floor keeps rare floods in deserts.
-        runoff = np.maximum(climate.runoff_mm / max(mean_runoff, 1e-9), RUNOFF_WEIGHT_FLOOR)
+        runoff_field = (
+            inputs.mesh,
+            np.maximum(climate.runoff_mm / max(mean_runoff, 1e-9), RUNOFF_WEIGHT_FLOOR),
+        )
     assert result is not None
     say(0.94, "Filling lakes")
     evolved = result.run.elevation

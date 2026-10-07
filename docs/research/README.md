@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Earth-scale landforms — 2026-10-07](2026-10-07-earth-scale-landforms.md) compares range
+  widths, valley spacing and river lengths with Earth (Hovius spacing, Hack's law, river and
+  fjord data). It narrows ranges to explicit widths, keeps shields smooth, and adds an
+  inherited surface and 3.2M-node builds with climate on coarser meshes.
+
 - [World-scale detail and softer climate boundaries — 2026-10-07](2026-10-07-world-scale-detail.md)
   adds multi-scale procedural forcing and a mesh-independent eddy diffusivity for moisture
   (the old mixing sharpened with mesh density). It also carves display valleys into the

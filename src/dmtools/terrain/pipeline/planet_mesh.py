@@ -11,7 +11,9 @@ from math import pi, sqrt
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, KDTree
+
+from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]
@@ -132,3 +134,13 @@ def vertex_triangles(mesh: SphereMesh) -> tuple[I64, I64]:
     ptr = np.zeros(mesh.size + 1, dtype=np.int64)
     np.add.at(ptr, flat + 1, 1)
     return np.cumsum(ptr), owner[order]
+
+
+def sample_field(mesh: SphereMesh, xyz: F64, values: F64) -> F64:
+    """Triangle-linear interpolation of a node field at unit vectors ``xyz``."""
+    nearest = np.asarray(KDTree(mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    vt_ptr, vt_idx = vertex_triangles(mesh)
+    return interpolate_to_lonlat(
+        np.ascontiguousarray(values, dtype=np.float64), mesh.xyz, mesh.triangles, vt_ptr, vt_idx,
+        mesh.ptr, mesh.nbr, nearest, np.ascontiguousarray(xyz),
+    )

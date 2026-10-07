@@ -94,6 +94,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [benchmarks/README.md](../benchmarks/README.md) | Public performance/quality probes, commands and measurement boundaries. |
 | [benchmarks/evolution/README.md](../benchmarks/evolution/README.md) | Isolated evolution setup, runnable comparisons and current limits. |
 | [benchmarks/planet/README.md](../benchmarks/planet/README.md) | Whole-planet sphere-mesh erosion harness, synthetic test worlds and metrics. |
+| [benchmarks/planet/scale_metrics.py](../benchmarks/planet/scale_metrics.py) | Landform scale metrics of a planet build: river lengths vs basin area, mountain-belt widths, valley and mouth spacing. |
 | [examples/README.md](../examples/README.md) | Public example projects and their supported behaviors. |
 | [schemas/README.md](../schemas/README.md) | Current world-source, geographic-context and local-terrain formats. |
 | [src/dmtools/terrain/adapters/README.md](../src/dmtools/terrain/adapters/README.md) | File-format/render/export adapter responsibilities. |
@@ -200,6 +201,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 
 | File | Purpose or document title |
 |---|---|
+| [docs/research/2026-10-07-earth-scale-landforms.md](research/2026-10-07-earth-scale-landforms.md) | Earth reference sizes of ranges, valleys, rivers and fjords; measured mismatch; explicit-width belts, shield erodibility, inherited surface, coarse climate and coupling meshes. |
 | [docs/research/2026-10-07-world-scale-detail.md](research/2026-10-07-world-scale-detail.md) | Multi-scale procedural forcing, physical moisture eddy diffusivity, world display valley carving, river widths and playa rules, with before/after metrics. |
 | [docs/research/2026-10-07-natural-map-rendering.md](research/2026-10-07-natural-map-rendering.md) | Natural-colour atlas, varying shelves, display detail, regional valley carving and snowline, with slope measurements and the calibration-test regime fix. |
 | [docs/research/2026-10-06-first-authored-world-planet.md](research/2026-10-06-first-authored-world-planet.md) | First run on a real authored world: timings, metrics, ice-sheet lake/river fix and authored-source findings. |

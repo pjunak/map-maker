@@ -65,12 +65,12 @@ leaves no `manifest.json`, so it never looks complete.
 
 | Option | Default | Meaning |
 |---|---:|---|
-| `--nodes` | 200,000 | Sphere mesh size. On an Earth-size world, 200,000 nodes are about 50 km apart and 800,000 about 25 km. Time grows a little faster than linearly. |
+| `--nodes` | 200,000 | Sphere mesh size. On an Earth-size world, 200,000 nodes are about 50 km apart, 800,000 about 25 km and 3,200,000 about 12 km. Use 3,200,000 for a final map: coarser meshes cannot resolve Earth-scale ranges and valleys and are previews. |
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
 | `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
-| `--process-km2` | 2,500 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys. |
+| `--process-km2` | 600 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys; keep it at least a few mesh cells. |
 | `--duration-myr` | 30 | Simulated history length. |
 | `--seed` | 20261006 | Master seed. Mesh, forcing and initial noise each use a named stage seed. |
 | `--width` | 4,096 | Width of the GeoTIFF and images. Height follows your SVG frame's aspect. |
@@ -81,7 +81,8 @@ Typical times on a 16-thread desktop:
 | Run | Time |
 |---|---:|
 | 100k nodes, geology and one climate pass | about 50 s |
-| 800k nodes | several minutes |
+| 800k nodes, two climate passes | about 3.5 min |
+| 3.2M nodes, two climate passes | about 8 min |
 
 Regional detail for an exported planet:
 
@@ -129,6 +130,10 @@ SVG's size and it lies under your coastline drawing.
    until each region's elevation statistic is close to its target. Without a
    recipe, ranges, minor fold belts, hill country and active margins are placed
    procedurally at scales from about 100 km to several thousand kilometres.
+   Ranges have Earth-like widths (great ranges 120–350 km, minor ones 40–120 km)
+   and lengths. Some great ranges carry a high plateau behind them, and broad
+   swells lift whole regions. Old shields erode slowly, so plateaus stay smooth
+   and rivers cut into them from their edges.
 4. **Climate.**
    - **Temperature** comes from latitude, height and distance from the sea.
    - **Winds** blow in trade, westerly and polar belts.

@@ -19,6 +19,8 @@ DETAIL_PRESETS = {
     "Quick · 50,000 nodes (~100 km)": 50_000,
     "Standard · 200,000 nodes (~50 km)": 200_000,
     "Detailed · 800,000 nodes (~25 km)": 800_000,
+    # Resolves Earth-scale ranges and valleys; about 8 minutes on a desktop.
+    "Fine · 3,200,000 nodes (~12 km)": 3_200_000,
 }
 DEFAULT_PRESET = "Standard · 200,000 nodes (~50 km)"
 

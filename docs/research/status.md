@@ -5,7 +5,9 @@
 (continuous vegetation, varying shelves, carved regional valleys, ridge-following snow).
 Authoritative relief and exports are unchanged. A follow-up adds
 [world-scale detail](2026-10-07-world-scale-detail.md): multi-scale procedural forcing and a
-mesh-independent moisture eddy diffusivity.
+mesh-independent moisture eddy diffusivity. [Earth-scale landforms](2026-10-07-earth-scale-landforms.md)
+then gives ranges explicit Earth-like widths and smooth shields, and adds 3.2M-node builds with
+climate on coarser meshes.
 
 **2026-10-06 update:** the plan is world-first. An experimental
 [whole-planet erosion harness](2026-10-06-whole-planet-erosion-relief.md) evolves
