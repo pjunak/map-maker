@@ -41,6 +41,8 @@ not competing queues. [TODO](../../TODO.md) retains the complete feature backlog
   Multi-scale forcing and mesh-independent moisture mixing give world-scale detail
   ([report](../research/2026-10-07-world-scale-detail.md)). Ranges, valleys and rivers
   match Earth's sizes at 3.2M nodes ([report](../research/2026-10-07-earth-scale-landforms.md)).
+  Composite orogens, a glacial buzzsaw and 4.9-min fine builds follow
+  ([report](../research/2026-10-08-orogens-glaciers-and-speed.md)).
 - **Local terrain path (unchanged):** World → Terrain, the composed generator/editor,
   builds, profiles and saved-parent experiments. M1 context binding is experimental.
   The local path remains available until M5 decides what replaces it.

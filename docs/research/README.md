@@ -19,6 +19,12 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Orogens, glaciers and speed — 2026-10-08](2026-10-08-orogens-glaciers-and-speed.md)
+  surveys methods (analytic stream power, deposition, tectonics, climate, cartographic
+  shading). It adds composite orogens with strike-aligned rock, a glacial buzzsaw,
+  Horton/sinuosity gates and openness shading. It records three rejected deposition trials,
+  and Numba noise and conditional flooding cut 3.2M builds to 4.9 min.
+
 - [Earth-scale landforms — 2026-10-07](2026-10-07-earth-scale-landforms.md) compares range
   widths, valley spacing and river lengths with Earth (Hovius spacing, Hack's law, river and
   fjord data). It narrows ranges to explicit widths, keeps shields smooth, and adds an

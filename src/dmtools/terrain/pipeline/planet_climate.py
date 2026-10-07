@@ -119,6 +119,20 @@ def temperatures(
     return mean, mean + half_range, mean - half_range
 
 
+def snowline_m(
+    mesh: SphereMesh, land: B, coast_m: F64, settings: PlanetClimateSettings | None = None
+) -> F64:
+    """Glacier equilibrium-line altitude (m): where the warm season reaches ~0 °C.
+
+    Earth's ELA is ~4.5-5.5 km in the tropics, ~3 km at 45° and near sea level in
+    the polar regions; the warm-season freezing level plus a few hundred metres
+    follows it.
+    """
+    s = settings or PlanetClimateSettings()
+    _, warm, _ = temperatures(mesh, np.zeros(mesh.size), land, coast_m, s)
+    return np.maximum(warm, 0.0) / s.lapse_c_per_km * 1000 + 300.0
+
+
 def prevailing_wind(
     lat: F64, s: PlanetClimateSettings, shift_deg: float = 0.0
 ) -> tuple[F64, F64]:

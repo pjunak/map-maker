@@ -24,7 +24,7 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image, ImageDraw
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, gaussian_filter1d
 
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
@@ -48,6 +48,9 @@ SEA_TEXTURE_M = 180.0
 EXAGGERATION = 13.0
 CARVE_ERODIBILITY = 0.3  # K * dt for display valley carving (m^0)
 CARVE_STEPS = 4
+# (radius m, weight, height scale m) of the multi-scale openness term.
+OPENNESS_SCALES = ((8e3, 0.4, 120.0), (30e3, 0.35, 350.0), (120e3, 0.25, 800.0))
+OPENNESS_GAIN = 0.3
 
 DESERT_HOT: RGB = (208, 186, 146)
 DESERT_COLD: RGB = (176, 166, 140)
@@ -144,7 +147,32 @@ def display_fields(
     gy = np.gradient(z, axis=0) / dy
     gx = (np.roll(z, -1, 1) - np.roll(z, 1, 1)) / (2 * dx)
     slope, light = shading(gx, gy, EXAGGERATION)
+    light = light * (1 + OPENNESS_GAIN * openness(z, dy, dx[:, 0]))
     return DisplayFields(z, base_land, slope, light)
+
+
+def openness(z: F64, dy_m: float, dx_m: F64) -> F64:
+    """Height above the local mean at several radii, squashed to -1..1.
+
+    A cheap stand-in for texture shading (Brown 2010) and sky-view factor
+    (Zakšek et al. 2011): ridges brighten and valleys darken at every scale, so
+    the relief hierarchy reads even where the hillshade light runs along a ridge.
+    ``dx_m`` is the east-west pixel width of each row; columns wrap around.
+    """
+    total = np.zeros_like(z)
+    for radius_m, weight, scale_m in OPENNESS_SCALES:
+        blurred = gaussian_filter1d(z, radius_m / dy_m, axis=0, mode="nearest")
+        # Rows share a latitude-dependent east-west sigma; blur bands of rows
+        # with similar sigma together.
+        sigma = np.minimum(radius_m / dx_m, z.shape[1] / 4)
+        bands = np.round(np.log(sigma) * 8).astype(np.int64)
+        for band in np.unique(bands):
+            rows = bands == band
+            blurred[rows] = gaussian_filter1d(
+                blurred[rows], float(np.median(sigma[rows])), axis=1, mode="wrap"
+            )
+        total += weight * np.tanh((z - blurred) / scale_m)
+    return total
 
 
 def valley_depth(rough: F64, raster: FrameRaster, land_px: B, amplitude: F64) -> F64:

@@ -26,7 +26,12 @@ from dmtools.terrain.pipeline.control import (
     cancellable_progress,
     check_cancelled,
 )
-from dmtools.terrain.pipeline.planet_climate import Climate, downscale_climate, simulate_climate
+from dmtools.terrain.pipeline.planet_climate import (
+    Climate,
+    downscale_climate,
+    simulate_climate,
+    snowline_m,
+)
 from dmtools.terrain.pipeline.planet_evolution import (
     CalibratedRelief,
     FlowState,
@@ -206,7 +211,9 @@ def generate_planet(
             steps=settings.steps, step_yr=settings.step_kyr * 1e3,
             area_exponent=settings.area_exponent,
             process_area_m2=settings.process_area_km2 * 1e6, iterations=iterations,
-            runoff=runoff, scale=scale, cancellation=cancellation, on_step=on_step,
+            runoff=runoff, scale=scale,
+            snowline_m=snowline_m(inputs.mesh, inputs.land, inputs.coast_m, settings.climate),
+            cancellation=cancellation, on_step=on_step,
         )
 
     for phase in range(phases):

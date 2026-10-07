@@ -81,8 +81,8 @@ Typical times on a 16-thread desktop:
 | Run | Time |
 |---|---:|
 | 100k nodes, geology and one climate pass | about 50 s |
-| 800k nodes, two climate passes | about 3.5 min |
-| 3.2M nodes, two climate passes | about 8 min |
+| 800k nodes, two climate passes | about 1.5 min |
+| 3.2M nodes, two climate passes | about 5 min |
 
 Regional detail for an exported planet:
 
@@ -133,7 +133,10 @@ SVG's size and it lies under your coastline drawing.
    Ranges have Earth-like widths (great ranges 120–350 km, minor ones 40–120 km)
    and lengths. Some great ranges carry a high plateau behind them, and broad
    swells lift whole regions. Old shields erode slowly, so plateaus stay smooth
-   and rivers cut into them from their edges.
+   and rivers cut into them from their edges. Great ranges have frontal ranges,
+   foothills and a hinterland range, with valleys between them where rivers run
+   along the range. Above the snowline glaciers erode fast, so peaks stay within
+   a few kilometres of it.
 4. **Climate.**
    - **Temperature** comes from latitude, height and distance from the sea.
    - **Winds** blow in trade, westerly and polar belts.

@@ -328,3 +328,42 @@ def neighbour_mix(values: F64, ptr: I64, nbr: I64, weight: F64, substeps: int) -
             following[i] = (1.0 - weight[i]) * current[i] + weight[i] * mean
         current, following = following, current
     return current
+
+
+@njit(cache=True)
+def downstream_order(receiver: I64, water: B) -> I64:
+    """Land nodes ordered so every receiver precedes its donors (O(n) tree walk).
+
+    Land nodes that drain to no water (an unfilled pit) are left out.
+    """
+    n = receiver.size
+    count = np.zeros(n + 1, np.int64)
+    for i in range(n):
+        r = receiver[i]
+        if not water[i] and r >= 0:
+            count[r + 1] += 1
+    for i in range(n):
+        count[i + 1] += count[i]
+    donors = np.empty(count[n], np.int64)
+    fill = count[:n].copy()
+    for i in range(n):
+        r = receiver[i]
+        if not water[i] and r >= 0:
+            donors[fill[r]] = i
+            fill[r] += 1
+    order = np.empty(n, np.int64)
+    size = 0
+    for i in range(n):
+        r = receiver[i]
+        if not water[i] and r >= 0 and water[r]:
+            order[size] = i
+            size += 1
+    head = 0
+    while head < size:
+        node = order[head]
+        head += 1
+        for k in range(count[node], count[node + 1]):
+            order[size] = donors[k]
+            size += 1
+    return order[:size]
+

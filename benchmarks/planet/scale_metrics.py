@@ -127,6 +127,78 @@ def rivers(build: Build, continent: I64) -> dict[str, object]:
     }
 
 
+def horton(build: Build, minimum_km2: float = 2_000.0) -> dict[str, object]:
+    """Strahler orders of the channel network and Horton's bifurcation/length ratios.
+
+    Earth's networks have bifurcation ratios of 3-5 and length ratios of 1.5-3.5
+    (Horton 1945; Strahler 1952).
+    """
+    mesh, land, receiver = build.mesh, build.land, build.receiver
+    channel = land & (build.area_m2 >= minimum_km2 * KM2)
+    order = downstream_first(receiver, land)
+    order = order[channel[order]]
+    distance = receiver_distance(mesh, receiver)
+    strahler = np.zeros(mesh.size, dtype=np.int64)
+    top = np.zeros(mesh.size, dtype=np.int64)  # highest donor order
+    ties = np.zeros(mesh.size, dtype=np.int64)  # donors with that order
+    for node in order[::-1]:
+        strahler[node] = 1 if top[node] == 0 else top[node] + (1 if ties[node] > 1 else 0)
+        r = receiver[node]
+        if r >= 0 and channel[r]:
+            if strahler[node] > top[r]:
+                top[r], ties[r] = strahler[node], 1
+            elif strahler[node] == top[r]:
+                ties[r] += 1
+    outlet = channel & ~(
+        (receiver >= 0) & channel[np.maximum(receiver, 0)]
+        & (strahler[np.maximum(receiver, 0)] == strahler)
+    )
+    orders = np.arange(1, int(strahler.max()) + 1)
+    counts = np.array([int(np.sum(outlet & (strahler == w))) for w in orders])
+    lengths = np.array(
+        [float(distance[channel & (strahler == w)].sum()) / max(c, 1) / 1e3 for w, c in
+         zip(orders, counts, strict=True)]
+    )
+    use = counts >= 3
+    bifurcation = float(np.exp(-np.polyfit(orders[use], np.log(counts[use]), 1)[0]))
+    length = float(np.exp(np.polyfit(orders[use], np.log(lengths[use]), 1)[0]))
+    return {
+        "minimum_area_km2": minimum_km2,
+        "streams_per_order": counts.tolist(),
+        "mean_length_km_per_order": [round(v) for v in lengths],
+        "bifurcation_ratio": round(bifurcation, 2),
+        "length_ratio": round(length, 2),
+    }
+
+
+def sinuosity(build: Build, minimum_km2: float = 1e5) -> float:
+    """Median main-stem sinuosity (path length / great-circle distance) of big rivers.
+
+    Large rivers measure 1.1-1.4 at reach scale (Wu et al. 2023); mesh paths add a
+    few per cent.
+    """
+    mesh, land, receiver = build.mesh, build.land, build.receiver
+    distance = receiver_distance(mesh, receiver)
+    longest = np.zeros(mesh.size)
+    source = np.arange(mesh.size)
+    for node in downstream_first(receiver, land)[::-1].tolist():
+        r = int(receiver[node])
+        if r >= 0 and land[r] and longest[node] + distance[node] > longest[r]:
+            longest[r] = longest[node] + distance[node]
+            source[r] = source[node]
+    mouths = np.flatnonzero(
+        land & (receiver >= 0) & ~land[np.maximum(receiver, 0)]
+        & (build.area_m2 >= minimum_km2 * KM2)
+    )
+    if not len(mouths):
+        return float("nan")
+    chord = np.linalg.norm(mesh.xyz[mouths] - mesh.xyz[source[mouths]], axis=1)
+    straight = 2 * np.arcsin(np.clip(chord / 2, 0, 1)) * mesh.radius_m
+    path = longest[mouths] + distance[mouths]
+    ok = straight > 0
+    return float(np.median(path[ok] / straight[ok]))
+
+
 def mountains(build: Build, continent: I64) -> dict[str, object]:
     """Belts of high or rugged ground; half-width from the distance to their edge."""
     mesh, land, z = build.mesh, build.land, build.elevation_m
@@ -206,6 +278,8 @@ def report(build: Build) -> dict[str, object]:
         "continents_km2": sorted((round(float(a)) for a in areas if a > 1e6), reverse=True),
         "rivers": rivers(build, continent),
         "mountains": mountains(build, continent),
+        "horton": horton(build),
+        "main_stem_sinuosity": round(sinuosity(build), 3),
         "mouth_spacing_km": {
             str(limit): round(mouth_spacing(build, limit)) for limit in (2_500, 10_000, 50_000)
         },

@@ -22,6 +22,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
 )
 from dmtools.terrain.pipeline.planet_kernels import (
     accumulate,
+    downstream_order,
     priority_flood,
     steepest_receivers,
     stream_power_implicit,
@@ -35,6 +36,13 @@ type StepCallback = Callable[[int, int], None]
 
 LAND_FLOOR_M = 1.0
 FILL_EPS_M = 1e-3
+# Glacial buzzsaw (Egholm et al. 2009): above the snowline glaciers erode far
+# faster than rivers, so peaks cluster within ~1-2 km of the ELA instead of
+# growing with uplift. Erodibility grows by GLACIAL_BOOST per GLACIAL_SCALE_M
+# above the ELA, capped at GLACIAL_CAP times.
+GLACIAL_BOOST = 1.5
+GLACIAL_SCALE_M = 1000.0
+GLACIAL_CAP = 5.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,12 +64,18 @@ class EvolutionRun:
 def route(
     mesh: SphereMesh, h: F64, water: B, runoff: F64 | None = None, inflow_m2: F64 | None = None
 ) -> FlowState:
-    filled, parent = priority_flood(h, water, mesh.ptr, mesh.nbr, FILL_EPS_M)
+    # Implicit stream power leaves almost no pits once drainage is established,
+    # so route by steepest descent and fill depressions only when some exist.
     receiver, distance = steepest_receivers(
-        filled, water, mesh.ptr, mesh.nbr, mesh.length_m, parent
+        h, water, mesh.ptr, mesh.nbr, mesh.length_m, np.full(mesh.size, -1, np.int64)
     )
-    land_nodes = np.flatnonzero(~water)
-    order = land_nodes[np.argsort(filled[land_nodes], kind="stable")]
+    filled = h
+    if np.any(~water & (receiver < 0)):
+        filled, parent = priority_flood(h, water, mesh.ptr, mesh.nbr, FILL_EPS_M)
+        receiver, distance = steepest_receivers(
+            filled, water, mesh.ptr, mesh.nbr, mesh.length_m, parent
+        )
+    order = downstream_order(receiver, water)
     source = mesh.area_m2 if runoff is None else mesh.area_m2 * runoff
     if inflow_m2 is not None:
         source = source + inflow_m2
@@ -82,13 +96,15 @@ def evolve(
     runoff: F64 | None = None,
     fixed_level: F64 | None = None,
     inflow_m2: F64 | None = None,
+    snowline_m: F64 | None = None,
     cancellation: CancellationToken | None = None,
     on_step: StepCallback | None = None,
 ) -> EvolutionRun:
     """``water`` marks fixed nodes held at ``fixed_level`` (default: sea level).
 
     ``inflow_m2`` adds drainage area entering from outside the domain (regional
-    boundaries), at the nodes where those rivers enter.
+    boundaries), at the nodes where those rivers enter. ``snowline_m`` enables
+    glacial erosion above the equilibrium-line altitude.
     """
     base = np.zeros(mesh.size) if fixed_level is None else fixed_level
     h = np.where(water, base, np.maximum(initial, LAND_FLOOR_M))
@@ -99,17 +115,15 @@ def evolve(
         check_cancelled(cancellation)
         state = route(mesh, h, water, runoff, inflow_m2)
         before = state.filled
+        erodibility = forcing.erodibility
+        if snowline_m is not None:
+            above = np.clip((before - snowline_m) / GLACIAL_SCALE_M, 0.0, None)
+            erodibility = erodibility * np.minimum(1 + GLACIAL_BOOST * above, GLACIAL_CAP)
+        uplift = forcing.steady_uplift if step < pulse_from else pulsed
+        flux = state.area_m2 + process_area_m2
         h = stream_power_implicit(
-            before,
-            state.order,
-            state.receiver,
-            state.distance_m,
-            water,
-            state.area_m2 + process_area_m2,
-            forcing.erodibility,
-            area_exponent,
-            forcing.steady_uplift if step < pulse_from else pulsed,
-            step_yr,
+            before, state.order, state.receiver, state.distance_m, water, flux,
+            erodibility, area_exponent, uplift, step_yr,
         )
         h = np.where(water, base, np.maximum(h, LAND_FLOOR_M))
         if step == steps - 1:
@@ -152,6 +166,7 @@ def calibrated_relief(
     iterations: int,
     runoff: F64 | None = None,
     scale: F64 | None = None,
+    snowline_m: F64 | None = None,
     cancellation: CancellationToken | None = None,
     on_step: StepCallback | None = None,
 ) -> CalibratedRelief:
@@ -180,7 +195,7 @@ def calibrated_relief(
         run = evolve(
             mesh, water, forcing, initial, steps=steps, step_yr=step_yr,
             area_exponent=area_exponent, process_area_m2=process_area_m2, runoff=runoff,
-            cancellation=cancellation, on_step=report,
+            snowline_m=snowline_m, cancellation=cancellation, on_step=report,
         )
         if regions is None:
             return CalibratedRelief(run, forcing, (), scale)

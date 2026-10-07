@@ -71,6 +71,7 @@ SWELL_UPLIFT = 8e-5
 # edges (the African plateau, the Colorado Plateau), instead of dissecting into
 # badlands at continental scale.
 SHIELD_ERODIBILITY = 0.25
+FOLD_WAVELENGTH_M = 45e3
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
 
@@ -128,16 +129,64 @@ def cratonic_profile(coast_m: F64) -> F64:
     return np.maximum(0.15, 0.55 + 0.9 * swell - 0.35 * sag)
 
 
-def crest_distance(mesh: SphereMesh, field: F64) -> F64:
-    """Approximate distance (m) to the zero line of a smooth field: |f| / |grad f|."""
+def signed_crest_distance(mesh: SphereMesh, field: F64) -> F64:
+    """Approximate signed distance (m) to the zero line of a smooth field: f / |grad f|."""
     east, north = tangent_frame(mesh.xyz)
     gradient_east, gradient_north = surface_gradient(mesh, field, east, north)
-    return np.abs(field) / np.maximum(np.hypot(gradient_east, gradient_north), 1e-12)
+    return field / np.maximum(np.hypot(gradient_east, gradient_north), 1e-12)
+
+
+def crest_distance(mesh: SphereMesh, field: F64) -> F64:
+    """Approximate distance (m) to the zero line of a smooth field: |f| / |grad f|."""
+    return np.abs(signed_crest_distance(mesh, field))
 
 
 def ridge_profile(distance_m: F64, half_width_m: F64) -> F64:
     """Uplift across a range: a broad axial zone falling to a defined front."""
     return 1 - _smoothstep(distance_m, 0.25 * half_width_m, half_width_m)
+
+
+# Composite orogen across strike, in units of the main range's half-width:
+# (offset, half-width, relative uplift, segment-gate seed offset). Real belts are
+# several parallel ranges (Himalaya: Siwalik foothills, Lesser and Greater
+# Himalaya, Tethyan ranges; Andes: Cordilleras Occidental and Oriental) with
+# longitudinal valleys between them that carry rivers along strike.
+OROGEN_RANGES = (
+    (0.0, 1.0, 1.0, 0),  # main axis
+    (1.35, 0.4, 0.55, 1),  # frontal range
+    (2.1, 0.3, 0.25, 2),  # foothills
+    (-1.7, 0.55, 0.7, 3),  # hinterland range
+)
+
+
+def orogen_profile(across_m: F64, half_width_m: F64, p: F64, seed: int) -> F64:
+    """Parallel, en-echelon ranges of one orogen from the signed across-strike distance."""
+    uplift = np.zeros_like(across_m)
+    for offset, half, weight, gate_seed in OROGEN_RANGES:
+        if gate_seed:
+            # Subsidiary ranges wander, change height and come and go along strike
+            # (en echelon segments) instead of running parallel like rails.
+            wander = 1 + 0.5 * fbm3(p, seed + 1200 + gate_seed, 3, 9.0)
+            strength = 0.5 + 0.5 * fbm3(p, seed + 1300 + gate_seed, 3, 6.0)
+            gate = _smoothstep(fbm3(p, seed + 1100 + gate_seed, 3, 10.0), -0.2, 0.2)
+        else:
+            wander, strength, gate = np.ones_like(across_m), 1.0, 1.0
+        centre = offset * half_width_m * wander
+        profile = ridge_profile(np.abs(across_m - centre), half * half_width_m)
+        uplift = np.maximum(uplift, weight * strength * gate * profile)
+    return uplift
+
+
+def strike_lithology(across_m: F64, half_width_m: F64, orogen: F64, phase: F64) -> F64:
+    """Erodibility multiplier of rock bands parallel to an orogen's strike.
+
+    A hard crystalline core with alternating weak and strong bands outward:
+    rivers find the weak bands and run along strike before breaking through,
+    and divides pin on the hard rock (Bernard et al. 2021).
+    """
+    core = 1 - 0.45 * (1 - _smoothstep(np.abs(across_m), 0.3 * half_width_m, 0.7 * half_width_m))
+    bands = 1 + 0.3 * np.cos(2 * np.pi * across_m / (0.9 * half_width_m) + phase)
+    return 1 + orogen * (core * bands - 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,15 +211,17 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     # segments 1,000-3,000 km long instead of one continent-spanning network.
     warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
     major = fbm3(p + 0.35 * warp, seed + 101, 4, 1.4)
-    major_half = 60e3 + 115e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4)
-    major_distance = crest_distance(mesh, major)
+    major_half = 50e3 + 80e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4)
+    # Signed distance across strike, positive towards the foreland side. Which
+    # side faces the foreland changes along strike, as it does between orogens.
+    across = signed_crest_distance(mesh, major) * np.sign(fbm3(p, seed + 191, 2, 1.0) + 1e-9)
     segments = _smoothstep(fbm3(p, seed + 151, 3, 3.5), -0.15, 0.25)
     inland_fade = _smoothstep(coast_m, 0.0, 150e3)
-    belts = ridge_profile(major_distance, major_half) * segments * inland_fade
-    # A few great orogens carry a high plateau behind the range (Tibet 1,000 km
-    # wide, Altiplano 350-400 km).
+    belts = orogen_profile(across, major_half, p, seed) * segments * inland_fade
+    # A few great orogens carry a high plateau on their hinterland side (Tibet
+    # 1,000 km wide, Altiplano 350-400 km).
     plateau = (
-        ridge_profile(major_distance, 4.0 * major_half)
+        ridge_profile(np.abs(across + 2.2 * major_half), 2.6 * major_half)
         * segments
         * _smoothstep(fbm3(p, seed + 171, 3, 2.0), 0.05, 0.35)
         * _smoothstep(coast_m, 100e3, 400e3)
@@ -181,8 +232,14 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     fine_warp = np.stack([fbm3(p, seed + 310 + k, 3, 4.0) for k in range(3)], axis=1)
     minor_field = fbm3(p + 0.12 * fine_warp, seed + 111, 4, 4.5)
     minor_half = 20e3 + 40e3 * _smoothstep(fbm3(p, seed + 161, 3, 8.0), -0.4, 0.4)
+    minor_across = signed_crest_distance(mesh, minor_field)
+    # Some minor belts are fold-and-thrust belts: parallel ridges ~45 km apart
+    # (Valley and Ridge, Zagros at a coarser scale) rather than a single ridge.
+    folds = (0.5 + 0.5 * np.cos(2 * np.pi * minor_across / FOLD_WAVELENGTH_M)) ** 2
+    folded = _smoothstep(fbm3(p, seed + 262, 3, 3.0), 0.0, 0.3)
     minor = (
-        ridge_profile(crest_distance(mesh, minor_field), minor_half)
+        ridge_profile(np.abs(minor_across), 1.6 * minor_half * (1 + folded))
+        * (1 - folded + folded * folds)
         * _smoothstep(fbm3(p, seed + 212, 3, 2.5), -0.1, 0.3)
         * _smoothstep(coast_m, 0.0, 80e3)
     )
@@ -219,7 +276,12 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     # Lithology varies down to ~30 km; without it rivers run straight and parallel
     # down every uniform slope.
     lithology = np.exp(1.1 * fbm3(p, seed + 404, 7, 3.0, 0.6))
-    texture = lithology * (SHIELD_ERODIBILITY + (1 - SHIELD_ERODIBILITY) * active)
+    orogen_zone = ridge_profile(np.abs(across), 3.0 * major_half) * segments * inland_fade
+    texture = (
+        lithology
+        * strike_lithology(across, major_half, orogen_zone, 3.0 * fbm3(p, seed + 272, 3, 8.0))
+        * (SHIELD_ERODIBILITY + (1 - SHIELD_ERODIBILITY) * active)
+    )
     return ProceduralForcing(np.where(land, uplift, 0.0), texture, uplift_texture)
 
 

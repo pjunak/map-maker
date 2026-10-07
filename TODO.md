@@ -100,7 +100,12 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Cheaper moisture transport: coarse climate and coupling meshes
     ([evidence](docs/research/2026-10-07-earth-scale-landforms.md)).
   - [x] Earth-scale range widths, valley spacing and river lengths (3.2M-node builds).
-  - [ ] Parallel sub-ranges, foothills and longitudinal valleys (more medium-long rivers).
+  - [x] Composite orogens, strike-aligned lithology and a glacial buzzsaw
+    ([evidence](docs/research/2026-10-08-orogens-glaciers-and-speed.md)).
+  - [ ] Conserving sediment deposition with flexure (alluvial plains, foreland basins);
+    per-node G term rejected.
+  - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
+  - [ ] Cold-current coastal deserts, continentality and Köppen-driven colours.
   - [ ] Bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.
