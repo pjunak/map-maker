@@ -79,6 +79,30 @@ and rejected (see below). Items 2 and 8 remain open.
 - **Gate metrics.** `benchmarks.planet.scale_metrics` now reports Strahler
   orders, Horton bifurcation and length ratios, and source-to-mouth sinuosity.
 
+## Boundary currents and ice sheets (second batch)
+
+- **Boundary currents.** The direction to the nearest coast, −∇(coast
+  distance), tells which side of an ocean basin a node is on.
+  - **Cold side.** Water whose nearest land lies to the east, and land whose
+    nearest sea lies to the west, get a cold anomaly of up to −5 °C between 8° and
+    42° latitude. Examples are the California, Humboldt, Canary and Benguela
+    currents.
+  - **Warm side.** The opposite side gets +2.5 °C between 12° and 50°.
+  - **Reach.** About 700 km offshore and about 250 km inland.
+  - **Rain.** Large-scale rain is suppressed by up to 85 % under the subsiding air
+    of a full cold anomaly (Rodwell & Hoskins 2001).
+  - **Effect.** At 800k nodes, hot desert went from 6.3 % to 6.7 % of land, in
+    narrow subtropical west-coast belts. Savanna went from 22.4 % to 20.2 %.
+    Mediterranean shrubland went from 0.8 % to 0.4 %, because the class requires
+    hot summers that the cool coasts now lack.
+  - **Provenance.** The climate algorithm identifier is now `planet-climate-v3`.
+- **Ice-sheet display surface.** Ice is drawn on Nye's perfectly plastic profile,
+  h = √(2τ₀/(ρg) · d), with τ₀ = 100 kPa and d the graph distance from the ice
+  margin, over a bed smoothed at about 150 km.
+  - **Effect.** Polar ice shades as smooth domes about 3 km high with steep
+    margins, and nunataks keep their own height.
+  - **Scope.** Display only. Exported elevation stays at bedrock.
+
 ## Rejected trials
 
 - **Lifting isolated pits** to just above their lowest neighbour, with a

@@ -105,7 +105,8 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [ ] Conserving sediment deposition with flexure (alluvial plains, foreland basins);
     per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
-  - [ ] Cold-current coastal deserts, continentality and Köppen-driven colours.
+  - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.
+  - [ ] Seasonal continentality (energy balance) and Köppen-driven colours.
   - [ ] Bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.

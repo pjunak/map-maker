@@ -66,6 +66,13 @@ STORM_INLAND_DECAY_M = 1.2e6
 # Moisture travel per season: enough for steady state (16,000 km is within 6 % of
 # 60,000 km in the 2026-10-06 convergence check), independent of mesh density.
 MOISTURE_TRAVEL_M = 2.0e7
+# Boundary currents: peak anomalies (°C), offshore reach and inland reach (m).
+COLD_CURRENT_C = 5.0
+WARM_CURRENT_C = 2.5
+CURRENT_REACH_M = 700e3
+COAST_INFLUENCE_M = 250e3
+# Share of large-scale rain suppressed under the subsiding air of a full cold anomaly.
+COLD_CURRENT_SUBSIDENCE = 0.85
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +108,34 @@ def sea_temperature(lat: F64, s: PlanetClimateSettings) -> F64:
     return s.pole_sst_c + (s.equator_sst_c - s.pole_sst_c) * np.cos(lat) ** 1.3
 
 
+def boundary_currents(mesh: SphereMesh, land: B, coast_m: F64) -> F64:
+    """Sea-surface (and coastal land) temperature anomaly of boundary currents (°C).
+
+    Subtropical gyres carry cold water along the eastern side of each ocean basin
+    (California, Humboldt, Canary, Benguela, West Australian currents) and warm
+    water along the western side (Gulf Stream, Kuroshio, Agulhas, Brazil, East
+    Australian). The direction to the nearest coast, -grad(coast distance),
+    tells which side a node is on: open water whose nearest land lies to the
+    east, and land whose nearest sea lies to the west, are on a cold coast.
+    """
+    east, north = tangent_frame(mesh.xyz)
+    gradient_east, gradient_north = surface_gradient(mesh, coast_m, east, north)
+    toward_east = -gradient_east / np.maximum(np.hypot(gradient_east, gradient_north), 1e-12)
+    west_coast = np.where(land, -toward_east, toward_east)
+    latitude = np.abs(np.rad2deg(mesh.lat))
+    cold_band = _smooth(latitude, 8, 15) * (1 - _smooth(latitude, 32, 42))
+    warm_band = _smooth(latitude, 12, 20) * (1 - _smooth(latitude, 40, 50))
+    reach = np.exp(-np.maximum(coast_m, 0) / np.where(land, COAST_INFLUENCE_M, CURRENT_REACH_M))
+    cold = COLD_CURRENT_C * _smooth(west_coast, 0.2, 0.7) * cold_band
+    warm = WARM_CURRENT_C * _smooth(-west_coast, 0.2, 0.7) * warm_band
+    return (warm - cold) * reach
+
+
+def _smooth(x: F64, a: float, b: float) -> F64:
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
 def temperatures(
     mesh: SphereMesh, elevation: F64, land: B, coast_m: F64, s: PlanetClimateSettings
 ) -> tuple[F64, F64, F64]:
@@ -109,6 +144,7 @@ def temperatures(
     continental = np.where(land, np.clip(coast_m / 1.5e6, 0, 1), 0.0)
     mean = (
         sea_temperature(lat, s)
+        + boundary_currents(mesh, land, coast_m)
         - lapse
         - 6 * continental * np.sin(np.abs(lat)) ** 2
         + np.where(land, 4.0 * (0.4 + 0.6 * continental) * np.cos(lat) ** 4, 0.0)
@@ -232,6 +268,9 @@ def simulate_climate(
     lat = mesh.lat
     abs_lat = np.abs(np.rad2deg(lat))
     temp, warm, cold = temperatures(mesh, elevation, land, coast_m, s)
+    # Air over cold currents subsides and is stable: coastal fog, little rain
+    # (Atacama, Namib, Baja California).
+    stable = np.clip(-boundary_currents(mesh, land, coast_m) / COLD_CURRENT_C, 0, 1)
     east, north = tangent_frame(mesh.xyz)
     step_m = mesh.spacing_m
     dt = step_m / max(s.wind_speed_m_s, 1e-6)
@@ -260,6 +299,7 @@ def simulate_climate(
         advect = departure_operator(mesh, east, north, u, v, dt)
         lift = np.maximum(0.0, u * grad_e + v * grad_n) * dt  # forced ascent per step, m
         large = _table(np.abs(np.rad2deg(lat) - season), ASCENT_PER_1000_KM) * step_m / 1e6
+        large = large * (1 - COLD_CURRENT_SUBSIDENCE * stable)
         orographic = np.where(land, 0.5 * lift / MOISTURE_SCALE_HEIGHT_M, 0.0)
         rain_fraction = np.clip(large + orographic, 0, 0.9)
         q = cap.copy()

@@ -143,7 +143,9 @@ SVG's size and it lies under your coastline drawing.
    - **Rain:** moisture travels with the wind, rains out on rising ground and over
      the tropics, and leaves rain shadows behind ranges. Weather systems also mix
      moisture sideways (strongest in the mid-latitude storm tracks), so desert
-     edges grade over hundreds of kilometres.
+     edges grade over hundreds of kilometres. Cold ocean currents along
+     subtropical west coasts cool them and suppress rain (coastal deserts); warm
+     currents keep east coasts mild.
    - **Runoff** is rain minus evaporation. It makes wet regions erode more in the
      next pass.
    - **Biomes** come from temperature and dryness.

@@ -36,6 +36,7 @@ from dmtools.terrain.adapters.planet_render import (
 )
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
+from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, neighbour_mix
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -51,6 +52,8 @@ CARVE_STEPS = 4
 # (radius m, weight, height scale m) of the multi-scale openness term.
 OPENNESS_SCALES = ((8e3, 0.4, 120.0), (30e3, 0.35, 350.0), (120e3, 0.25, 800.0))
 OPENNESS_GAIN = 0.3
+ICE_BASAL_STRESS_PA = 1e5
+ICE_BED_SMOOTHING_M = 150e3
 
 DESERT_HOT: RGB = (208, 186, 146)
 DESERT_COLD: RGB = (176, 166, 140)
@@ -136,6 +139,11 @@ def display_fields(
     land = np.maximum(
         base_land + amplitude * detail - valley_depth(rough, raster, land_px, amplitude), 1.0
     )
+    ice = ice_covered(result)
+    if ice.any():
+        surface = raster.interpolate(mesh, np.where(ice, ice_surface(result, ice), 0.0))
+        covered = land_px & (raster.interpolate(mesh, ice.astype(np.float64)) > 0.5)
+        land = np.where(covered, np.maximum(surface, land), land)
     hills = eroded_fbm(
         points, np.zeros(len(points)), DETAIL_SEED + 4, 5, radius / 60e3, 0.55, 0.0
     ).reshape(shape)
@@ -149,6 +157,29 @@ def display_fields(
     slope, light = shading(gx, gy, EXAGGERATION)
     light = light * (1 + OPENNESS_GAIN * openness(z, dy, dx[:, 0]))
     return DisplayFields(z, base_land, slope, light)
+
+
+def ice_surface(result: PlanetResult, ice: B) -> F64:
+    """Display surface of ice sheets (m): Nye's perfectly plastic profile.
+
+    Basal shear stress tau0 ~ 100 kPa gives a thickness h = sqrt(2 tau0 / (rho g) d)
+    at a distance d from the ice margin: ~3.3 km at 500 km, as on Antarctica and
+    Greenland. The ice rests on a smoothed bed, so it shades as a smooth dome;
+    nunataks keep their own height where they rise above it.
+    """
+    mesh = result.mesh
+    bed = np.where(result.land, np.maximum(result.elevation_m, 0.0), 0.0)
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    margin = np.flatnonzero(np.bincount(src, ice[src] & ~ice[mesh.nbr], mesh.size) > 0)
+    if not len(margin):
+        return bed
+    inside = multi_source_distance(
+        margin, np.zeros(margin.size), mesh.ptr, mesh.nbr, mesh.length_m
+    )
+    thickness = np.sqrt(2 * ICE_BASAL_STRESS_PA / (917.0 * 9.81) * inside)
+    passes = max(1, round((ICE_BED_SMOOTHING_M / mesh.spacing_m) ** 2))
+    smooth_bed = neighbour_mix(bed, mesh.ptr, mesh.nbr, np.full(mesh.size, 0.5), passes)
+    return np.where(ice, np.maximum(smooth_bed + thickness, bed), bed)
 
 
 def openness(z: F64, dy_m: float, dx_m: F64) -> F64:
