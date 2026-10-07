@@ -30,7 +30,7 @@ class RegionViewer(tk.Toplevel):
             f"{run.window.radius_m / 1000:,.0f} km radius (experimental)"
         )
         self.layer = tk.StringVar(
-            self, value="Atlas" if run.window.vegetation_rgb is not None else "Relief"
+            self, value="Atlas" if run.window.climate is not None else "Relief"
         )
         self.readout = tk.StringVar(
             self,
@@ -39,7 +39,7 @@ class RegionViewer(tk.Toplevel):
         )
         bar = ttk.Frame(self, padding=6)
         bar.pack(fill="x")
-        choices = ("Atlas", "Relief") if run.window.vegetation_rgb is not None else ("Relief",)
+        choices = ("Atlas", "Relief") if run.window.climate is not None else ("Relief",)
         self.layer_input = ttk.Combobox(
             bar, textvariable=self.layer, values=choices, state="readonly", width=10
         )

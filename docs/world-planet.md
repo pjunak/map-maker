@@ -69,8 +69,8 @@ leaves no `manifest.json`, so it never looks complete.
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
-| `--erodibility` | 4e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
-| `--process-km2` | 10,000 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys. |
+| `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
+| `--process-km2` | 2,500 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys. |
 | `--duration-myr` | 30 | Simulated history length. |
 | `--seed` | 20261006 | Master seed. Mesh, forcing and initial noise each use a named stage seed. |
 | `--width` | 4,096 | Width of the GeoTIFF and images. Height follows your SVG frame's aspect. |
@@ -90,13 +90,19 @@ dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-
 ```
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
-Use `--spacing-km` for a different detail spacing.
+Use `--spacing-km` for a different detail spacing. A region writes `elevation.tif`
+(the blended tile relief), `relief.png` and, with climate, a natural-colour `atlas.png`.
+
+**What the images add.** Atlas and relief images draw small ridges, valleys and
+texture below the mesh resolution, so slopes do not shade as smooth ramps. This
+detail is for display only. It is not in `elevation.tif` and does not change
+rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural-map-rendering.md).
 
 ## Outputs
 
 | File | Contents |
 |---|---|
-| `atlas.png` | Biome-coloured shaded relief with rivers (needs climate). |
+| `atlas.png` | Natural-colour shaded relief: vegetation from dryness and temperature, rock, snow, depth-tinted sea, lakes and rivers (needs climate). |
 | `relief.png` | Hypsometric shaded relief with rivers. |
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
 | `elevation.tif` | Float32 elevation (land and display ocean floor) in metres, on a geographic CRS for your world's sphere radius. |

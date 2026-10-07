@@ -61,6 +61,7 @@ class RegionalParent:
     biome: NDArray[np.int8] | None = None
     warm_season_c: F64 | None = None
     coast_m: F64 | None = None
+    sea_floor_m: F64 | None = None  # display bathymetry on water nodes; 0 on land
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:
@@ -75,6 +76,7 @@ class RegionalParent:
             None if climate is None else climate.biome,
             None if climate is None else climate.warm_c,
             result.coast_m,
+            np.where(result.land, 0.0, result.elevation_m),
         )
 
     def sample(self, xyz: F64, values: F64) -> F64:

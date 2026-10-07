@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Natural-looking planet and regional maps — 2026-10-07](2026-10-07-natural-map-rendering.md)
+  replaces biome-class colours and uniform shelves with continuous natural colour, and adds
+  sub-mesh display detail. Regional windows get valleys carved over the detail by grid stream
+  power, real bathymetry and a ridge-following snowline.
+
 - [First authored world through the planet — 2026-10-06](2026-10-06-first-authored-world-planet.md)
   runs a private 9-continent world at 200k/800k nodes and regional zoom, fixes lakes and
   rivers on ice sheets, and records staircase-coast and placeholder-geology findings.

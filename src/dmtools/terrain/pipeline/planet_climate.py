@@ -82,11 +82,6 @@ BIOMES = (
     "temperate forest", "temperate rainforest", "hot desert", "savanna",
     "tropical seasonal forest", "tropical rainforest", "alpine", "mediterranean shrubland",
 )
-BIOME_COLOURS = (
-    (0, 0, 0), (240, 244, 248), (170, 178, 160), (70, 110, 80), (196, 186, 150),
-    (196, 200, 120), (90, 150, 80), (50, 120, 90), (230, 205, 145), (190, 190, 90),
-    (110, 160, 60), (30, 110, 50), (150, 140, 135), (170, 160, 90),
-)
 
 
 def _table(abs_lat_deg: F64, table: tuple[tuple[float, ...], tuple[float, ...]]) -> F64:

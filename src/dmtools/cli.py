@@ -145,9 +145,9 @@ def create_parser() -> argparse.ArgumentParser:
     planet.add_argument("--nodes", type=int, default=200_000,
                         help="Sphere mesh nodes (200,000 ~ 50 km spacing on an Earth-size world).")
     planet.add_argument("--duration-myr", type=float, default=30.0)
-    planet.add_argument("--erodibility", type=float, default=4e-6,
+    planet.add_argument("--erodibility", type=float, default=5e-6,
                         help="Base erodibility; lower values give higher relief.")
-    planet.add_argument("--process-km2", type=float, default=10_000.0,
+    planet.add_argument("--process-km2", type=float, default=2_500.0,
                         help="Smallest resolved drainage area (keeps relief mesh-independent).")
     planet.add_argument("--calibrate", type=int, default=3,
                         help="Geology target corrections (only with --geology).")

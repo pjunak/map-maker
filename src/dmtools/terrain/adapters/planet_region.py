@@ -14,19 +14,26 @@ import rasterio
 import shapely
 from affine import Affine
 from numpy.typing import NDArray
-from PIL import Image, ImageDraw
+from PIL import Image
 from rasterio.crs import CRS
+from scipy.ndimage import distance_transform_edt, gaussian_filter
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
-from dmtools.terrain.adapters.planet_render import LAND_STOPS, RIVER_COLOUR, SEA_STOPS
-from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
-from dmtools.terrain.pipeline.planet_climate import (
-    BIOME_COLOURS,
-    classify,
-    potential_evapotranspiration,
+from dmtools.terrain.adapters.planet_natural import (
+    HYPSOMETRIC,
+    RIVER,
+    PixelClimate,
+    land_colour,
+    ramp,
+    river_coverage,
+    sea_depth_colour,
+    shading,
 )
+from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
+from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
+from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 from dmtools.terrain.pipeline.planet_forcing import source_xy
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
@@ -37,6 +44,16 @@ type B = NDArray[np.bool_]
 
 REGION_SCHEMA = "dmtools.planet-region"
 REGION_VERSION = 1
+# Display-only regional relief (never exported). Regional pixels are a few
+# hundred metres, far below the 5 km tile mesh, so mountains need sub-tile
+# ridges and valleys; slopes need far less exaggeration than the world preview.
+REGION_EXAGGERATION = 1.3
+REGION_DETAIL_SEED = 17
+REGION_DETAIL_WAVELENGTH_M = 30e3
+REGION_DETAIL_FLOOR_M = 70.0
+REGION_DETAIL_SHARE = 0.6  # detail amplitude per metre of tile height
+REGION_CARVE_ERODIBILITY = 0.4  # K * dt for valley carving (m^0)
+REGION_CARVE_STEPS = 4
 
 
 @dataclass(frozen=True)
@@ -120,9 +137,12 @@ class RegionWindow:
     pixels: int
     elevation_m: F64  # (pixels, pixels); NaN outside the window circle
     land: B
-    vegetation_rgb: F64 | None
-    rivers: list[tuple[float, float, float, float, float]]  # x0, y0, x1, y1, strength
+    climate: PixelClimate | None
+    rivers: F64  # anti-aliased river coverage 0..1
+    points: F64  # pixel unit vectors (pixels * pixels, 3)
     tiles: tuple[int, ...]
+    planet_m: float
+    lapse_c_per_km: float
 
     @property
     def pixel_m(self) -> float:
@@ -162,19 +182,20 @@ def compose_window(
 
     surfaces = {tile: surface for tile, (surface, _) in tiles.items()}
     land = window_land(parent, points).reshape(pixels, pixels) & inside
-    sea = parent.sample(points, np.where(parent.land, 0.0, -2000.0)).reshape(pixels, pixels)
+    floor = parent.sea_floor_m
+    if floor is None:
+        floor = np.where(parent.land, 0.0, -2000.0)
+    sea = parent.sample(points, floor).reshape(pixels, pixels)
     elevation = np.zeros(pixels * pixels)
     elevation[inside.ravel()] = blend(grid, surfaces, points[inside.ravel()])
     elevation = elevation.reshape(pixels, pixels)
-    elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -20.0))
+    elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
     elevation = np.where(inside, elevation, np.nan)
-    vegetation = (
-        regional_vegetation(parent, points, elevation, land) if parent.biome is not None else None
-    )
-    # Rivers: each tile draws only segments it owns (largest blend weight there).
-    rivers: list[tuple[float, float, float, float, float]] = []
+    climate = regional_climate(parent, points, elevation, land)
+    # Rivers: each tile draws only the reaches it owns (largest blend weight there).
+    coverage = np.zeros((pixels, pixels))
     threshold = river_km2 * 1e6
-    top = 1.0
+    scale = pixels / (2 * radius_m)
     for tile, (surface, flow) in tiles.items():
         mesh = surface.mesh
         major = (flow.receiver >= 0) & (flow.area_m2 >= threshold)
@@ -182,28 +203,49 @@ def compose_window(
         if not len(nodes):
             continue
         ids, weights = grid.weights(mesh.xyz[nodes])
-        owner = ids[np.arange(len(nodes)), np.argmax(weights, axis=1)] == tile
-        nodes = nodes[owner]
-        plane_a = forward_aeqd(mesh.xyz[nodes], *centre, planet_m)
-        plane_b = forward_aeqd(mesh.xyz[flow.receiver[nodes]], *centre, planet_m)
-        keep = (np.hypot(*plane_a.T) < radius_m) & (np.hypot(*plane_b.T) < radius_m)
-        for (ax, ay), (bx, by), area in zip(
-            plane_a[keep], plane_b[keep], flow.area_m2[nodes][keep], strict=True
-        ):
-            strength = float(np.log(area / threshold))
-            top = max(top, strength)
-            rivers.append((float(ax), float(ay), float(bx), float(by), strength))
-    rivers = [(a, b, c, d, s / top) for a, b, c, d, s in rivers]
+        owned = np.zeros(mesh.size, dtype=bool)
+        owned[nodes[ids[np.arange(len(nodes)), np.argmax(weights, axis=1)] == tile]] = True
+        plane = forward_aeqd(mesh.xyz, *centre, planet_m)
+        x = (plane[:, 0] + radius_m) * scale
+        y = (radius_m - plane[:, 1]) * scale
+        stop = surface.elevation_m <= 0
+        coverage = np.maximum(
+            coverage,
+            river_coverage(
+                x,
+                y,
+                flow.receiver,
+                flow.area_m2,
+                owned & ~stop,
+                stop,
+                (pixels, pixels),
+                pixels / 1200,
+            ),
+        )
+    coverage = np.where(land, coverage, 0.0)
     return RegionWindow(
-        centre, radius_m, pixels, elevation, land, vegetation, rivers, tuple(sorted(tiles))
+        centre,
+        radius_m,
+        pixels,
+        elevation,
+        land,
+        climate,
+        coverage,
+        points,
+        tuple(sorted(tiles)),
+        planet_m,
+        parent.settings.climate.lapse_c_per_km,
     )
 
 
-def regional_vegetation(parent: RegionalParent, points: F64, elevation: F64, land: B) -> F64:
-    """Biome colours re-derived per pixel: parent climate, lapse-corrected to fine relief."""
-    assert parent.temperature_c is not None and parent.precipitation_mm is not None
+def regional_climate(
+    parent: RegionalParent, points: F64, elevation: F64, land: B
+) -> PixelClimate | None:
+    """Parent climate at each pixel, lapse-corrected to the fine relief."""
+    if parent.temperature_c is None or parent.precipitation_mm is None:
+        return None
     shape = elevation.shape
-    z = np.where(land, elevation, 0.0).ravel()
+    z = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0).ravel()
     lift = (z - parent.sample(points, parent.surface_m)) / 1000
     lapse = parent.settings.climate.lapse_c_per_km
     temperature = parent.sample(points, parent.temperature_c) - lapse * lift
@@ -217,60 +259,89 @@ def regional_vegetation(parent: RegionalParent, points: F64, elevation: F64, lan
     )
     latitude = np.arcsin(np.clip(points[:, 2], -1, 1))
     pet = potential_evapotranspiration(latitude, temperature, coast)
-    biome = classify(temperature, warm, precipitation, pet, z, land.ravel())
-    return np.asarray(BIOME_COLOURS, dtype=np.float64)[biome.astype(np.int64)].reshape(*shape, 3)
+    return PixelClimate(
+        temperature.reshape(shape),
+        warm.reshape(shape),
+        precipitation.reshape(shape),
+        pet.reshape(shape),
+    )
 
 
-def _ramp(z: F64, stops: tuple[tuple[int, tuple[int, int, int]], ...]) -> F64:
-    xs = np.array([k for k, _ in stops], dtype=np.float64)
-    return np.stack([np.interp(z, xs, [c[i] for _, c in stops]) for i in range(3)], axis=-1)
+def display_relief(window: RegionWindow) -> F64:
+    """Elevation plus sub-tile ridges and valleys for shading only (never exported).
+
+    The 5 km tile mesh cannot resolve hillslopes, so mountains would shade as
+    smooth domes. Ridged, slope-damped noise scaled with height adds roughness,
+    and a few stream-power steps routed over that rough surface carve it into a
+    connected, branching valley network. Carving depth is capped at the local
+    detail amplitude, so the tile relief keeps its shape.
+    """
+    z = np.nan_to_num(window.elevation_m, nan=-200.0)
+    land = window.land
+    if not land.any():
+        return z
+    base = np.where(land, z, 0.0)
+    ridged = np.clip((base - 300) / 1500, 0, 1).ravel()
+    detail = eroded_fbm(
+        window.points,
+        ridged,
+        REGION_DETAIL_SEED,
+        5,
+        window.planet_m / REGION_DETAIL_WAVELENGTH_M,
+        0.5,
+        0.1,
+    ).reshape(z.shape)
+    detail -= detail[land].mean()
+    amplitude = REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base
+    rough = np.where(land, z + amplitude * detail, z)
+    # Outside the window circle, hold each cell at the nearest inside height so
+    # the rim is not a base level that every border valley would cut down to.
+    inside = np.isfinite(window.elevation_m)
+    nearest = cast(
+        NDArray[np.intp],
+        distance_transform_edt(~inside, return_distances=False, return_indices=True),
+    )
+    rough = rough[nearest[0], nearest[1]]
+    carved = carve_valleys(
+        rough, ~land, window.pixel_m, REGION_CARVE_ERODIBILITY, 0.5, REGION_CARVE_STEPS
+    )
+    # Flats and plateaus carve into straight grid-aligned grooves, and real ones
+    # stay smooth at this scale, so incision follows the tile relief's slope.
+    tile_slope = gaussian_filter(
+        np.hypot(*np.gradient(np.where(inside, z, 0.0), window.pixel_m)), 3.0
+    )
+    steep = np.clip((tile_slope - 0.006) / 0.024, 0, 1)
+    # Blurring the incision widens one-pixel D8 channels into valleys.
+    depth = gaussian_filter(np.clip(rough - carved, 0, amplitude) * steep, 1.3)
+    relief = gaussian_filter(rough - depth, 0.5)
+    return np.where(land, np.maximum(relief, 1.0), z)
 
 
 def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
-    z = np.nan_to_num(window.elevation_m, nan=-200.0)
-    gy, gx = np.gradient(z, window.pixel_m)
-    gx, gy = gx * 6.0, -gy * 6.0
-    az, alt = np.deg2rad(315), np.deg2rad(40)
-    light = (np.cos(alt) * np.sin(az), np.cos(alt) * np.cos(az), np.sin(alt))
-    shade = np.clip(
-        (-gx * light[0] - gy * light[1] + light[2]) / np.sqrt(gx * gx + gy * gy + 1), 0, 1
-    )
+    """Natural-colour (atlas) or shaded hypsometric view of a regional window."""
+    z = display_relief(window)
+    gy = np.gradient(z, axis=0) / window.pixel_m
+    gx = np.gradient(z, axis=1) / window.pixel_m
+    slope, light = shading(gx, gy, REGION_EXAGGERATION)
     land = window.land
-    if atlas and window.vegetation_rgb is not None:
-        rock = np.clip((z - 1500) / 2500, 0, 1)[..., None]
-        land_rgb = (
-            window.vegetation_rgb * (1 - rock)
-            + _ramp(
-                z,
-                (
-                    (0, (0, 0, 0)),
-                    (1500, (0, 0, 0)),
-                    (3200, (150, 130, 115)),
-                    (5000, (245, 245, 245)),
-                ),
-            )
-            * rock
+    climate = window.climate
+    if atlas and climate is not None:
+        lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
+        shown = PixelClimate(
+            climate.temperature_c - lapse,
+            climate.warm_season_c - lapse,
+            climate.precipitation_mm,
+            climate.pet_mm,
         )
+        wet = gaussian_filter(window.rivers, 3.0)
+        land_rgb = land_colour(window.points, window.planet_m, shown, z, slope, light, wet)
     else:
-        land_rgb = _ramp(z, LAND_STOPS)
-    rgb = np.where(land[..., None], land_rgb, _ramp(z, SEA_STOPS))
-    rgb = rgb * np.where(land, 0.55 + 0.65 * shade, 0.95)[..., None]
+        land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+    rgb = np.where(land[..., None], land_rgb, sea_depth_colour(-z, light))
+    alpha = (0.9 * window.rivers)[..., None]
+    rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
     rgb[~np.isfinite(window.elevation_m)] = (36, 54, 82)
-    image = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
-    draw = ImageDraw.Draw(image)
-    scale = window.pixels / (2 * window.radius_m)
-    for x0, y0, x1, y1, strength in window.rivers:
-        draw.line(
-            (
-                (x0 + window.radius_m) * scale,
-                (window.radius_m - y0) * scale,
-                (x1 + window.radius_m) * scale,
-                (window.radius_m - y1) * scale,
-            ),
-            fill=RIVER_COLOUR,
-            width=max(1, round(1 + 2 * strength)),
-        )
-    return image
+    return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
 
 
 def aeqd_crs_wkt(lon0: float, lat0: float, radius_m: float) -> str:
@@ -318,7 +389,7 @@ def write_region(
     names.append("elevation.tif")
     window_image(window, atlas=False).save(target / "relief.png")
     names.append("relief.png")
-    if window.vegetation_rgb is not None:
+    if window.climate is not None:
         window_image(window, atlas=True).save(target / "atlas.png")
         names.append("atlas.png")
     manifest: dict[str, object] = {

@@ -229,9 +229,12 @@ def test_large_meshes_calibrate_on_a_coarse_mesh_then_run_once(
     import dmtools.terrain.pipeline.planet as planet
 
     monkeypatch.setattr(planet, "CALIBRATION_NODES", 6000)
+    # Production meshes resolve the process area (2,500 km2 is ~4 cells at 800k
+    # nodes). Keep that ratio here: at ~21,000 km2 per cell, a 2,500 km2 process
+    # area would test coarse-mesh dependence instead of calibration transfer.
     settings = PlanetSettings(
         nodes=24_000, duration_myr=8.0, step_kyr=250.0, calibration_iterations=2,
-        climate_passes=0,
+        climate_passes=0, process_area_km2=90_000.0,
     )
     result = generate_planet(open_world(world_path), settings, sample_recipe(world_path))
     # Two coarse corrections then one full-resolution measurement.

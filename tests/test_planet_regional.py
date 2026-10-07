@@ -140,3 +140,24 @@ def test_region_build_reuses_cached_tiles_and_publishes_a_manifest(
 
 def test_world_path_fixture_is_reusable(tmp_path: Path) -> None:
     assert build_world(WorldSpec(seed=3, columns=256), tmp_path, "x").exists()
+
+
+def test_display_valley_carving_only_lowers_land_and_keeps_outlets() -> None:
+    from dmtools.terrain.pipeline.planet_detail import carve_valleys
+
+    rows = columns = 64
+    rng = np.random.default_rng(3)
+    _, x = np.mgrid[0:rows, 0:columns]
+    z = 20.0 * x + 150.0 * rng.random((rows, columns))
+    outlet = np.zeros((rows, columns), dtype=bool)
+    outlet[:, 0] = True
+    z[outlet] = 0.0
+    carved = carve_valleys(z, outlet, 500.0, 0.4, 0.5, 3)
+    again = carve_valleys(z, outlet, 500.0, 0.4, 0.5, 3)
+    assert np.array_equal(carved, again)
+    assert np.all(np.isfinite(carved))
+    assert np.array_equal(carved[outlet], z[outlet])
+    # Depressions are filled before carving, so a cell may rise to its spill level
+    # but never above the highest original cell; incision lowers most of the land.
+    assert carved.max() <= z.max() + 1e-6
+    assert np.mean(carved[~outlet] < z[~outlet]) > 0.5

@@ -93,6 +93,8 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] World-tab Planet stage: generate, cancel, atlas/relief/rainfall/temperature
     layers, hover inspection, export; stale results discarded on edit.
   - [x] First real authored world end to end (9 continents; ice-sheet fix).
+  - [x] Natural-colour atlas and regional display detail with carved valleys
+    ([evidence](docs/research/2026-10-07-natural-map-rendering.md)).
   - [ ] Bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.

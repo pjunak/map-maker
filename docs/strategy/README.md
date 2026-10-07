@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-06. **Active milestone: M2 — whole-planet relief.** The plan is now
+Updated 2026-10-07. **Active milestone: M2 — whole-planet relief.** The plan is now
 **world-first**: one whole-planet relief made by uplift and erosion on an irregular
 sphere mesh, then climate on the same mesh, then coupling, acceptance, a native
 core and regional zoom. The 2026-10-06 [planet relief evidence](../research/2026-10-06-whole-planet-erosion-relief.md)
@@ -35,6 +35,9 @@ not competing queues. [TODO](../../TODO.md) retains the complete feature backlog
   erosion and biomes. It publishes a world-aligned GeoTIFF, atlas images, river
   vectors and the authoritative mesh archive. `benchmarks.planet` keeps synthetic
   test worlds, sample geology and resolution sweeps.
+- **Map images (experimental, 2026-10-07):** natural-colour atlases and regional
+  windows with display-only sub-mesh detail and carved regional valleys
+  ([report](../research/2026-10-07-natural-map-rendering.md)). Exports are unchanged.
 - **Local terrain path (unchanged):** World → Terrain, the composed generator/editor,
   builds, profiles and saved-parent experiments. M1 context binding is experimental.
   The local path remains available until M5 decides what replaces it.

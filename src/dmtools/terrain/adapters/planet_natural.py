@@ -1,0 +1,417 @@
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+"""Natural-colour cartography for planet rasters (derived display, not authority).
+
+The look follows natural-colour shaded-relief atlases rather than discrete
+biome fills:
+
+* **Display relief.** The triangle-interpolated planet surface plus sub-mesh
+  eroded detail, scaled by local relief, faded at coasts and suppressed along
+  large rivers.
+* **Shading.** Multi-directional hillshade on that display relief.
+* **Land colour.** Continuous colour from per-pixel climate:
+  - aridity P/PET with soil patchiness sets desert, steppe, grass or forest;
+  - temperature, lapse-corrected to the pixel's height, picks tropical,
+    temperate or boreal forest, tundra and perennial snow;
+  - slope exposes rock, and bare dryland hills read dark brown.
+* **Ocean colour.** Depth-tinted, with subtly shaded abyssal texture.
+* **Rivers.** Tapered with discharge, smoothed and anti-aliased.
+"""
+
+from dataclasses import dataclass
+
+import numpy as np
+from numpy.typing import NDArray
+from PIL import Image, ImageDraw
+from scipy.ndimage import gaussian_filter
+
+from dmtools.terrain.adapters.planet_render import (
+    FrameRaster,
+    PlanetRasters,
+    climate_images,
+    ice_covered,
+    planet_rasters,
+    river_threshold_m3_s,
+)
+from dmtools.terrain.pipeline.planet import PlanetResult
+from dmtools.terrain.pipeline.planet_detail import eroded_fbm
+
+type F64 = NDArray[np.float64]
+type B = NDArray[np.bool_]
+type RGB = tuple[int, int, int]
+
+DETAIL_SEED = 7
+DETAIL_WAVELENGTH_M = 110e3
+DETAIL_OCTAVES = 8
+SEA_TEXTURE_M = 180.0
+EXAGGERATION = 13.0
+
+DESERT_HOT: RGB = (208, 186, 146)
+DESERT_COLD: RGB = (176, 166, 140)
+DESERT_OCHRE: RGB = (186, 146, 106)
+DESERT_GREY: RGB = (150, 136, 118)
+STEPPE: RGB = (160, 152, 104)
+GRASS_WARM: RGB = (128, 140, 80)
+GRASS_COOL: RGB = (118, 136, 88)
+FOREST_TROPICAL: RGB = (46, 82, 42)
+FOREST_TEMPERATE: RGB = (68, 98, 56)
+FOREST_BOREAL: RGB = (58, 78, 60)
+TUNDRA: RGB = (150, 146, 124)
+ROCK: RGB = (132, 122, 112)
+BARE_DRYLAND: RGB = (124, 102, 80)
+SNOW: RGB = (242, 244, 247)
+LAKE: RGB = (62, 106, 146)
+SALT_FLAT: RGB = (214, 210, 196)
+RIVER: RGB = (62, 104, 150)
+SEA_STOPS: tuple[tuple[float, RGB], ...] = (
+    (0, (62, 110, 144)),
+    (60, (55, 101, 137)),
+    (160, (47, 91, 129)),
+    (1000, (35, 73, 113)),
+    (2500, (27, 59, 99)),
+    (4500, (19, 44, 82)),
+    (7000, (12, 30, 62)),
+)
+HYPSOMETRIC: tuple[tuple[float, RGB], ...] = (
+    (0, (104, 136, 92)),
+    (300, (138, 156, 106)),
+    (800, (178, 172, 128)),
+    (1500, (176, 150, 112)),
+    (2500, (150, 128, 106)),
+    (3500, (164, 156, 150)),
+    (5000, (236, 236, 236)),
+)
+
+
+def _smooth(x: F64, a: float, b: float) -> F64:
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+def _mix(base: F64, colour: RGB | F64, weight: F64) -> F64:
+    target = np.asarray(colour, dtype=np.float64)
+    return base * (1 - weight)[..., None] + target * weight[..., None]
+
+
+def ramp(z: F64, stops: tuple[tuple[float, RGB], ...]) -> F64:
+    xs = np.array([s[0] for s in stops], dtype=np.float64)
+    return np.stack([np.interp(z, xs, [s[1][k] for s in stops]) for k in range(3)], axis=-1)
+
+
+@dataclass(frozen=True)
+class DisplayFields:
+    """Per-pixel fields shared by the natural and relief maps."""
+
+    elevation_m: F64  # display relief: land with detail, sea with texture
+    base_m: F64  # interpolated planet land surface (no detail)
+    slope: F64  # display slope (m/m)
+    light: F64  # multi-directional hillshade, 1.0 on flat ground
+
+
+def display_fields(
+    result: PlanetResult, raster: FrameRaster, land_px: B, base_land: F64, base_sea: F64
+) -> DisplayFields:
+    mesh = result.mesh
+    radius = mesh.radius_m
+    shape = raster.shape
+    points = raster.queries
+    coast = raster.interpolate(
+        mesh, np.maximum(np.where(np.isfinite(result.coast_m), result.coast_m, 0), 0)
+    )
+    discharge = raster.interpolate(mesh, np.log1p(np.maximum(result.lakes.discharge_m3_s, 0.0)))
+    ridged = _smooth(base_land, 500, 2200).ravel()
+    detail = eroded_fbm(
+        points, ridged, DETAIL_SEED, DETAIL_OCTAVES, radius / DETAIL_WAVELENGTH_M, 0.55, 0.12
+    ).reshape(shape) - 0.17 * ridged.reshape(shape)
+    amplitude = (
+        (45 + 0.38 * base_land) * _smooth(coast, 0, 25e3) / (1 + np.sqrt(np.expm1(discharge)) / 12)
+    )
+    land = np.maximum(base_land + amplitude * detail, 1.0)
+    hills = eroded_fbm(
+        points, np.zeros(len(points)), DETAIL_SEED + 4, 5, radius / 60e3, 0.55, 0.0
+    ).reshape(shape)
+    sea = base_sea + _smooth(-base_sea, 500, 3000) * SEA_TEXTURE_M * hills
+    z = np.where(land_px, land, np.minimum(sea, -1.0))
+    rows, columns = shape
+    dy = np.pi * radius / rows
+    dx = 2 * np.pi * radius / columns * np.maximum(np.cos(raster.latitude), 0.05)[:, None]
+    gy = np.gradient(z, axis=0) / dy
+    gx = (np.roll(z, -1, 1) - np.roll(z, 1, 1)) / (2 * dx)
+    slope, light = shading(gx, gy, EXAGGERATION)
+    return DisplayFields(z, base_land, slope, light)
+
+
+def shading(gx: F64, gy: F64, exaggeration: float) -> tuple[F64, F64]:
+    """Slope (m/m) and multi-directional hillshade normalised to 1 on flat ground.
+
+    ``gx`` is the eastward and ``gy`` the southward (image-row) height gradient.
+    """
+
+    def shade(azimuth: float, altitude: float) -> F64:
+        az, alt = np.deg2rad(azimuth), np.deg2rad(altitude)
+        lx, ly, lz = np.cos(alt) * np.sin(az), np.cos(alt) * np.cos(az), np.sin(alt)
+        sx, sy = gx * exaggeration, gy * exaggeration
+        return (-sx * lx + sy * ly + lz) / np.sqrt(sx * sx + sy * sy + 1)
+
+    combined = 0.62 * shade(315, 42) + 0.23 * shade(270, 50) + 0.15 * shade(355, 55)
+    flat = (
+        0.62 * np.sin(np.deg2rad(42))
+        + 0.23 * np.sin(np.deg2rad(50))
+        + 0.15 * np.sin(np.deg2rad(55))
+    )
+    return np.hypot(gx, gy), np.clip(combined, 0, None) / flat
+
+
+@dataclass(frozen=True)
+class PixelClimate:
+    """Climate at each pixel, already lapse-corrected to the displayed height."""
+
+    temperature_c: F64
+    warm_season_c: F64
+    precipitation_mm: F64
+    pet_mm: F64
+
+
+def land_colour(
+    points: F64,
+    radius_m: float,
+    climate: PixelClimate,
+    z: F64,
+    slope: F64,
+    light: F64,
+    wet: F64 | None = None,
+) -> F64:
+    """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
+
+    ``wet`` (0..1, blurred river coverage) greens river corridors in drylands.
+    """
+    shape = z.shape
+    zeros = np.zeros(len(points))
+    temperature, warm = climate.temperature_c, climate.warm_season_c
+    # Soil, groundwater and local relief make vegetation boundaries ragged at
+    # every scale; the fine octave also hides the parent mesh's straight edges.
+    patch = eroded_fbm(points, zeros, 41, 5, radius_m / 300e3, 0.55, 0.0).reshape(shape)
+    fine = eroded_fbm(points, zeros, 53, 4, radius_m / 35e3, 0.55, 0.0).reshape(shape)
+    aridity = (
+        climate.precipitation_mm
+        / np.maximum(climate.pet_mm, 1.0)
+        * np.exp(0.45 * patch + 0.3 * fine)
+    )
+    if wet is not None:
+        # Only drylands show river corridors; humid land is green either way.
+        aridity = aridity * (1 + 15 * wet * (1 - _smooth(aridity, 0.25, 0.9)))
+    veg = _smooth(aridity, 0.04, 0.8)
+    forest = _smooth(aridity, 0.6, 1.25) * _smooth(warm, 9, 14)
+    desert = _mix(_fill(shape, DESERT_COLD), DESERT_HOT, _smooth(temperature, 5, 18))
+    hue = eroded_fbm(points, zeros, 43, 4, radius_m / 450e3, 0.5, 0.0).reshape(shape)
+    hue = hue + 0.6 * fine
+    desert = _mix(desert, DESERT_OCHRE, _smooth(hue, 0.0, 0.5) * 0.55)
+    desert = _mix(desert, DESERT_GREY, _smooth(-hue, 0.1, 0.6) * 0.5)
+    grass = _mix(_fill(shape, GRASS_COOL), GRASS_WARM, _smooth(temperature, 8, 20))
+    low = _mix(desert, STEPPE, _smooth(veg, 0, 0.35))
+    low = _mix(low, grass, _smooth(veg, 0.35, 0.7))
+    trees = _mix(_fill(shape, FOREST_BOREAL), FOREST_TEMPERATE, _smooth(temperature, 3, 9))
+    trees = _mix(trees, FOREST_TROPICAL, _smooth(temperature, 17, 23))
+    colour = _mix(low, trees, forest)
+    colour = _mix(colour, TUNDRA, 1 - _smooth(warm, 4, 11))
+    rocky = np.clip(_smooth(slope, 0.08, 0.3) * 0.75 + _smooth(z, 3000, 4500) * 0.25, 0, 0.8)
+    colour = _mix(colour, ROCK, rocky)
+    colour = _mix(colour, BARE_DRYLAND, (1 - veg) * _smooth(slope, 0.015, 0.09) * 0.6)
+    # The snowline wanders with local climate and lies lower on shaded slopes;
+    # steep faces shed snow and stay bare.
+    wander = eroded_fbm(points, zeros, 47, 4, radius_m / 40e3, 0.55, 0.0).reshape(shape)
+    shade = np.clip(1 - light, -0.5, 0.8)
+    cold = -warm + 1.4 * wander + 2.5 * shade
+    snow = _smooth(cold, -0.8, 1.0) * (1 - 0.7 * _smooth(slope, 0.3, 0.7))
+    colour = _mix(colour, SNOW, snow)
+    texture = eroded_fbm(points, zeros, 23, 4, radius_m / 25e3, 0.6, 0.0).reshape(shape)
+    colour *= (1 + 0.045 * texture + 0.05 * patch)[..., None]
+    return colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+
+
+def _fill(shape: tuple[int, ...], colour: RGB) -> F64:
+    return np.broadcast_to(np.asarray(colour, dtype=np.float64), (*shape, 3)).copy()
+
+
+def natural_colour(
+    result: PlanetResult, raster: FrameRaster, rivers: F64, fields: DisplayFields
+) -> F64:
+    climate = result.climate
+    assert climate is not None
+    mesh = result.mesh
+    lapse = result.settings.climate.lapse_c_per_km
+    lift = (fields.elevation_m - fields.base_m) / 1000
+    pixel = PixelClimate(
+        raster.interpolate(mesh, climate.temperature_c) - lapse * lift,
+        raster.interpolate(mesh, climate.warm_c) - lapse * lift,
+        raster.interpolate(mesh, climate.precipitation_mm),
+        raster.interpolate(mesh, climate.pet_mm),
+    )
+    return land_colour(
+        raster.queries,
+        mesh.radius_m,
+        pixel,
+        fields.elevation_m,
+        fields.slope,
+        fields.light,
+        gaussian_filter(rivers, 1.0),
+    )
+
+
+def sea_depth_colour(depth_m: F64, light: F64) -> F64:
+    sea = ramp(np.maximum(depth_m, 0), SEA_STOPS)
+    return sea * (0.88 + 0.12 * np.clip(light, 0, 2) - 0.12)[..., None]
+
+
+def sea_colour(fields: DisplayFields) -> F64:
+    return sea_depth_colour(-fields.elevation_m, fields.light)
+
+
+def relief_colour(fields: DisplayFields) -> F64:
+    colour = ramp(fields.elevation_m, HYPSOMETRIC)
+    return colour * (0.30 + 0.70 * np.clip(fields.light, 0, 1.5))[..., None]
+
+
+def paint_water(rgb: F64, result: PlanetResult, lakes_px: NDArray[np.int64]) -> F64:
+    """Lakes in water colour; only closed lakes in hot, dry basins read as salt pans."""
+    out = rgb.copy()
+    lakes = result.lakes
+    if not len(lakes.level_m):
+        return out
+    salt = lakes.endorheic.copy()
+    climate = result.climate
+    if climate is not None:
+        for lake in np.flatnonzero(salt):
+            nodes = lakes.lake == lake
+            salt[lake] = bool(np.mean(climate.temperature_c[nodes]) > 12.0)
+    on_lake = lakes_px >= 0
+    pan = salt[np.maximum(lakes_px, 0)] & on_lake
+    out[on_lake & ~pan] = LAKE
+    out[pan] = SALT_FLAT
+    return out
+
+
+def river_layer(
+    result: PlanetResult, raster: FrameRaster, threshold_m3_s: float, supersample: int = 2
+) -> F64:
+    """Anti-aliased river coverage (0..1) on the world-frame raster."""
+    mesh, flow = result.mesh, result.flow
+    rows, columns = raster.shape
+    frame = raster.frame
+    discharge = result.lakes.discharge_m3_s
+    stop = ~result.land | (result.lakes.lake >= 0)
+    major = (~stop) & ~ice_covered(result) & (flow.receiver >= 0) & (discharge >= threshold_m3_s)
+    lon = np.degrees(np.arctan2(mesh.xyz[:, 1], mesh.xyz[:, 0]))
+    lat = np.degrees(np.arcsin(np.clip(mesh.xyz[:, 2], -1, 1)))
+    x = ((lon - frame.central_meridian_deg + 180) % 360) / 360 * columns
+    y = (90 - lat) / 180 * rows
+    return river_coverage(
+        x, y, flow.receiver, discharge, major, stop, (rows, columns), columns / 4800, supersample
+    )
+
+
+def river_coverage(
+    x: F64,
+    y: F64,
+    receiver: NDArray[np.int64],
+    discharge: F64,
+    major: B,
+    stop: B,
+    shape: tuple[int, int],
+    width_scale: float,
+    supersample: int = 2,
+) -> F64:
+    """Tapered, Chaikin-smoothed, anti-aliased river lines for nodes at pixel (x, y)."""
+    rows, columns = shape
+    if not major.any():
+        return np.zeros(shape)
+    donors = np.zeros(len(receiver), dtype=np.int64)
+    np.add.at(donors, receiver[major], 1)
+    heads = np.flatnonzero(major & (donors == 0))
+    peak = float(discharge[major].max())
+    mask = Image.new("L", (columns * supersample, rows * supersample), 0)
+    draw = ImageDraw.Draw(mask)
+    visited = np.zeros(len(receiver), dtype=bool)
+    for head in heads[np.argsort(-discharge[heads])].tolist():
+        chain = [head]
+        node = head
+        while True:
+            visited[node] = True
+            nxt = int(receiver[node])
+            if nxt < 0:
+                break
+            chain.append(nxt)
+            if stop[nxt] or visited[nxt] or not major[nxt]:
+                break
+            node = nxt
+        if len(chain) < 2:
+            continue
+        path = np.stack((x[chain], y[chain]), axis=1)
+        if np.any(np.abs(np.diff(path[:, 0])) > columns / 2):
+            continue
+        for _ in range(2):
+            a, b = path[:-1], path[1:]
+            cut = np.empty((2 * len(a), 2))
+            cut[0::2] = 0.75 * a + 0.25 * b
+            cut[1::2] = 0.25 * a + 0.75 * b
+            path = np.vstack((path[:1], cut, path[-1:]))
+        flow_along = np.interp(
+            np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), discharge[chain]
+        )
+        width = (0.55 + 2.6 * (flow_along / peak) ** 0.4) * width_scale * supersample
+        for k in range(len(path) - 1):
+            draw.line(
+                (tuple(path[k] * supersample), tuple(path[k + 1] * supersample)),
+                fill=255,
+                width=max(1, round(float(width[k]))),
+            )
+    mask = mask.resize((columns, rows), Image.Resampling.LANCZOS)
+    return np.asarray(mask, dtype=np.float64) / 255.0
+
+
+def compose(
+    land_rgb: F64,
+    sea_rgb: F64,
+    land_px: B,
+    rivers: F64,
+    result: PlanetResult,
+    lakes_px: NDArray[np.int64],
+) -> Image.Image:
+    rgb = np.where(land_px[..., None], land_rgb, sea_rgb)
+    rgb = paint_water(rgb, result, lakes_px)
+    alpha = (0.9 * rivers)[..., None]
+    rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
+    return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
+
+
+def preview_images(
+    result: PlanetResult, rasters: PlanetRasters, threshold_m3_s: float
+) -> dict[str, Image.Image]:
+    """Natural-colour atlas, shaded relief and climate previews (derived display)."""
+    land_px = rasters.land_px
+    base_land = np.where(land_px, rasters.elevation_m, 0.0)
+    base_sea = np.where(land_px, 0.0, rasters.elevation_m)
+    fields = display_fields(result, rasters.raster, land_px, base_land, base_sea)
+    rivers = river_layer(result, rasters.raster, threshold_m3_s)
+    sea = sea_colour(fields)
+    images: dict[str, Image.Image] = {}
+    if result.climate is not None:
+        images["Planet atlas"] = compose(
+            natural_colour(result, rasters.raster, rivers, fields),
+            sea,
+            land_px,
+            rivers,
+            result,
+            rasters.lakes_px,
+        )
+    images["Planet relief"] = compose(
+        relief_colour(fields), sea, land_px, rivers, result, rasters.lakes_px
+    )
+    images |= climate_images(result, rasters)
+    return images
+
+
+def render_previews(result: PlanetResult, width: int, river_km2: float) -> dict[str, Image.Image]:
+    return preview_images(
+        result, planet_rasters(result, width), river_threshold_m3_s(result, river_km2)
+    )

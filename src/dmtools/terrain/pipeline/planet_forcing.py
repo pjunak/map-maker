@@ -94,7 +94,7 @@ def coast_distance(mesh: SphereMesh, land: B) -> F64:
     )
 
 
-def _smoothstep(x: F64, a: float, b: float) -> F64:
+def _smoothstep(x: F64, a: float | F64, b: float | F64) -> F64:
     t = np.clip((x - a) / (b - a), 0, 1)
     return t * t * (3 - 2 * t)
 
@@ -299,11 +299,19 @@ def measure_regions(h: F64, regions: GeologyRegions) -> tuple[float | None, ...]
 
 
 def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
-    """Display bathymetry (m, negative): shelf, slope, abyss, ridges and hills."""
-    shelf = _smoothstep(coast_m, 0, 120e3)
-    slope = _smoothstep(coast_m, 120e3, 450e3)
-    depth = 150 * shelf + 3800 * slope
-    hills = fbm3(mesh.xyz, seed + 909, 6, 6.0)
+    """Display bathymetry (m, negative).
+
+    A continental shelf whose width varies along the coast (about 10-260 km), a
+    sharp shelf break onto a steep slope, a continental rise into abyssal plains,
+    and broad mid-ocean ridges and swells. A uniform shelf would draw an
+    identical halo around every coast.
+    """
+    width = 10e3 + 250e3 * _smoothstep(fbm3(mesh.xyz, seed + 707, 4, 14.0), -0.3, 0.4) ** 1.5
+    shelf = 20 + 120 * _smoothstep(coast_m, 0, width)
+    slope = 3200 * _smoothstep(coast_m, width, width + 90e3)
+    rise = 1000 * _smoothstep(coast_m, width + 90e3, width + 900e3)
     ridge = 1 - np.abs(fbm3(mesh.xyz, seed + 808, 3, 1.0))
-    depth -= slope * (900 * _smoothstep(ridge, 0.75, 0.98) - 250 * hills)
-    return np.where(water, -depth, 0.0)
+    abyss = _smoothstep(coast_m, width + 300e3, width + 900e3)
+    hills = fbm3(mesh.xyz, seed + 909, 5, 6.0)
+    swell = abyss * (1300 * _smoothstep(ridge, 0.72, 0.97) - 250 * hills)
+    return np.where(water, -(shelf + slope + rise - swell), 0.0)

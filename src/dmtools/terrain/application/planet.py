@@ -9,7 +9,7 @@ from PIL import Image
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
 from dmtools.terrain.adapters.planet_build import write_planet_build
-from dmtools.terrain.adapters.planet_render import render_previews
+from dmtools.terrain.adapters.planet_natural import render_previews
 from dmtools.terrain.adapters.world_geology import geology_document, read_geology
 from dmtools.terrain.adapters.world_project import read_world_project, world_project_document
 from dmtools.terrain.adapters.world_svg import parse_world_svg

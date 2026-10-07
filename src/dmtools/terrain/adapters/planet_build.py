@@ -24,11 +24,11 @@ from numpy.typing import NDArray
 from rasterio.crs import CRS
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
+from dmtools.terrain.adapters.planet_natural import preview_images
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
     ice_covered,
     planet_rasters,
-    preview_images,
     river_threshold_m3_s,
 )
 from dmtools.terrain.adapters.world_geology import geology_document

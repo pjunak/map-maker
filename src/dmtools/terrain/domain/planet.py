@@ -63,9 +63,9 @@ class PlanetSettings:
     nodes: int = 200_000
     duration_myr: float = 30.0
     step_kyr: float = 100.0
-    erodibility: float = 4e-6
+    erodibility: float = 5e-6
     area_exponent: float = 0.45
-    process_area_km2: float = 10_000.0
+    process_area_km2: float = 2_500.0
     calibration_iterations: int = 3
     climate_passes: int = 1
     climate: PlanetClimateSettings = field(default_factory=PlanetClimateSettings)
