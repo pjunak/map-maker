@@ -307,3 +307,24 @@ def flow_length(order: I64, receiver: I64, water: B, distance: F64) -> F64:
             if candidate > length[r]:
                 length[r] = candidate
     return length
+
+
+@njit(cache=True, parallel=True)
+def neighbour_mix(values: F64, ptr: I64, nbr: I64, weight: F64, substeps: int) -> F64:
+    """Explicit diffusion: ``substeps`` relaxations towards the neighbour mean.
+
+    Each substep moves every node by ``weight`` (at most 0.5 for stability) of
+    the way to the mean of its neighbours.
+    """
+    n = values.size
+    current = values.copy()
+    following = np.empty(n)
+    for _ in range(substeps):
+        for i in prange(n):
+            total = 0.0
+            for k in range(ptr[i], ptr[i + 1]):
+                total += current[nbr[k]]
+            mean = total / (ptr[i + 1] - ptr[i])
+            following[i] = (1.0 - weight[i]) * current[i] + weight[i] * mean
+        current, following = following, current
+    return current

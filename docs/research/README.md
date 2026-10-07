@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [World-scale detail and softer climate boundaries — 2026-10-07](2026-10-07-world-scale-detail.md)
+  adds multi-scale procedural forcing and a mesh-independent eddy diffusivity for moisture
+  (the old mixing sharpened with mesh density). It also carves display valleys into the
+  world atlas, and makes rivers thinner and playas arid-only.
+
 - [Natural-looking planet and regional maps — 2026-10-07](2026-10-07-natural-map-rendering.md)
   replaces biome-class colours and uniform shelves with continuous natural colour, and adds
   sub-mesh display detail. Regional windows get valleys carved over the detail by grid stream

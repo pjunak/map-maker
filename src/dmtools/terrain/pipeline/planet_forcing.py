@@ -119,18 +119,45 @@ class ProceduralForcing:
 
 
 def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> ProceduralForcing:
-    """Ridged-noise orogens, noise-gated active margins and weak inland cratons."""
+    """Ridged-noise orogens, noise-gated active margins and weak inland cratons.
+
+    Earth's continents carry structure at every scale: a few great orogens
+    (1,000s of km), many minor ranges and old fold belts (100s of km) and hill
+    country between them. Forcing with only continental-scale structure erodes
+    into a handful of huge, uniform plains and plateaus.
+    """
     p = mesh.xyz
     warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
     ridged = 1 - np.abs(fbm3(p + 0.35 * warp, seed + 101, 4, 1.4))
     belts = _smoothstep(ridged, 0.80, 0.97) * _smoothstep(coast_m, 0.0, 150e3)
+    fine_warp = np.stack([fbm3(p, seed + 310 + k, 3, 4.0) for k in range(3)], axis=1)
+    minor_ridged = 1 - np.abs(fbm3(p + 0.12 * fine_warp, seed + 111, 4, 4.5))
+    minor = (
+        _smoothstep(minor_ridged, 0.84, 0.97)
+        * _smoothstep(fbm3(p, seed + 212, 3, 2.5), -0.1, 0.3)
+        * _smoothstep(coast_m, 0.0, 80e3)
+    )
+    hill_ridged = 1 - np.abs(fbm3(p + 0.05 * fine_warp, seed + 121, 3, 12.0))
+    hills = _smoothstep(hill_ridged, 0.65, 0.95) * _smoothstep(
+        fbm3(p, seed + 222, 3, 3.5), -0.1, 0.4
+    )
     gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
-    margins = gate * _smoothstep(coast_m, 30e3, 120e3) * (1 - _smoothstep(coast_m, 250e3, 500e3))
+    # Active margins vary along strike; a uniform coastal band erodes into a comb
+    # of identical parallel valleys.
+    strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
+    margins = (
+        gate
+        * (0.35 + 0.65 * strike)
+        * _smoothstep(coast_m, 30e3, 120e3)
+        * (1 - _smoothstep(coast_m, 250e3, 500e3))
+    )
     # Uniform uplift erodes into a smooth dome with radial drainage. Inherited
-    # structure (warps, faults, lithology) breaks that symmetry at 500-2000 km.
-    uplift_texture = np.exp(UPLIFT_TEXTURE * fbm3(p, seed + 505, 4, 3.0))
-    craton = 6e-5 * cratonic_profile(coast_m) * uplift_texture
-    uplift = craton + 1.2e-3 * belts + 6e-4 * margins
+    # structure (warps, faults, lithology) breaks that symmetry from 100 to 2000 km.
+    uplift_texture = np.exp(UPLIFT_TEXTURE * fbm3(p, seed + 505, 6, 3.0, 0.6))
+    # The marginal swell sits a varying distance inland, not on a ring.
+    inland = coast_m * np.exp(0.4 * fbm3(p, seed + 606, 3, 4.0))
+    craton = 6e-5 * cratonic_profile(inland) * uplift_texture
+    uplift = craton + 1.2e-3 * belts + 4e-4 * minor + 1.2e-4 * hills + 6e-4 * margins
     texture = np.exp(1.1 * fbm3(p, seed + 404, 5, 3.0))
     return ProceduralForcing(np.where(land, uplift, 0.0), texture, uplift_texture)
 

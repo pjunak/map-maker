@@ -38,6 +38,8 @@ not competing queues. [TODO](../../TODO.md) retains the complete feature backlog
 - **Map images (experimental, 2026-10-07):** natural-colour atlases and regional
   windows with display-only sub-mesh detail and carved regional valleys
   ([report](../research/2026-10-07-natural-map-rendering.md)). Exports are unchanged.
+  Multi-scale forcing and mesh-independent moisture mixing give world-scale detail
+  ([report](../research/2026-10-07-world-scale-detail.md)).
 - **Local terrain path (unchanged):** World → Terrain, the composed generator/editor,
   builds, profiles and saved-parent experiments. M1 context binding is experimental.
   The local path remains available until M5 decides what replaces it.

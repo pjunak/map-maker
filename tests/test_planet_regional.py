@@ -49,8 +49,10 @@ def test_regional_relief_matches_its_parent_at_parent_scale(parent: PlanetResult
     lon, lat = _land_centre(parent)
     region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
     assert region.boundary.sum() > 50 and np.all(np.hypot(*region.plane_m.T) <= 600e3 + 1)
+    # Multi-scale parent forcing starts the coarse (20k-node) fixture further from
+    # its parent; it still converges (394 -> 163 -> 102 -> 68 m over 6 iterations).
     result = enrich(
-        RegionalParent.from_result(parent), region, process_area_km2=2_000, iterations=3, seed=1
+        RegionalParent.from_result(parent), region, process_area_km2=2_000, iterations=4, seed=1
     )
     first, last = result.history[0], result.history[-1]
     assert last["rms_vs_parent_m"] < first["rms_vs_parent_m"]
@@ -152,8 +154,9 @@ def test_display_valley_carving_only_lowers_land_and_keeps_outlets() -> None:
     outlet = np.zeros((rows, columns), dtype=bool)
     outlet[:, 0] = True
     z[outlet] = 0.0
-    carved = carve_valleys(z, outlet, 500.0, 0.4, 0.5, 3)
-    again = carve_valleys(z, outlet, 500.0, 0.4, 0.5, 3)
+    dx = np.full(rows, 500.0)
+    carved = carve_valleys(z, outlet, 500.0, dx, 0.4, 0.5, 3)
+    again = carve_valleys(z, outlet, 500.0, dx, 0.4, 0.5, 3)
     assert np.array_equal(carved, again)
     assert np.all(np.isfinite(carved))
     assert np.array_equal(carved[outlet], z[outlet])
@@ -161,3 +164,60 @@ def test_display_valley_carving_only_lowers_land_and_keeps_outlets() -> None:
     # but never above the highest original cell; incision lowers most of the land.
     assert carved.max() <= z.max() + 1e-6
     assert np.mean(carved[~outlet] < z[~outlet]) > 0.5
+
+
+def test_grid_carving_matches_the_mesh_kernels_and_wraps_longitude() -> None:
+    from dmtools.terrain.pipeline.planet_detail import carve_valleys
+    from dmtools.terrain.pipeline.planet_kernels import (
+        accumulate,
+        priority_flood,
+        steepest_receivers,
+        stream_power_implicit,
+    )
+
+    rows = columns = 24
+    cell = 500.0
+    rng = np.random.default_rng(1)
+    z = rng.random((rows, columns)) * 300 + np.arange(columns)[None, :] * 30
+    outlet = np.zeros((rows, columns), dtype=bool)
+    outlet[:, 0] = True
+    z[outlet] = 0.0
+    # Reference: the same steps on an explicit 8-neighbour CSR graph.
+    index = np.arange(rows * columns).reshape(rows, columns)
+    edges: list[tuple[int, int, float]] = []
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if dr or dc:
+                r0, r1 = max(0, -dr), rows - max(0, dr)
+                c0, c1 = max(0, -dc), columns - max(0, dc)
+                here = index[r0:r1, c0:c1].ravel()
+                there = index[r0 + dr : r1 + dr, c0 + dc : c1 + dc].ravel()
+                edges += [
+                    (int(a), int(b), cell * float(np.hypot(dr, dc)))
+                    for a, b in zip(here, there, strict=True)
+                ]
+    edges.sort(key=lambda edge: edge[0])
+    ptr = np.searchsorted([e[0] for e in edges], np.arange(rows * columns + 1)).astype(np.int64)
+    nbr = np.array([e[1] for e in edges], dtype=np.int64)
+    length = np.array([e[2] for e in edges])
+    fixed = outlet.ravel()
+    land = np.flatnonzero(~fixed)
+    h = z.ravel().copy()
+    for _ in range(3):
+        filled, parent = priority_flood(h, fixed, ptr, nbr, 1e-3)
+        receiver, distance = steepest_receivers(filled, fixed, ptr, nbr, length, parent)
+        order = land[np.argsort(filled[land], kind="stable")]
+        area = accumulate(order, receiver, fixed, np.full(h.size, cell * cell))
+        h = stream_power_implicit(
+            filled, order, receiver, distance, fixed, area, np.full(h.size, 0.4), 0.5,
+            np.zeros(h.size), 1.0,
+        )
+    carved = carve_valleys(z, outlet, cell, np.full(rows, cell), 0.4, 0.5, 3)
+    np.testing.assert_allclose(carved, h.reshape(rows, columns), atol=1e-9)
+    # With wrapping, shifting the map in longitude shifts the result unchanged.
+    shifted = carve_valleys(
+        np.roll(z, 7, axis=1), np.roll(outlet, 7, axis=1), cell, np.full(rows, cell), 0.4, 0.5,
+        3, wrap=True,
+    )
+    wrapped = carve_valleys(z, outlet, cell, np.full(rows, cell), 0.4, 0.5, 3, wrap=True)
+    np.testing.assert_allclose(shifted, np.roll(wrapped, 7, axis=1), atol=1e-9)

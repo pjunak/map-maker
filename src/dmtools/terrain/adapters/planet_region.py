@@ -219,7 +219,7 @@ def compose_window(
                 owned & ~stop,
                 stop,
                 (pixels, pixels),
-                pixels / 1200,
+                pixels / 800,
             ),
         )
     coverage = np.where(land, coverage, 0.0)
@@ -303,7 +303,13 @@ def display_relief(window: RegionWindow) -> F64:
     )
     rough = rough[nearest[0], nearest[1]]
     carved = carve_valleys(
-        rough, ~land, window.pixel_m, REGION_CARVE_ERODIBILITY, 0.5, REGION_CARVE_STEPS
+        rough,
+        ~land,
+        window.pixel_m,
+        np.full(z.shape[0], window.pixel_m),
+        REGION_CARVE_ERODIBILITY,
+        0.5,
+        REGION_CARVE_STEPS,
     )
     # Flats and plateaus carve into straight grid-aligned grooves, and real ones
     # stay smooth at this scale, so incision follows the tile relief's slope.

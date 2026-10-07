@@ -95,7 +95,7 @@ Use `--spacing-km` for a different detail spacing. A region writes `elevation.ti
 
 **What the images add.** Atlas and relief images draw small ridges, valleys and
 texture below the mesh resolution, so slopes do not shade as smooth ramps. This
-detail is for display only. It is not in `elevation.tif` and does not change
+detail, including small valleys carved into it, is for display only. It is not in `elevation.tif` and does not change
 rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural-map-rendering.md).
 
 ## Outputs
@@ -126,12 +126,16 @@ SVG's size and it lies under your coastline drawing.
 3. **Geology.** Each region becomes an uplift rate and a rock hardness. For
    example, young belts are high and sharp, 300 Ma belts are low and smooth,
    plateaus are uplifted late, and basins are soft and low. Uplift is re-scaled
-   until each region's elevation statistic is close to its target.
+   until each region's elevation statistic is close to its target. Without a
+   recipe, ranges, minor fold belts, hill country and active margins are placed
+   procedurally at scales from about 100 km to several thousand kilometres.
 4. **Climate.**
    - **Temperature** comes from latitude, height and distance from the sea.
    - **Winds** blow in trade, westerly and polar belts.
    - **Rain:** moisture travels with the wind, rains out on rising ground and over
-     the tropics, and leaves rain shadows behind ranges.
+     the tropics, and leaves rain shadows behind ranges. Weather systems also mix
+     moisture sideways (strongest in the mid-latitude storm tracks), so desert
+     edges grade over hundreds of kilometres.
    - **Runoff** is rain minus evaporation. It makes wet regions erode more in the
      next pass.
    - **Biomes** come from temperature and dryness.

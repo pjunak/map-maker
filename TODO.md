@@ -95,6 +95,9 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] First real authored world end to end (9 continents; ice-sheet fix).
   - [x] Natural-colour atlas and regional display detail with carved valleys
     ([evidence](docs/research/2026-10-07-natural-map-rendering.md)).
+  - [x] World-scale relief and climate detail: multi-scale forcing, physical moisture
+    mixing, carved display valleys ([evidence](docs/research/2026-10-07-world-scale-detail.md)).
+  - [ ] Cheaper moisture diffusion (coarse-grid or implicit); it nearly doubles 800k climate time.
   - [ ] Bathymetry product as the ocean floor.
 - [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
   mesh, consuming its relief; provisional biome labels.

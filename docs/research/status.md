@@ -3,7 +3,9 @@
 **2026-10-07 update:** planet and regional images now use
 [natural colour and display-only sub-mesh detail](2026-10-07-natural-map-rendering.md)
 (continuous vegetation, varying shelves, carved regional valleys, ridge-following snow).
-Authoritative relief and exports are unchanged.
+Authoritative relief and exports are unchanged. A follow-up adds
+[world-scale detail](2026-10-07-world-scale-detail.md): multi-scale procedural forcing and a
+mesh-independent moisture eddy diffusivity.
 
 **2026-10-06 update:** the plan is world-first. An experimental
 [whole-planet erosion harness](2026-10-06-whole-planet-erosion-relief.md) evolves

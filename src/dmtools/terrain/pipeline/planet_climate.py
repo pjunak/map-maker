@@ -35,6 +35,7 @@ from scipy.spatial import KDTree
 
 from dmtools.terrain.domain.planet import PlanetClimateSettings
 from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
+from dmtools.terrain.pipeline.planet_kernels import neighbour_mix
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, vertex_triangles
 
 type F64 = NDArray[np.float64]
@@ -56,7 +57,10 @@ ASCENT_PER_1000_KM = (
     (0, 8, 15, 22, 30, 42, 55, 65, 80, 90),
     (1.8, 1.5, 0.35, 0.04, 0.15, 1.0, 1.3, 0.9, 0.4, 0.25),
 )
-EDDY_MIXING = ((0, 20, 35, 50, 65, 90), (0.08, 0.08, 0.35, 0.45, 0.3, 0.15))
+# Horizontal eddy diffusivity of moisture (m^2/s). Synoptic eddies mix moisture
+# at 1e5-1e6 m^2/s, most strongly in the mid-latitude storm tracks. A physical
+# diffusivity keeps climate boundaries independent of mesh density.
+EDDY_DIFFUSIVITY = ((0, 20, 35, 50, 65, 90), (1.5e5, 1.5e5, 5e5, 7e5, 4.5e5, 2e5))
 STORM_SUPPLY = ((0, 12, 18, 30, 36, 48, 62, 90), (0.01, 0.003, 0.0, 0.0, 0.02, 0.04, 0.025, 0.008))
 STORM_INLAND_DECAY_M = 1.2e6
 # Moisture travel per season: enough for steady state (16,000 km is within 6 % of
@@ -220,9 +224,11 @@ def simulate_climate(
     cap = capacity(temp)
     ground = np.where(land, np.maximum(elevation, 0), 0.0)
     grad_e, grad_n = surface_gradient(mesh, ground, east, north)
-    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
-    degree = np.diff(mesh.ptr).astype(np.float64)
-    mixing = _table(abs_lat, EDDY_MIXING)
+    # Per-step relaxation towards the neighbour mean is a diffusion with
+    # D = w * spacing^2 / (4 dt); split it into stable substeps of w <= 0.5.
+    mixing = 4 * _table(abs_lat, EDDY_DIFFUSIVITY) * dt / step_m**2
+    substeps = max(1, int(np.ceil(float(mixing.max()) / 0.5)))
+    mixing = mixing / substeps
     background = 0.6 * capacity(sea_temperature(lat, s))
     inland = np.exp(-coast_m / STORM_INLAND_DECAY_M)
     supply = np.where(land, _table(abs_lat, STORM_SUPPLY) * inland, 0.0)
@@ -248,7 +254,7 @@ def simulate_climate(
             if step % 64 == 0:
                 check_cancelled(cancellation)
             q = advect @ q
-            q = (1 - mixing) * q + mixing * np.bincount(src, q[mesh.nbr], mesh.size) / degree
+            q = neighbour_mix(q, mesh.ptr, mesh.nbr, mixing, substeps)
             q = q + evaporation * np.maximum(cap - q, 0.0)
             q = q + supply * np.maximum(background - q, 0.0)
             excess = np.maximum(q - cap, 0.0)

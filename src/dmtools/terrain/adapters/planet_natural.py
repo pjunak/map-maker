@@ -19,6 +19,7 @@ biome fills:
 """
 
 from dataclasses import dataclass
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,7 +35,7 @@ from dmtools.terrain.adapters.planet_render import (
     river_threshold_m3_s,
 )
 from dmtools.terrain.pipeline.planet import PlanetResult
-from dmtools.terrain.pipeline.planet_detail import eroded_fbm
+from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -45,6 +46,8 @@ DETAIL_WAVELENGTH_M = 110e3
 DETAIL_OCTAVES = 8
 SEA_TEXTURE_M = 180.0
 EXAGGERATION = 13.0
+CARVE_ERODIBILITY = 0.3  # K * dt for display valley carving (m^0)
+CARVE_STEPS = 4
 
 DESERT_HOT: RGB = (208, 186, 146)
 DESERT_COLD: RGB = (176, 166, 140)
@@ -126,7 +129,10 @@ def display_fields(
     amplitude = (
         (45 + 0.38 * base_land) * _smooth(coast, 0, 25e3) / (1 + np.sqrt(np.expm1(discharge)) / 12)
     )
-    land = np.maximum(base_land + amplitude * detail, 1.0)
+    rough = np.where(land_px, base_land + amplitude * detail, 0.0)
+    land = np.maximum(
+        base_land + amplitude * detail - valley_depth(rough, raster, land_px, amplitude), 1.0
+    )
     hills = eroded_fbm(
         points, np.zeros(len(points)), DETAIL_SEED + 4, 5, radius / 60e3, 0.55, 0.0
     ).reshape(shape)
@@ -139,6 +145,26 @@ def display_fields(
     gx = (np.roll(z, -1, 1) - np.roll(z, 1, 1)) / (2 * dx)
     slope, light = shading(gx, gy, EXAGGERATION)
     return DisplayFields(z, base_land, slope, light)
+
+
+def valley_depth(rough: F64, raster: FrameRaster, land_px: B, amplitude: F64) -> F64:
+    """Display-only valley incision below the mesh scale (see ``carve_valleys``).
+
+    Stream power routed over the textured surface turns its hollows into
+    branching valleys, so relief reads at Earth-like scale instead of as broad
+    smooth ramps between mesh-scale rivers. Incision is capped at the local
+    detail amplitude and faded on flats, which would carve grid-aligned grooves.
+    """
+    rows, columns = raster.shape
+    radius = raster.frame.radius_km * 1000
+    dy = np.pi * radius / rows
+    dx = 2 * np.pi * radius / columns * np.maximum(np.cos(raster.latitude), 0.05)
+    carved = carve_valleys(rough, ~land_px, dy, dx, CARVE_ERODIBILITY, 0.5, CARVE_STEPS, wrap=True)
+    gy = np.gradient(rough, axis=0) / dy
+    gx = np.gradient(rough, axis=1) / dx[:, None]
+    steep = np.clip((gaussian_filter(np.hypot(gx, gy), 2.0) - 0.002) / 0.01, 0, 1)
+    depth = np.clip(rough - carved, 0, amplitude) * steep
+    return gaussian_filter(depth, (1.0, 1.0), mode=cast(Any, ("nearest", "wrap")))
 
 
 def shading(gx: F64, gy: F64, exaggeration: float) -> tuple[F64, F64]:
@@ -254,7 +280,7 @@ def natural_colour(
         fields.elevation_m,
         fields.slope,
         fields.light,
-        gaussian_filter(rivers, 1.0),
+        0.6 * rivers,
     )
 
 
@@ -273,7 +299,7 @@ def relief_colour(fields: DisplayFields) -> F64:
 
 
 def paint_water(rgb: F64, result: PlanetResult, lakes_px: NDArray[np.int64]) -> F64:
-    """Lakes in water colour; only closed lakes in hot, dry basins read as salt pans."""
+    """Lakes in water colour; only closed lakes in hot, arid basins read as dry salt pans."""
     out = rgb.copy()
     lakes = result.lakes
     if not len(lakes.level_m):
@@ -283,12 +309,17 @@ def paint_water(rgb: F64, result: PlanetResult, lakes_px: NDArray[np.int64]) -> 
     if climate is not None:
         for lake in np.flatnonzero(salt):
             nodes = lakes.lake == lake
-            salt[lake] = bool(np.mean(climate.temperature_c[nodes]) > 12.0)
+            aridity = np.mean(
+                climate.precipitation_mm[nodes] / np.maximum(climate.pet_mm[nodes], 1)
+            )
+            salt[lake] = bool(np.mean(climate.temperature_c[nodes]) > 12.0 and aridity < 0.35)
     on_lake = lakes_px >= 0
     pan = salt[np.maximum(lakes_px, 0)] & on_lake
-    out[on_lake & ~pan] = LAKE
-    out[pan] = SALT_FLAT
-    return out
+    # Soft shores; a playa grades from a bright centre into the surrounding ground.
+    water = gaussian_filter((on_lake & ~pan).astype(np.float64), 0.7)[..., None]
+    playa = np.clip(gaussian_filter(pan.astype(np.float64), 2.0) * 1.4 - 0.2, 0, 0.85)[..., None]
+    out = out * (1 - water) + np.asarray(LAKE, dtype=np.float64) * water
+    return out * (1 - playa) + np.asarray(SALT_FLAT, dtype=np.float64) * playa
 
 
 def river_layer(
@@ -358,7 +389,7 @@ def river_coverage(
         flow_along = np.interp(
             np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), discharge[chain]
         )
-        width = (0.55 + 2.6 * (flow_along / peak) ** 0.4) * width_scale * supersample
+        width = (0.4 + 1.6 * (flow_along / peak) ** 0.5) * width_scale * supersample
         for k in range(len(path) - 1):
             draw.line(
                 (tuple(path[k] * supersample), tuple(path[k + 1] * supersample)),
