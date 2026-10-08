@@ -2,7 +2,7 @@
 
 import tkinter as tk
 from collections.abc import Callable
-from math import cos, radians, sin
+from math import asin, cos, radians, sin
 from pathlib import Path
 from tkinter import filedialog, ttk
 from uuid import uuid4
@@ -13,7 +13,9 @@ from scipy.spatial import KDTree  # pyright: ignore[reportMissingTypeStubs]
 from dmtools.terrain.application.planet import PlanetRun
 from dmtools.terrain.domain.planet import PlanetSettings
 from dmtools.terrain.pipeline.planet import PlanetResult
-from dmtools.terrain.pipeline.planet_climate import BIOMES
+from dmtools.terrain.pipeline.planet_koppen import KOPPEN, KOPPEN_NAMES
+from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
+from dmtools.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETTINGS
 
 DETAIL_PRESETS = {
     "Quick · 50,000 nodes (~100 km)": 50_000,
@@ -31,14 +33,18 @@ class PlanetProbe:
     def __init__(self, result: PlanetResult) -> None:
         self.result = result
         self.tree = KDTree(result.mesh.xyz)
+        volcanoes = result.volcanoes
+        self.volcano_tree = KDTree(volcanoes.xyz) if len(volcanoes) else None
 
     def describe(self, longitude_deg: float, latitude_deg: float) -> str:
         lon, lat = radians(longitude_deg), radians(latitude_deg)
         point = (cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat))
         node = int(self.tree.query(point)[1])  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
         result = self.result
+        volcano = self._volcano(point)
         if not result.land[node]:
-            return f"Sea · floor {result.elevation_m[node]:,.0f} m (display bathymetry)"
+            sea = f"Sea · floor {result.elevation_m[node]:,.0f} m (display bathymetry)"
+            return sea if volcano is None else f"{sea} · {volcano}"
         lakes = result.lakes
         parts = [f"Ground {result.elevation_m[node]:,.0f} m"]
         lake = int(lakes.lake[node])
@@ -50,12 +56,31 @@ class PlanetProbe:
             parts.append(f"river {flow:,.0f} m³/s")
         climate = result.climate
         if climate is not None:
+            code = KOPPEN[int(climate.koppen[node])]
             parts.append(
                 f"{climate.temperature_c[node]:.0f} °C · "
                 f"{climate.precipitation_mm[node]:,.0f} mm/yr · "
-                f"{BIOMES[int(climate.biome[node])]}"
+                f"{code} {KOPPEN_NAMES.get(code, '')}"
             )
+        if volcano is not None:
+            parts.append(volcano)
         return " · ".join(parts)
+
+    def _volcano(self, point: tuple[float, float, float]) -> str | None:
+        """The volcano whose edifice is under the cursor, if any."""
+        if self.volcano_tree is None:
+            return None
+        v = self.result.volcanoes
+        chord, found = self.volcano_tree.query(point)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        index = int(found)  # pyright: ignore[reportUnknownArgumentType]
+        distance = 2 * asin(min(float(chord) / 2, 1.0)) * self.result.mesh.radius_m  # pyright: ignore[reportUnknownArgumentType]
+        if distance > max(float(v.radius_m[index]), 1.5 * self.result.mesh.spacing_m):
+            return None
+        state = "active" if v.active[index] else f"extinct ~{v.age_myr[index]:.1f} Myr"
+        return (
+            f"{state} {VOLCANO_KINDS[int(v.kind[index])]} "
+            f"({VOLCANO_SETTINGS[int(v.setting[index])]}, {v.height_m[index]:,.0f} m edifice)"
+        )
 
 
 def mean_land(result: PlanetResult, values: np.ndarray[tuple[int], np.dtype[np.float64]]) -> float:

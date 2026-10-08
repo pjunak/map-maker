@@ -116,6 +116,16 @@ def test_planet_probe_describes_sea_land_climate_and_lakes(app: ui.TerrainApp) -
     assert probe.describe(float(lon[sea]), float(lat[sea])).startswith("Sea")
     text = probe.describe(float(lon[land]), float(lat[land]))
     assert text.startswith("Ground") and "mm/yr" in text and "°C" in text
+    from dmtools.terrain.pipeline.planet_koppen import KOPPEN
+
+    assert any(f" {code} " in text for code in KOPPEN[1:])
+    volcanoes = result.volcanoes
+    if len(volcanoes):
+        x, y, z = (float(c) for c in volcanoes.xyz[0])
+        on_volcano = probe.describe(
+            float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arcsin(z)))
+        )
+        assert "volcano" in on_volcano or "caldera" in on_volcano or "seamount" in on_volcano
 
 
 def test_zoom_detail_opens_a_region_viewer_and_reuses_cached_tiles(

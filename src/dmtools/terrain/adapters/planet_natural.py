@@ -37,7 +37,7 @@ from dmtools.terrain.adapters.planet_render import (
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, neighbour_mix
-from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, edifice_height
+from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, SEAMOUNT, edifice_height
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -557,8 +557,32 @@ def preview_images(
     images["Planet relief"] = compose(
         relief_colour(fields), sea, land_px, rivers, result, rasters.lakes_px
     )
+    if "Planet atlas" in images and len(result.volcanoes):
+        images["Planet volcanoes"] = volcano_markers(images["Planet atlas"], result, rasters.raster)
     images |= climate_images(result, rasters)
     return images
+
+
+def volcano_markers(atlas: Image.Image, result: PlanetResult, raster: FrameRaster) -> Image.Image:
+    """The atlas with land volcanoes marked: red for active, dark for extinct."""
+    marked = atlas.copy()
+    draw = ImageDraw.Draw(marked)
+    rows, columns = raster.shape
+    frame = raster.frame
+    v = result.volcanoes
+    size = max(3, round(columns / 960))
+    for k in np.flatnonzero(v.kind != SEAMOUNT):
+        x, y, z = (float(c) for c in v.xyz[k])
+        lon = np.degrees(np.arctan2(y, x))
+        lat = np.degrees(np.arcsin(np.clip(z, -1, 1)))
+        px = ((lon - frame.central_meridian_deg + 180) % 360) / 360 * columns
+        py = (90 - lat) / 180 * rows
+        colour = (235, 50, 20) if v.active[k] else (45, 35, 35)
+        draw.polygon(
+            [(px, py - size), (px - size, py + size), (px + size, py + size)],
+            outline=colour, width=max(1, size // 3),
+        )
+    return marked
 
 
 def render_previews(result: PlanetResult, width: int, river_km2: float) -> dict[str, Image.Image]:

@@ -141,6 +141,7 @@ PREVIEW_LAYERS = (
     "Planet atlas",
     "Planet relief",
     "Planet climate zones",
+    "Planet volcanoes",
     "Planet rainfall",
     "Planet temperature",
 )

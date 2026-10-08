@@ -50,6 +50,7 @@ PREVIEW_FILES = {
     "Planet rainfall": "precipitation.png",
     "Planet temperature": "temperature.png",
     "Planet climate zones": "koppen.png",
+    "Planet volcanoes": "volcanoes.png",
 }
 PLANET_BUILD_VERSION = 1
 MAX_RIVER_FEATURES = 200_000

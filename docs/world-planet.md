@@ -33,9 +33,10 @@ Open or import a world in the **World** tab, then choose **Planet…** (or the
    recipe saved from the Geology editor is picked up automatically.
 3. **Click Generate planet.** Progress shows below the map, and **Cancel planet
    job** stops at the next checkpoint without installing a result.
-4. **Pick a layer** above the map: **Planet atlas**, **Planet relief**, **Planet climate zones**, **Planet
+4. **Pick a layer** above the map: **Planet atlas**, **Planet relief**, **Planet climate zones**, **Planet volcanoes**, **Planet
    rainfall** or **Planet temperature**. Hovering shows the ground height,
-   lake, river discharge, temperature, rainfall and biome under the cursor.
+   lake, river discharge, temperature, rainfall and Köppen climate zone under
+   the cursor, and the volcano when you hover over one.
 5. **Click Export planet…** to write the same build folder as the command line.
 
 Editing the world (names, frame, assignments) discards the generated planet, so
@@ -107,6 +108,7 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `relief.png` | Hypsometric shaded relief with rivers. |
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
 | `koppen.png` | Köppen–Geiger climate zones in their standard colours. |
+| `volcanoes.png` | The atlas with land volcanoes marked: red for active, dark for extinct. |
 | `elevation.tif` | Float32 elevation in metres (land, and an ocean floor with mid-ocean ridges, sea-floor ageing and trenches), on a geographic CRS for your world's sphere radius. |
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |

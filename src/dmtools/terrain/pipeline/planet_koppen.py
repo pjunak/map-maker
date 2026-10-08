@@ -45,6 +45,20 @@ KOPPEN_COLOURS: tuple[tuple[int, int, int], ...] = (
     (178, 178, 178), (102, 102, 102),
 )
 _INDEX = {code: k for k, code in enumerate(KOPPEN)}
+KOPPEN_NAMES = {
+    "Af": "tropical rainforest", "Am": "tropical monsoon", "Aw": "tropical savanna",
+    "As": "tropical dry-summer savanna", "BWh": "hot desert", "BWk": "cold desert",
+    "BSh": "hot steppe", "BSk": "cold steppe", "Csa": "hot-summer Mediterranean",
+    "Csb": "warm-summer Mediterranean", "Csc": "cool-summer Mediterranean",
+    "Cwa": "monsoon-influenced humid subtropical", "Cwb": "subtropical highland",
+    "Cwc": "cold subtropical highland", "Cfa": "humid subtropical", "Cfb": "oceanic",
+    "Cfc": "subpolar oceanic", "Dsa": "hot-summer dry continental",
+    "Dsb": "warm-summer dry continental", "Dsc": "dry subarctic", "Dsd": "dry extreme subarctic",
+    "Dwa": "monsoon hot-summer continental", "Dwb": "monsoon warm-summer continental",
+    "Dwc": "monsoon subarctic", "Dwd": "monsoon extreme subarctic",
+    "Dfa": "hot-summer humid continental", "Dfb": "warm-summer humid continental",
+    "Dfc": "subarctic", "Dfd": "extreme subarctic", "ET": "tundra", "EF": "ice cap",
+}
 
 
 def monthly(mean: F64, warmest: F64, coldest: F64, p_warm: F64, p_cold: F64) -> tuple[F64, F64]:

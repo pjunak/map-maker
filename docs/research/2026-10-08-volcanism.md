@@ -80,6 +80,13 @@ and drawn as young constructional landforms.
 - **Provenance.** The relief algorithm identifier is now
   `sphere-mesh-stream-power-v10`.
 
+## In the app
+
+- **Layer.** A "Planet volcanoes" layer shows the atlas with land volcanoes
+  marked (red for active, dark for extinct). It is written as `volcanoes.png`.
+- **Hover.** The inspector names the volcano under the cursor, with its kind,
+  setting, activity and edifice height.
+
 ## Limits and next steps
 
 - **No volcanic islands.** Island arcs and ocean islands would need new land.
