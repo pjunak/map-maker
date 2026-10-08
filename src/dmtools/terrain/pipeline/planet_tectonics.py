@@ -32,6 +32,7 @@ type I64 = NDArray[np.int64]
 type B = NDArray[np.bool_]
 
 PLATE_COUNT = 18
+PLUME_COUNT = 8
 # Euler-pole angular speeds (degrees per million years): Earth's plates move at
 # 0.2-1.3 deg/Myr, i.e. 1-10 cm/yr at the equator of their pole.
 MIN_ROTATION_DEG_MYR = 0.25
@@ -48,6 +49,9 @@ class Tectonics:
     across_m: F64  # signed distance across that boundary, positive on its foreland side
     convergence: F64  # closing rate at that boundary (m/yr), negative where it opens
     leading: F64  # 0..1 leading-edge strength of the nearest coast (active margin)
+    plumes: F64  # (k, 3) fixed mantle-plume (hotspot) positions
+    plume_heading: F64  # (k, 3) unit tangent of plate motion over each plume (0 if still)
+    plume_speed_m_yr: F64  # plate speed over each plume
 
 
 def plate_tectonics(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Tectonics:
@@ -104,7 +108,22 @@ def plate_tectonics(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Tecto
     across = np.where(plate == foreland, distance, -distance)
 
     leading = _leading_edges(mesh, land, coast_m, velocity, east, north)
-    return Tectonics(plate, v_east, v_north, distance, across, convergence, leading)
+    plumes = rng.normal(size=(PLUME_COUNT, 3))
+    plumes /= np.linalg.norm(plumes, axis=1)[:, None]
+    over = np.argmax(plumes @ mesh.xyz.T, axis=1)
+    motion = velocity[over] - np.einsum("ij,ij->i", velocity[over], plumes)[:, None] * plumes
+    speed = np.linalg.norm(motion, axis=1)
+    heading = motion / np.maximum(speed, 1e-12)[:, None]
+    return Tectonics(
+        plate, v_east, v_north, distance, across, convergence, leading, plumes, heading, speed
+    )
+
+
+def plume_track(plates: Tectonics, index: int, distance_m: F64, radius_m: float) -> F64:
+    """Points ``distance_m`` along a hotspot track: older crust rides with the plate."""
+    angle = np.asarray(distance_m, dtype=np.float64) / radius_m
+    plume, heading = plates.plumes[index], plates.plume_heading[index]
+    return np.cos(angle)[:, None] * plume + np.sin(angle)[:, None] * heading
 
 
 def _leading_edges(

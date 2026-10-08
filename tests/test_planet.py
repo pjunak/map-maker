@@ -461,3 +461,21 @@ def test_volcanoes_follow_tectonic_settings_and_stay_below_sea_level_offshore() 
     centre, rim, outside = edifice_height(points, RADIUS, one)
     assert centre < rim and outside == 0.0
     assert GUYOT_DEPTH_M < 0
+
+
+def test_flood_basalts_cover_land_at_the_old_end_of_a_hotspot_track() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import TRAP_RADIUS_M, flood_basalts
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
+
+    mesh = build_mesh(20_000, RADIUS, 10)
+    land = np.ones(mesh.size, dtype=bool)
+    land[np.argmin(mesh.xyz[:, 2])] = False  # one ocean node so coasts exist
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+
+    coast = coast_distance(mesh, land)
+    plates = plate_tectonics(mesh, land, coast, 3)
+    cover = flood_basalts(mesh, land, coast, plates)
+    assert np.all((cover >= 0) & (cover <= 1))
+    # Each province is at most a few times the nominal radius across.
+    assert mesh.area_m2[cover > 0.5].sum() < len(plates.plumes) * np.pi * (1.5 * TRAP_RADIUS_M) ** 2

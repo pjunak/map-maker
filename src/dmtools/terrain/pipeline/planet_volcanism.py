@@ -29,7 +29,7 @@ from scipy.spatial import KDTree
 
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
-from dmtools.terrain.pipeline.planet_tectonics import Tectonics
+from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plume_track
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]
@@ -43,7 +43,6 @@ ARC, HOTSPOT, RIFT, INTRAPLATE = range(4)
 ARC_SPACING_M = 70e3
 ARC_FRONT_M = 130e3  # typical distance of the volcanic front inland of the coast
 RIFT_SPACING_M = 120e3
-HOTSPOT_COUNT = 8
 HOTSPOT_TRACK_SPACING_M = 140e3
 HOTSPOT_TRACK_MAX_MYR = 70.0
 SEAMOUNT_AREA_M2 = 3e11  # ocean floor per random intraplate seamount
@@ -147,29 +146,22 @@ def place_volcanoes(
 
 def _hotspots(mesh: SphereMesh, land: B, plates: Tectonics, rng: np.random.Generator) -> Volcanoes:
     radius = mesh.radius_m
-    plumes = rng.normal(size=(HOTSPOT_COUNT, 3))
-    plumes /= np.linalg.norm(plumes, axis=1)[:, None]
     tree = KDTree(mesh.xyz)
     xyz: list[F64] = []
     heights: list[float] = []
     kinds: list[int] = []
     actives: list[bool] = []
     ages: list[float] = []
-    for plume in plumes:
-        node = int(tree.query(plume)[1])
-        velocity = np.array([plates.velocity_east[node], plates.velocity_north[node]])
-        speed = float(np.hypot(*velocity))  # m/yr
+    for index in range(len(plates.plumes)):
+        speed = float(plates.plume_speed_m_yr[index])
         if speed < 1e-4:
             continue
-        east = np.cross([0.0, 0.0, 1.0], plume)
-        east /= max(float(np.linalg.norm(east)), 1e-12)
-        north = np.cross(plume, east)
-        heading = (velocity[0] * east + velocity[1] * north) / speed
-        steps = int(min(HOTSPOT_TRACK_MAX_MYR * 1e6 * speed, 4000e3) // HOTSPOT_TRACK_SPACING_M)
-        for k in range(steps + 1):
-            # Older volcanoes ride with the plate, away from the plume.
-            angle = k * HOTSPOT_TRACK_SPACING_M / radius
-            point = np.cos(angle) * plume + np.sin(angle) * heading
+        length = min(HOTSPOT_TRACK_MAX_MYR * 1e6 * speed, 4000e3)
+        steps = int(length // HOTSPOT_TRACK_SPACING_M)
+        track = plume_track(
+            plates, index, np.arange(steps + 1, dtype=np.float64) * HOTSPOT_TRACK_SPACING_M, radius
+        )
+        for k, point in enumerate(track):
             age = k * HOTSPOT_TRACK_SPACING_M / speed / 1e6
             on_land = bool(land[int(tree.query(point)[1])])
             fresh = np.exp(-age / (8.0 if on_land else 40.0))

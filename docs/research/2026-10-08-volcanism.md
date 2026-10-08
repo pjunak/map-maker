@@ -61,11 +61,28 @@ and drawn as young constructional landforms.
 - **Arc count.** Arcs are about 2× Earth's continental-arc density. Aethelara's
   indented coasts give more leading-edge coastline.
 
+## Flood basalts
+
+- **Plumes.** Mantle plumes now live in the plate model (`Tectonics.plumes`,
+  with plate heading and speed over each plume), so hotspot tracks and flood
+  basalts share them.
+- **Placement.** A plume's first arrival erupts a large igneous province at the
+  far, old end of its track, about 65 Myr of plate motion away (Deccan, Siberian
+  Traps, Paraná). Where that point is on land at least 200 km inland, the
+  forcing adds a lobed plateau of about 450 km radius.
+  - **Rock.** Erodibility is 0.35×, for resistant stacked lava flows.
+  - **Uplift.** 0.15 mm/yr for lava thickness and plume-head uplift.
+- **Aethelara.** One province of about 370,000 km² lands on the southern polar
+  continent. It overlaps an active collision belt, so it reads only as a
+  gently raised tableland.
+- **Not yet drawn.** Stepped "trap" escarpments and dark basalt soils are not
+  rendered yet.
+- **Provenance.** The relief algorithm identifier is now
+  `sphere-mesh-stream-power-v10`.
+
 ## Limits and next steps
 
 - **No volcanic islands.** Island arcs and ocean islands would need new land.
-- **Lava plateaus.** No flood-basalt plateaus (Deccan, Columbia River) yet; they
-  belong in the forcing as low-erodibility plateaus over old plume heads.
 - **Fixed shapes.** Volcano shape does not age beyond height loss along hotspot
   tracks; old volcanoes keep cone profiles.
 - **No eruptions.** Activity is a static label: no eruption history, tephra or

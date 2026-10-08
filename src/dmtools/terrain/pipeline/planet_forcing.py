@@ -33,7 +33,7 @@ from dmtools.terrain.pipeline.planet_kernels import (
 )
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
-from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plate_tectonics
+from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plate_tectonics, plume_track
 from dmtools.terrain.pipeline.world import WorldMap
 from dmtools.terrain.pipeline.world_geology import resolve_geology
 
@@ -90,6 +90,10 @@ MAX_DELTA_SHELF_M = 350e3
 # Rivers delivering less than this (m^3/yr) build no visible delta shelf.
 MIN_DELTA_FLUX_M3_YR = 1e7
 OLD_OROGEN_SHARE = 0.45
+TRAP_UPLIFT = 1.5e-4
+TRAP_ERODIBILITY = 0.35
+TRAP_RADIUS_M = 450e3
+TRAP_AGE_MYR = 65.0
 HALF_SPREADING_M_PER_MYR = 40e3
 PLATE_CORE_KM2 = 2e6
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
@@ -195,6 +199,30 @@ def orogen_profile(across_m: F64, half_width_m: F64, p: F64, seed: int) -> F64:
         profile = ridge_profile(np.abs(across_m - centre), half * half_width_m)
         uplift = np.maximum(uplift, weight * strength * gate * profile)
     return uplift
+
+
+def flood_basalts(mesh: SphereMesh, land: B, coast_m: F64, plates: Tectonics) -> F64:
+    """0..1 cover of flood-basalt plateaus where old plume heads reached land.
+
+    A plume's first arrival erupts a large igneous province (Deccan 0.5 M km^2,
+    Siberian Traps, Parana, Columbia River) at the far, old end of its hotspot
+    track. Stacked resistant lava flows erode into high, flat-topped plateaus
+    with stepped escarpments.
+    """
+    cover = np.zeros(mesh.size)
+    for index in range(len(plates.plumes)):
+        speed = float(plates.plume_speed_m_yr[index])
+        if speed < 1e-4:
+            continue
+        distance = min(TRAP_AGE_MYR * 1e6 * speed, 4000e3)
+        head = plume_track(plates, index, np.array([distance]), mesh.radius_m)[0]
+        node = int(np.argmax(mesh.xyz @ head))
+        if not land[node] or coast_m[node] < 200e3:
+            continue
+        reach = np.arccos(np.clip(mesh.xyz @ head, -1, 1)) * mesh.radius_m
+        lobes = TRAP_RADIUS_M * (1 + 0.35 * fbm3(mesh.xyz, 7000 + index, 3, 6.0))
+        cover = np.maximum(cover, 1 - _smoothstep(reach, 0.6 * lobes, lobes))
+    return np.where(land, cover, 0.0)
 
 
 def strike_lithology(across_m: F64, half_width_m: F64, orogen: F64, phase: F64) -> F64:
@@ -307,6 +335,7 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     uplift_texture = np.exp(UPLIFT_TEXTURE * fbm3(p, seed + 505, 6, 3.0, 0.6))
     # The marginal swell sits a varying distance inland, not on a ring.
     inland = coast_m * np.exp(0.4 * fbm3(p, seed + 606, 3, 4.0))
+    traps = flood_basalts(mesh, land, coast_m, plates)
     craton = CRATON_UPLIFT * cratonic_profile(inland) * uplift_texture
     uplift = (
         craton
@@ -317,6 +346,7 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         + HILL_UPLIFT * hills
         + MARGIN_UPLIFT * margins
         + MINOR_UPLIFT * rift_shoulders
+        + TRAP_UPLIFT * traps
     )
     active = np.clip(np.maximum(np.maximum(belts, minor), margins), 0.0, 1.0)
     # Lithology varies down to ~30 km; without it rivers run straight and parallel
@@ -325,6 +355,7 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     orogen_zone = ridge_profile(np.abs(across), 3.0 * major_half) * segments * inland_fade
     texture = (
         lithology
+        * (1 - (1 - TRAP_ERODIBILITY) * traps)
         * strike_lithology(across, major_half, orogen_zone, 3.0 * fbm3(p, seed + 272, 3, 8.0))
         * strike_lithology(
             old_across,
