@@ -84,6 +84,11 @@ INTERMONTANE_DEPTH_M = 800.0
 ALLUVIAL_RELIEF = 0.04
 TRENCH_DEPTH_M = 3500.0
 RIFT_DEPTH_M = 900.0
+# Delta shelf radius R = DELTA_SHELF_COEFF * sqrt(Qs [m^3/yr]) in m, capped.
+DELTA_SHELF_COEFF = 15.0
+MAX_DELTA_SHELF_M = 350e3
+# Rivers delivering less than this (m^3/yr) build no visible delta shelf.
+MIN_DELTA_FLUX_M3_YR = 1e7
 OLD_OROGEN_SHARE = 0.45
 HALF_SPREADING_M_PER_MYR = 40e3
 PLATE_CORE_KM2 = 2e6
@@ -527,7 +532,13 @@ def measure_regions(h: F64, regions: GeologyRegions) -> tuple[float | None, ...]
     return tuple(values)
 
 
-def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
+def ocean_floor(
+    mesh: SphereMesh,
+    coast_m: F64,
+    water: B,
+    seed: int,
+    sediment: tuple[I64, F64] | None = None,
+) -> F64:
     """Display bathymetry (m, negative) from continental margins and plate age.
 
     Near land: a shelf whose width varies along the coast (about 10-260 km), a
@@ -537,9 +548,15 @@ def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
     them at a half spreading rate, and depth grows from ~2.6 km at the ridge to
     ~5.6 km on old floor. Trenches follow the active margins whose coastal
     ranges the forcing raises.
+
+    ``sediment`` (mouth nodes, sediment flux in m^3/yr) widens the shelf around
+    big river mouths: the volume builds a prograding wedge (Amazon, Yellow Sea,
+    Bay of Bengal) instead of vanishing.
     """
     p = mesh.xyz
     width = 10e3 + 250e3 * _smoothstep(fbm3(p, seed + 707, 4, 14.0), -0.3, 0.4) ** 1.5
+    if sediment is not None and len(sediment[0]):
+        width = np.maximum(width, delta_shelf_width(mesh, *sediment))
     margin = 20 + 120 * _smoothstep(coast_m, 0, width) + 3200 * _smoothstep(
         coast_m, width, width + 90e3
     )
@@ -558,6 +575,24 @@ def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
     active = _smoothstep(gate * (0.35 + 0.65 * strike), 0.45, 0.85)
     depth += TRENCH_DEPTH_M * active * np.exp(-(((coast_m - width - 110e3) / 45e3) ** 2))
     return np.where(water, -depth, 0.0)
+
+
+def delta_shelf_width(mesh: SphereMesh, mouths: I64, flux_m3_yr: F64) -> F64:
+    """Shelf width (m) built by the sediment of the nearest big river mouth.
+
+    Most sediment ever delivered leaves the shelf for deep-sea fans or is carried
+    along the coast, so the shelf a river builds follows its present flux. With
+    R = DELTA_SHELF_COEFF * sqrt(Qs), the Amazon (~4e8 m^3/yr) reaches ~300 km and
+    the Rhone (~2e6 m^3/yr) ~20 km. It tapers around the mouth.
+    """
+    radius = np.minimum(
+        DELTA_SHELF_COEFF * np.sqrt(np.maximum(flux_m3_yr, 0.0)), MAX_DELTA_SHELF_M
+    )
+    distance, owner = multi_source_nearest(
+        mouths, np.arange(len(mouths), dtype=np.int64), mesh.ptr, mesh.nbr, mesh.length_m
+    )
+    reach = radius[np.maximum(owner, 0)]
+    return np.where(owner >= 0, reach * (1 - _smoothstep(distance, 0.4 * reach, 1.4 * reach)), 0.0)
 
 
 def sea_floor_age_myr(mesh: SphereMesh, land: B) -> F64:

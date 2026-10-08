@@ -398,3 +398,16 @@ def test_plates_classify_boundaries_and_leading_edges_deterministically() -> Non
     # The signed across-strike distance flips sign across each boundary.
     assert np.allclose(np.abs(first.across_m), first.boundary_m)
     assert np.all((first.leading >= 0) & (first.leading <= 1))
+
+
+def test_big_river_mouths_build_wider_shelves() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import delta_shelf_width
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    mesh = build_mesh(20_000, RADIUS, 8)
+    mouths = np.array([0, 5_000], dtype=np.int64)
+    width = delta_shelf_width(mesh, mouths, np.array([4e8, 2e6]))
+    big, small = width[mouths]
+    assert 250e3 < big <= 350e3 and 10e3 < small < 40e3
+    distance = np.arccos(np.clip(mesh.xyz @ mesh.xyz[mouths].T, -1, 1)) * RADIUS
+    assert np.all(width[np.all(distance > 800e3, axis=1)] == 0)

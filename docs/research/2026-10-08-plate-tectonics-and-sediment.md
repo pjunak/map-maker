@@ -49,6 +49,26 @@ cordilleras line the leading edges.
 
 The relief algorithm identifier is now `sphere-mesh-stream-power-v7`.
 
+## Sediment budget: delta shelves
+
+The authored coastline means sediment cannot build new land. It can, however,
+build continental shelf off river mouths.
+
+- **Flux.** Near steady state, erosion balances uplift, so each river mouth
+  delivers Qs = Σ U·area over its catchment, in m³/yr.
+- **Shelf.** Most sediment ever delivered leaves the shelf for deep-sea fans or
+  drifts along the coast, so the shelf a river builds follows its present flux:
+  R = 15 √Qs, capped at 350 km. Rivers below 10⁷ m³/yr build none.
+  - **Calibration.** The Amazon (~4×10⁸ m³/yr) reaches about 300 km and the
+    Rhône (~2×10⁶ m³/yr) about 20 km.
+- **Rejected first trial.** Scaling by the 30 Myr volume put every median river
+  on a 260 km shelf.
+- **Effect.** The atlas shows broader, lighter shelves off the largest rivers.
+- **Provenance.** The relief algorithm identifier is now
+  `sphere-mesh-stream-power-v8`.
+- **Not done.** A sediment-conserving land model, where basin fill is bounded
+  by catchment supply, remains a TODO.
+
 ## Terrain-coupled vegetation (zoom detail)
 
 Vegetation was a climate field with noise patches. At regional zoom it ignored

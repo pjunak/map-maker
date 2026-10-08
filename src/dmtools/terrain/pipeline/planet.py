@@ -40,6 +40,8 @@ from dmtools.terrain.pipeline.planet_evolution import (
     calibrated_relief,
 )
 from dmtools.terrain.pipeline.planet_forcing import (
+    MIN_DELTA_FLUX_M3_YR,
+    PLATEAU_PULSE_FRACTION,
     Forcing,
     GeologyRegions,
     coast_distance,
@@ -48,6 +50,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
     land_on_mesh,
     ocean_floor,
 )
+from dmtools.terrain.pipeline.planet_kernels import accumulate
 from dmtools.terrain.pipeline.planet_lakes import Lakes, balance_lakes, young_depressions
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_field
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
@@ -96,6 +99,23 @@ class PlanetResult:
     lakes: Lakes  # lake state and the final routing on the water surface
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
+
+
+def river_sediment(
+    mesh: SphereMesh, land: B, flow: FlowState, forcing: Forcing
+) -> tuple[NDArray[np.int64], F64]:
+    """River mouths and the sediment flux (m^3/yr) each delivers.
+
+    Near steady state, erosion balances uplift, so a river's sediment flux is the
+    uplift volume rate of its catchment (Qs = sum U * area).
+    """
+    uplift = (forcing.steady_uplift + PLATEAU_PULSE_FRACTION * forcing.pulse_uplift) * mesh.area_m2
+    flux = accumulate(flow.order, flow.receiver, ~land, np.where(land, uplift, 0.0))
+    receiver = flow.receiver
+    mouth = land & (receiver >= 0) & ~land[np.maximum(receiver, 0)]
+    mouth &= flux >= MIN_DELTA_FLUX_M3_YR
+    nodes = np.flatnonzero(mouth)
+    return np.asarray(receiver[nodes], dtype=np.int64), flux[nodes]
 
 
 def generate_planet(
@@ -277,7 +297,10 @@ def generate_planet(
         None if climate is None else climate.pet_mm,
     )
     say(0.97, "Measuring relief")
-    bathymetry = ocean_floor(mesh, coast, water, seeds[PLANET_FORCING_STAGE_ID])
+    bathymetry = ocean_floor(
+        mesh, coast, water, seeds[PLANET_FORCING_STAGE_ID],
+        river_sediment(mesh, land, lakes.flow, result.forcing),
+    )
     elevation = np.where(water, bathymetry, lakes.ground_m)
     metrics = relief_metrics(mesh, lakes.surface_m, water | (lakes.lake >= 0), lakes.flow)
     metrics["lakes"] = {
