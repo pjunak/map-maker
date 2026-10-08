@@ -49,6 +49,22 @@ cordilleras line the leading edges.
 
 The relief algorithm identifier is now `sphere-mesh-stream-power-v7`.
 
+## Terrain-coupled vegetation (zoom detail)
+
+Vegetation was a climate field with noise patches. At regional zoom it ignored
+the relief, so forests and grassland formed blobs that crossed ridges.
+
+- **Moisture.** Land colour now shifts moisture by terrain position: ±0.5 in log
+  aridity, from height above the local mean.
+  - **Atlas scales.** 8, 30 and 120 km, as for openness shading.
+  - **Regional scales.** 3 and 15 km.
+  - **Effect.** Valleys gather water and soil, so they are greener and forested.
+    Ridges and slopes steeper than about 10 % are drier.
+- **Mosaic grain.** The finest mosaic noise drops from 35 km to 8 km in regional
+  windows.
+- **Result.** Forest now grows in dendritic patterns up the valleys and ridges
+  read as open country, as on satellite imagery of humid hill country.
+
 ## Limits
 
 - **Ridges.** Mid-ocean ridges still come from the boundaries between the

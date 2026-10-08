@@ -52,6 +52,8 @@ CARVE_STEPS = 4
 # (radius m, weight, height scale m) of the multi-scale openness term.
 OPENNESS_SCALES = ((8e3, 0.4, 120.0), (30e3, 0.35, 350.0), (120e3, 0.25, 800.0))
 OPENNESS_GAIN = 0.3
+# Moisture shift (in log aridity) between ridge crests and valley floors.
+TERRAIN_MOISTURE = 0.5
 ICE_BASAL_STRESS_PA = 1e5
 ICE_BED_SMOOTHING_M = 150e3
 
@@ -115,6 +117,7 @@ class DisplayFields:
     base_m: F64  # interpolated planet land surface (no detail)
     slope: F64  # display slope (m/m)
     light: F64  # multi-directional hillshade, 1.0 on flat ground
+    position: F64  # -1 (valley floor) .. +1 (ridge crest), multi-scale openness
 
 
 def display_fields(
@@ -165,8 +168,9 @@ def display_fields(
     gy = np.gradient(z, axis=0) / dy
     gx = (np.roll(z, -1, 1) - np.roll(z, 1, 1)) / (2 * dx)
     slope, light = shading(gx, gy, EXAGGERATION)
-    light = light * (1 + OPENNESS_GAIN * openness(z, dy, dx[:, 0]))
-    return DisplayFields(z, base_land, slope, light)
+    position = openness(z, dy, dx[:, 0])
+    light = light * (1 + OPENNESS_GAIN * position)
+    return DisplayFields(z, base_land, slope, light, position)
 
 
 def ice_surface(result: PlanetResult, ice: B) -> F64:
@@ -275,10 +279,15 @@ def land_colour(
     slope: F64,
     light: F64,
     wet: F64 | None = None,
+    position: F64 | None = None,
+    fine_wavelength_m: float = 35e3,
 ) -> F64:
     """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
 
     ``wet`` (0..1, blurred river coverage) greens river corridors in drylands.
+    ``position`` (-1 valley floor .. +1 ridge crest) ties the vegetation mosaic
+    to the terrain: valleys gather water and soil, ridges and steep slopes shed
+    them. ``fine_wavelength_m`` sets the finest mosaic scale (smaller when zoomed).
     """
     shape = z.shape
     zeros = np.zeros(len(points))
@@ -286,11 +295,18 @@ def land_colour(
     # Soil, groundwater and local relief make vegetation boundaries ragged at
     # every scale; the fine octave also hides the parent mesh's straight edges.
     patch = eroded_fbm(points, zeros, 41, 5, radius_m / 300e3, 0.55, 0.0).reshape(shape)
-    fine = eroded_fbm(points, zeros, 53, 4, radius_m / 35e3, 0.55, 0.0).reshape(shape)
+    fine = eroded_fbm(points, zeros, 53, 4, radius_m / fine_wavelength_m, 0.55, 0.0).reshape(
+        shape
+    )
+    terrain = (
+        np.zeros(shape)
+        if position is None
+        else -TERRAIN_MOISTURE * position - 0.8 * _smooth(slope, 0.1, 0.5)
+    )
     aridity = (
         climate.precipitation_mm
         / np.maximum(climate.pet_mm, 1.0)
-        * np.exp(0.45 * patch + 0.3 * fine)
+        * np.exp(0.45 * patch + 0.3 * fine + terrain)
     )
     if wet is not None:
         # Only drylands show river corridors; humid land is green either way.
@@ -350,6 +366,7 @@ def natural_colour(
         fields.slope,
         fields.light,
         0.6 * rivers,
+        fields.position,
     )
 
 

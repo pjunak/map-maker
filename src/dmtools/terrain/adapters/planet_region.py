@@ -48,6 +48,7 @@ REGION_VERSION = 1
 # hundred metres, far below the 5 km tile mesh, so mountains need sub-tile
 # ridges and valleys; slopes need far less exaggeration than the world preview.
 REGION_EXAGGERATION = 1.3
+REGION_MOSAIC_WAVELENGTH_M = 8e3
 REGION_DETAIL_SEED = 17
 REGION_DETAIL_WAVELENGTH_M = 30e3
 REGION_DETAIL_FLOOR_M = 70.0
@@ -326,6 +327,14 @@ def display_relief(window: RegionWindow) -> F64:
     return np.where(land, np.maximum(relief, 1.0), z)
 
 
+def window_position(z: F64, pixel_m: float) -> F64:
+    """Valley (-1) to ridge (+1) position from height above the local mean at 3-15 km."""
+    total = np.zeros_like(z)
+    for radius_m, weight, scale_m in ((3e3, 0.5, 80.0), (15e3, 0.5, 300.0)):
+        total += weight * np.tanh((z - gaussian_filter(z, radius_m / pixel_m)) / scale_m)
+    return total
+
+
 def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
     """Natural-colour (atlas) or shaded hypsometric view of a regional window."""
     z = display_relief(window)
@@ -343,7 +352,10 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             climate.pet_mm,
         )
         wet = 0.6 * gaussian_filter(window.rivers, 2.0)
-        land_rgb = land_colour(window.points, window.planet_m, shown, z, slope, light, wet)
+        land_rgb = land_colour(
+            window.points, window.planet_m, shown, z, slope, light, wet,
+            window_position(z, window.pixel_m), REGION_MOSAIC_WAVELENGTH_M,
+        )
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
     rgb = np.where(land[..., None], land_rgb, sea_depth_colour(-z, light))
