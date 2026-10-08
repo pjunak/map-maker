@@ -221,3 +221,15 @@ def test_grid_carving_matches_the_mesh_kernels_and_wraps_longitude() -> None:
     )
     wrapped = carve_valleys(z, outlet, cell, np.full(rows, cell), 0.4, 0.5, 3, wrap=True)
     np.testing.assert_allclose(shifted, np.roll(wrapped, 7, axis=1), atol=1e-9)
+
+
+def test_regional_parent_reports_lake_cover_and_level(parent: PlanetResult) -> None:
+    regional = RegionalParent.from_result(parent)
+    lakes = parent.lakes
+    cover, level, closed = regional.lakes_at(parent.mesh.xyz)
+    on_lake = lakes.lake >= 0
+    if on_lake.any():
+        assert np.all(cover[on_lake] > 0.99)
+        assert np.allclose(level[on_lake], lakes.level_m[lakes.lake[on_lake]])
+        assert np.array_equal(closed[on_lake], lakes.endorheic[lakes.lake[on_lake]])
+    assert np.all(cover[~on_lake & parent.land] < 1.0 + 1e-9)

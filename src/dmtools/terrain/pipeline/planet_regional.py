@@ -67,6 +67,9 @@ class RegionalParent:
     volcanic_m: F64 | None = None  # edifice height the mesh carries from volcanoes
     volcanoes: Volcanoes | None = None
     precip_warm_mm: F64 | None = None  # warm-half-year precipitation rate
+    lake: I64 | None = None  # lake id per parent node, -1 if none
+    lake_level_m: F64 | None = None  # surface per lake id
+    lake_endorheic: B | None = None  # closed lake per lake id
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:
@@ -86,7 +89,26 @@ class RegionalParent:
             result.volcanic_m,
             result.volcanoes,
             None if climate is None else climate.precip_warm_mm,
+            result.lakes.lake,
+            result.lakes.level_m,
+            result.lakes.endorheic,
         )
+
+    def lakes_at(self, xyz: F64) -> tuple[F64, F64, B]:
+        """Lake cover (0..1), the nearest lake's level and whether it is closed."""
+        if self.lake is None or self.lake_level_m is None or not np.any(self.lake >= 0):
+            n = len(xyz)
+            return np.zeros(n), np.full(n, -np.inf), np.zeros(n, dtype=bool)
+        cover = self.sample(xyz, (self.lake >= 0).astype(np.float64))
+        nodes = np.flatnonzero(self.lake >= 0)
+        nearest = np.asarray(KDTree(self.mesh.xyz[nodes]).query(xyz, workers=-1)[1])
+        ids = self.lake[nodes[nearest]]
+        closed = (
+            np.zeros(len(xyz), dtype=bool)
+            if self.lake_endorheic is None
+            else self.lake_endorheic[ids].astype(bool)
+        )
+        return cover, self.lake_level_m[ids].astype(np.float64), closed
 
     def sample(self, xyz: F64, values: F64) -> F64:
         """Triangle-linear interpolation of a parent node field at unit vectors."""
@@ -189,8 +211,11 @@ def enrich(
         # Volcanoes are drawn on top of the regional relief, not eroded from uplift.
         surface = surface - np.where(parent.land, parent.volcanic_m, 0.0)
     target = np.maximum(parent.sample(mesh.xyz, surface), 0.0)
-    fixed = water | (region.boundary & land)
-    level = np.where(water, 0.0, target)
+    # Parent lakes are fixed water at their level: regional rivers end in them.
+    lake_cover, lake_level, _ = parent.lakes_at(mesh.xyz)
+    lake = land & (lake_cover > 0.5)
+    fixed = water | (region.boundary & land) | lake
+    level = np.where(water, 0.0, np.where(lake, lake_level, target))
     steady = parent.sample(mesh.xyz, parent.steady_uplift)
     pulse = parent.sample(mesh.xyz, parent.pulse_uplift)
     erodibility = parent.sample(mesh.xyz, parent.erodibility) * np.exp(

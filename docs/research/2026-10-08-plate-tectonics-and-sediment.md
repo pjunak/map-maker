@@ -141,6 +141,22 @@ depth, so it made a few large hollows that sloping ground rarely closed.
 - **Provenance.** The relief algorithm identifier is now
   `sphere-mesh-stream-power-v12`.
 
+## Lakes in regional zoom
+
+Regional windows used to ignore lakes, so lake districts, rift lakes and caldera
+lakes vanished on zoom.
+
+- **Tiles.** Regional tiles hold parent lake nodes as fixed water at the lake
+  level, so regional rivers end in lakes.
+- **Windows.** Windows fill the regional relief up to the nearest parent lake's
+  level wherever parent lake cover exceeds 15 %, so shores follow the fine
+  terrain.
+- **Colour.** Closed lakes in hot, arid basins draw as salt pans.
+- **Provenance.** The regional algorithm identifier is now
+  `planet-blended-tiles-v2`, so old tile caches are not reused.
+- **Aethelara.** A rift-valley lake of about 1,500 × 300 km (441,000 km²,
+  larger than the Caspian) zooms to Tanganyika-like shores.
+
 ## Limits
 
 - **No motion of land.** Plates never move land, because the coastline is

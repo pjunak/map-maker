@@ -23,7 +23,9 @@ from shapely.ops import unary_union
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.planet_natural import (
     HYPSOMETRIC,
+    LAKE,
     RIVER,
+    SALT_FLAT,
     PixelClimate,
     land_colour,
     ramp,
@@ -50,6 +52,7 @@ REGION_VERSION = 1
 # ridges and valleys; slopes need far less exaggeration than the world preview.
 REGION_EXAGGERATION = 1.3
 REGION_MOSAIC_WAVELENGTH_M = 8e3
+LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
 REGION_SLOPE_SCALE = 3.5
 REGION_DETAIL_SEED = 17
@@ -148,6 +151,8 @@ class RegionWindow:
     planet_m: float
     lapse_c_per_km: float
     volcanic: F64  # 0..1 cover of young volcanic edifices near summits
+    lakes: B  # lake water (parent lakes with shores on the regional relief)
+    salt: B  # dry salt pans of hot, arid closed lakes
 
     @property
     def pixel_m(self) -> float:
@@ -205,6 +210,16 @@ def compose_window(
         elevation = np.where(land, elevation + sharp, elevation)
         volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
+    # Lakes fill the regional relief up to the parent lake level, so shores
+    # follow the fine terrain instead of the coarse parent mesh.
+    cover, level, closed = parent.lakes_at(points)
+    lakes = (
+        land
+        & inside
+        & (cover.reshape(pixels, pixels) > 0.15)
+        & (elevation <= level.reshape(pixels, pixels) + LAKE_SHORE_M)
+    )
+    salt = lakes & closed.reshape(pixels, pixels)
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
     # Rivers: each tile draws only the reaches it owns (largest blend weight there).
@@ -237,7 +252,7 @@ def compose_window(
                 pixels / 1100,
             ),
         )
-    coverage = np.where(land, coverage, 0.0)
+    coverage = np.where(land & ~lakes, coverage, 0.0)
     return RegionWindow(
         centre,
         radius_m,
@@ -251,6 +266,8 @@ def compose_window(
         planet_m,
         parent.settings.climate.lapse_c_per_km,
         volcanic,
+        lakes,
+        salt,
     )
 
 
@@ -383,6 +400,16 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
     rgb = np.where(land[..., None], land_rgb, sea_depth_colour(-z, light))
+    if window.lakes.any():
+        pan = window.salt
+        if climate is not None:
+            # Closed lakes in hot, arid basins dry to salt pans; others stay saline lakes.
+            arid = climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < 0.35
+            pan = pan & arid & (climate.temperature_c > 12.0)
+        else:
+            pan = np.zeros_like(pan)
+        rgb[window.lakes & ~pan] = LAKE
+        rgb[pan] = SALT_FLAT
     alpha = (0.9 * window.rivers)[..., None]
     rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
     rgb[~np.isfinite(window.elevation_m)] = (36, 54, 82)
