@@ -361,19 +361,33 @@ def test_flexural_basins_fill_to_well_drained_plains() -> None:
     assert np.all(filled[outside] >= h[outside] - 1e-9)
 
 
-def test_sea_floor_deepens_with_age_away_from_ridges_between_continents() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance, ocean_floor
+def test_sea_floor_ages_away_from_spreading_ridges() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import (
+        coast_distance,
+        ocean_floor,
+        plate_sea_floor_age_myr,
+        sea_floor_age_myr,
+    )
     from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
 
     mesh = build_mesh(20_000, RADIUS, 6)
     # Two large polar caps of land with an ocean between them.
     land = np.abs(mesh.xyz[:, 2]) > 0.6
     coast = coast_distance(mesh, land)
-    depth = -ocean_floor(mesh, coast, ~land, 3)
     ocean = ~land
-    equator = ocean & (np.abs(mesh.xyz[:, 2]) < 0.05)  # the ridge, midway between them
+    # Without plates, the ridge runs midway between the continents.
+    age = sea_floor_age_myr(mesh, land)
+    equator = ocean & (np.abs(mesh.xyz[:, 2]) < 0.05)
     flank = ocean & (np.abs(np.abs(mesh.xyz[:, 2]) - 0.3) < 0.05)
-    assert np.median(depth[equator]) < np.median(depth[flank]) - 400
+    assert np.median(age[equator]) < np.median(age[flank])
+    # With plates, crust is youngest on opening boundaries and ages away from them.
+    plates = plate_tectonics(mesh, land, coast, 3)
+    plate_age = plate_sea_floor_age_myr(mesh, ocean, coast, plates)
+    if plate_age is not None:
+        ridge = ocean & (plates.boundary_m < mesh.spacing_m) & (plates.convergence < -0.005)
+        assert np.median(plate_age[ridge]) < np.median(plate_age[ocean])
+    depth = -ocean_floor(mesh, coast, ocean, 3, None, plates)
     assert np.all(depth[ocean] > 0) and np.all(depth[land] == 0)
 
 

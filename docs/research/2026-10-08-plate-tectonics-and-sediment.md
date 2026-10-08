@@ -105,11 +105,24 @@ it in the global Priority-Flood on steps that still had pits.
   - climate, about 30 s;
   - plate tectonics, computed four times, about 18 s.
 
+## Ridges and trenches from the plates
+
+- **Ridges.** Mid-ocean ridges are now the plate boundaries that open under the
+  sea, at least 80 km from any coast. Crust ages away from them at half the mean
+  opening rate. A single rate keeps the age field continuous: per-segment rates
+  drew step-like scarps wherever the nearest segment changed.
+  - **Link to rifts.** Rifts on land and ridges at sea now lie on the same
+    boundaries.
+  - **Fallback.** The earlier continent-equidistant ridges remain only for when
+    no boundary opens under the sea.
+- **Trenches.** Ocean–ocean convergent boundaries get trenches (up to 2.8 km
+  deeper, about 50 km wide) on the down-going side, 150 km or more from land.
+  Their volcanic island arcs are left out, since they would be new land.
+- **Provenance.** The relief algorithm identifier is now
+  `sphere-mesh-stream-power-v11`.
+
 ## Limits
 
-- **Ridges.** Mid-ocean ridges still come from the boundaries between the
-  oceans nearest to each landmass, not from divergent plate boundaries. The two
-  agree in spirit but are not linked.
 - **No motion of land.** Plates never move land, because the coastline is
   authored. Collision belts are where boundaries happen to cross land, not where
   continents have actually collided.

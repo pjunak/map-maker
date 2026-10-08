@@ -95,6 +95,8 @@ TRAP_ERODIBILITY = 0.35
 TRAP_RADIUS_M = 450e3
 TRAP_AGE_MYR = 65.0
 HALF_SPREADING_M_PER_MYR = 40e3
+RIDGE_COAST_CLEARANCE_M = 80e3
+MAX_SEA_FLOOR_AGE_MYR = 200.0
 PLATE_CORE_KM2 = 2e6
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
@@ -598,7 +600,11 @@ def ocean_floor(
     margin = 20 + 120 * _smoothstep(coast_m, 0, width) + 3200 * _smoothstep(
         coast_m, width, width + 90e3
     )
-    age_myr = sea_floor_age_myr(mesh, ~water)
+    if plates is None:
+        plates = plate_tectonics(mesh, ~water, coast_m, seed)
+    age_myr = plate_sea_floor_age_myr(mesh, water, coast_m, plates)
+    if age_myr is None:
+        age_myr = sea_floor_age_myr(mesh, ~water)
     # The ridge crest is a broad swell, not a cusp: smooth age over ~2 Myr.
     young = 2600 + 365 * np.sqrt(np.sqrt(age_myr**2 + 4.0) - 2.0)
     old = 5651 - 2473 * np.exp(-0.0278 * age_myr)
@@ -608,13 +614,41 @@ def ocean_floor(
     # Rough young crust (abyssal hills, ridge flanks) smooths as sediment drapes it.
     hills = fbm3(p, seed + 909, 5, 6.0)
     depth -= blend * (120 + 280 * np.exp(-age_myr / 30)) * hills
-    if plates is None:
-        plates = plate_tectonics(mesh, ~water, coast_m, seed)
     gate = _smoothstep(plates.leading, 0.15, 0.6)
     strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
     active = _smoothstep(gate * (0.35 + 0.65 * strike), 0.45, 0.85)
     depth += TRENCH_DEPTH_M * active * np.exp(-(((coast_m - width - 110e3) / 45e3) ** 2))
+    # Ocean-ocean convergence: a trench on the down-going side of the boundary
+    # (Marianas, Tonga); the volcanic arc would be new land, so it is left out.
+    closing = _smoothstep(plates.convergence, 0.01, 0.05) * _smoothstep(coast_m, 150e3, 400e3)
+    offset = plates.across_m - 40e3
+    depth += 0.8 * TRENCH_DEPTH_M * closing * np.exp(-((offset / 50e3) ** 2))
     return np.where(water, -depth, 0.0)
+
+
+def plate_sea_floor_age_myr(
+    mesh: SphereMesh, water: B, coast_m: F64, plates: Tectonics
+) -> F64 | None:
+    """Sea-floor age from distance to the nearest spreading plate boundary.
+
+    Mid-ocean ridges are the plate boundaries that open under the sea; crust
+    ages with distance from them at half the mean opening rate (a single rate
+    keeps the age field continuous where the nearest ridge segment changes). Where an
+    opening boundary crosses a continent it is a rift, so rift valleys on land
+    continue offshore as ridges (Red Sea into the Gulf of Aden). Returns None
+    when no boundary opens under the sea.
+    """
+    near = plates.boundary_m < 0.75 * mesh.spacing_m
+    ridge = np.flatnonzero(
+        water & near & (plates.convergence < -0.005) & (coast_m > RIDGE_COAST_CLEARANCE_M)
+    )
+    if not len(ridge):
+        return None
+    distance = multi_source_distance(
+        ridge, np.zeros(len(ridge)), mesh.ptr, mesh.nbr, mesh.length_m
+    )
+    half_rate = max(0.5 * float(np.mean(-plates.convergence[ridge])), 0.01)  # m/yr
+    return np.minimum(distance / half_rate / 1e6, MAX_SEA_FLOOR_AGE_MYR)
 
 
 def delta_shelf_width(mesh: SphereMesh, mouths: I64, flux_m3_yr: F64) -> F64:
