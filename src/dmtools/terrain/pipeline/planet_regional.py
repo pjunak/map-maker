@@ -36,6 +36,7 @@ type I64 = NDArray[np.int64]
 type B = NDArray[np.bool_]
 
 FINE_TEXTURE = 0.5
+BASIN_FULL_M = 200.0  # basin depth at which a node counts as fully depositional
 FINE_TEXTURE_WAVELENGTH_M = 40e3
 MIN_RUNOFF_WEIGHT = 0.05
 
@@ -61,6 +62,7 @@ class RegionalParent:
     warm_season_c: F64 | None = None
     coast_m: F64 | None = None
     sea_floor_m: F64 | None = None  # display bathymetry on water nodes; 0 on land
+    basin_depth_m: F64 | None = None  # sediment-filled flexural basins (deposition zones)
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:
@@ -76,6 +78,7 @@ class RegionalParent:
             None if climate is None else climate.warm_c,
             result.coast_m,
             np.where(result.land, 0.0, result.elevation_m),
+            result.forcing.basin_depth_m,
         )
 
     def sample(self, xyz: F64, values: F64) -> F64:
@@ -182,6 +185,12 @@ def enrich(
     erodibility = parent.sample(mesh.xyz, parent.erodibility) * np.exp(
         FINE_TEXTURE * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / FINE_TEXTURE_WAVELENGTH_M)
     )
+    if parent.basin_depth_m is not None:
+        # Sediment-filled basins are deposition zones: the parent plain is kept
+        # (no uplift, almost no erosion) instead of being re-dissected into hills.
+        basin = np.clip(parent.sample(mesh.xyz, parent.basin_depth_m) / BASIN_FULL_M, 0, 1)
+        steady, pulse = steady * (1 - basin), pulse * (1 - basin)
+        erodibility = erodibility * (1 - 0.97 * basin)
     runoff = (
         None if parent.runoff_weight is None
         else np.maximum(parent.sample(mesh.xyz, parent.runoff_weight), MIN_RUNOFF_WEIGHT)

@@ -220,6 +220,8 @@ def write_planet_build(
         arrays["geology_region"] = result.regions.region.astype("<i4")
     if result.runoff_weight is not None:
         arrays["runoff_weight"] = result.runoff_weight.astype("<f8")
+    if result.forcing.basin_depth_m is not None:
+        arrays["basin_depth_m"] = result.forcing.basin_depth_m.astype("<f4")
     if climate is not None:
         arrays |= {
             "temperature_c": climate.temperature_c.astype("<f4"),

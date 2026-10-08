@@ -84,5 +84,8 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
             ),
             coast_m=data["coast_distance_m"].astype(np.float64),
             sea_floor_m=np.where(land, 0.0, data["elevation_m"].astype(np.float64)),
+            basin_depth_m=(
+                data["basin_depth_m"].astype(np.float64) if "basin_depth_m" in data else None
+            ),
         )
     return LoadedPlanet(folder, str(claimed), parent)

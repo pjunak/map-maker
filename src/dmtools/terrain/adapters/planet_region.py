@@ -219,7 +219,7 @@ def compose_window(
                 owned & ~stop,
                 stop,
                 (pixels, pixels),
-                pixels / 800,
+                pixels / 1100,
             ),
         )
     coverage = np.where(land, coverage, 0.0)
@@ -281,7 +281,14 @@ def display_relief(window: RegionWindow) -> F64:
     if not land.any():
         return z
     base = np.where(land, z, 0.0)
-    ridged = np.clip((base - 300) / 1500, 0, 1).ravel()
+    inside = np.isfinite(window.elevation_m)
+    tile_slope = gaussian_filter(
+        np.hypot(*np.gradient(np.where(inside, z, 0.0), window.pixel_m)), 3.0
+    )
+    # Flat plains and plateau tops stay smooth; slopes get ridges and gullies.
+    # Ridged noise creases into sharp lines, so it too needs relief, not height.
+    ruggedness = 0.15 + 0.85 * np.clip((tile_slope - 0.002) / 0.018, 0, 1)
+    ridged = (np.clip((base - 300) / 1500, 0, 1) * ruggedness).ravel()
     detail = eroded_fbm(
         window.points,
         ridged,
@@ -292,11 +299,10 @@ def display_relief(window: RegionWindow) -> F64:
         0.1,
     ).reshape(z.shape)
     detail -= detail[land].mean()
-    amplitude = REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base
+    amplitude = (REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base) * ruggedness
     rough = np.where(land, z + amplitude * detail, z)
     # Outside the window circle, hold each cell at the nearest inside height so
     # the rim is not a base level that every border valley would cut down to.
-    inside = np.isfinite(window.elevation_m)
     nearest = cast(
         NDArray[np.intp],
         distance_transform_edt(~inside, return_distances=False, return_indices=True),
@@ -313,9 +319,6 @@ def display_relief(window: RegionWindow) -> F64:
     )
     # Flats and plateaus carve into straight grid-aligned grooves, and real ones
     # stay smooth at this scale, so incision follows the tile relief's slope.
-    tile_slope = gaussian_filter(
-        np.hypot(*np.gradient(np.where(inside, z, 0.0), window.pixel_m)), 3.0
-    )
     steep = np.clip((tile_slope - 0.006) / 0.024, 0, 1)
     # Blurring the incision widens one-pixel D8 channels into valleys.
     depth = gaussian_filter(np.clip(rough - carved, 0, amplitude) * steep, 1.3)
@@ -339,7 +342,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             climate.precipitation_mm,
             climate.pet_mm,
         )
-        wet = gaussian_filter(window.rivers, 3.0)
+        wet = 0.6 * gaussian_filter(window.rivers, 2.0)
         land_rgb = land_colour(window.points, window.planet_m, shown, z, slope, light, wet)
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]

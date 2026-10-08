@@ -134,6 +134,19 @@ Po and Mesopotamian plains, and the Tarim and Fergana basins.
 - **Provenance.** The relief algorithm identifier is now
   `sphere-mesh-stream-power-v5`.
 
+### Regional zoom over basins
+
+- **Basin field.** The planet archive stores `basin_depth_m`, and regional
+  enrichment reads it.
+- **Deposition zones.** Inside basins, regional tiles keep the parent plain:
+  uplift is removed and erodibility drops to 3 %. They are no longer
+  re-dissected into hills of the right mean height.
+- **Regional display detail.** Detail amplitude and the ridged-noise blend now
+  scale with tile slope, as on the world map. This removes crease lines on flat
+  plains.
+- **Rivers.** Regional rivers are about 30 % thinner, with a lighter riparian
+  halo.
+
 A conserving sediment model with flexure would replace this geometric
 imposition later. It already gives the right landform: flat, well-drained
 lowlands along ranges, with the occasional long lake in an intermontane trough.
