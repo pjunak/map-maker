@@ -24,7 +24,7 @@ from dmtools.terrain.domain.models import LandformSettings
 from dmtools.terrain.domain.world import WorldFrame
 from dmtools.terrain.domain.world_geology import GeologyProfile, WorldGeologyRecipe
 from dmtools.terrain.pipeline.planet_climate import surface_gradient, tangent_frame
-from dmtools.terrain.pipeline.planet_kernels import multi_source_distance
+from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, priority_flood
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.world import WorldMap
@@ -72,6 +72,9 @@ SWELL_UPLIFT = 8e-5
 # badlands at continental scale.
 SHIELD_ERODIBILITY = 0.25
 FOLD_WAVELENGTH_M = 45e3
+FORELAND_DEPTH_M = 1500.0
+INTERMONTANE_DEPTH_M = 800.0
+ALLUVIAL_RELIEF = 0.04
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
 
@@ -194,6 +197,7 @@ class ProceduralForcing:
     uplift: F64  # m/yr
     texture: F64  # dimensionless rock-erodibility variation (median ~1)
     uplift_texture: F64  # dimensionless uplift variation within regions (median ~1)
+    basin_depth_m: F64  # flexural subsidence filled with sediment after erosion
 
 
 def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> ProceduralForcing:
@@ -282,7 +286,20 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         * strike_lithology(across, major_half, orogen_zone, 3.0 * fbm3(p, seed + 272, 3, 8.0))
         * (SHIELD_ERODIBILITY + (1 - SHIELD_ERODIBILITY) * active)
     )
-    return ProceduralForcing(np.where(land, uplift, 0.0), texture, uplift_texture)
+    # Mountain loads flex the crust down in front of a range (foreland basins:
+    # Indo-Gangetic, Po, Mesopotamia, ~200-400 km wide) and between parallel
+    # ranges (intermontane basins); rivers fill them into flat alluvial plains.
+    foreland = ridge_profile(np.abs(across - 3.2 * major_half), 1.6 * major_half)
+    intermontane = ridge_profile(np.abs(across + 0.85 * major_half), 0.35 * major_half)
+    basin_depth = (
+        (FORELAND_DEPTH_M * foreland + INTERMONTANE_DEPTH_M * intermontane)
+        * segments
+        * inland_fade
+        * (1 - belts)
+    )
+    return ProceduralForcing(
+        np.where(land, uplift, 0.0), texture, uplift_texture, np.where(land, basin_depth, 0.0)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,6 +402,7 @@ class Forcing:
     pulse_uplift: F64  # m/yr added in the final pulse window
     erodibility: F64
     procedural: B
+    basin_depth_m: F64 | None = None  # filled after erosion (see fill_basins)
 
 
 def build_forcing(
@@ -430,7 +448,25 @@ def build_forcing(
         pulse = smooth_over_land(mesh, pulse, land, half)
         factor = smooth_over_land(mesh, factor, land, half)
     erodibility = base_erodibility * factor * procedural.texture
-    return Forcing(steady, pulse, erodibility, automatic)
+    basin_depth = np.where(automatic, procedural.basin_depth_m, 0.0)
+    return Forcing(steady, pulse, erodibility, automatic, basin_depth)
+
+
+def fill_basins(mesh: SphereMesh, water: B, h: F64, depth_m: F64) -> F64:
+    """Sink flexural basins and fill them with sediment to their spill level.
+
+    The filled plain keeps ALLUVIAL_RELIEF of the original relief above it, so
+    fans slope gently away from the mountain front and rivers gather along the
+    basin axis instead of crossing a perfectly flat floor. Note this also fills
+    every other closed depression; lakes come from young depressions instead.
+    """
+    sunk = np.where(water, h, np.maximum(h - depth_m, 1.0))
+    filled, _ = priority_flood(sunk, water, mesh.ptr, mesh.nbr, 1e-3)
+    plain = filled + ALLUVIAL_RELIEF * np.maximum(h - filled, 0.0)
+    # Sediment aggrades above old valley floors; outside basins nothing changes.
+    # A second fill keeps the plain well drained (no lakes from the fans alone).
+    surface = np.where(water | (depth_m <= 0), h, plain)
+    return priority_flood(surface, water, mesh.ptr, mesh.nbr, 1e-3)[0]
 
 
 def measure_regions(h: F64, regions: GeologyRegions) -> tuple[float | None, ...]:

@@ -103,6 +103,41 @@ and rejected (see below). Items 2 and 8 remain open.
     margins, and nunataks keep their own height.
   - **Scope.** Display only. Exported elevation stays at bedrock.
 
+## Foreland and intermontane basins (third batch)
+
+Mountain loads flex the crust down in front of a range and between its parallel
+ranges, and rivers fill the space into flat alluvial plains: the Indo-Gangetic,
+Po and Mesopotamian plains, and the Tarim and Fergana basins.
+
+- **Basin field.** The forcing now exports a basin depth on the foreland side of
+  great orogens: up to 1,500 m, centred 3.2 half-widths from the main axis.
+  Between the main axis and the hinterland range it is up to 800 m deep.
+- **Filling.** After erosion the depression is imposed and filled with
+  Priority-Flood to its spill level. 4 % of the old relief is kept above the
+  fill, so fans slope gently from the mountain front and rivers gather along the
+  basin axis. A second fill keeps the plain well drained.
+- **Display detail.** World-scale detail amplitude now also scales with
+  mesh-scale slope, between 0.2× and 1×, so flat plains and plateau tops stay
+  smooth.
+
+### Lakes
+
+- **First version.** The fan relief left pits, giving 271 lakes (86 closed,
+  1.7 % of land).
+- **With the second fill.** 88 lakes (14 closed, 0.43 % of land), against 41
+  before the basins, at 800k nodes.
+
+### Effect on height and IDs
+
+- **Heights.** Land mean went from 875 m to 834 m; land above 1 km went from
+  29.9 % to 28.1 %.
+- **Provenance.** The relief algorithm identifier is now
+  `sphere-mesh-stream-power-v5`.
+
+A conserving sediment model with flexure would replace this geometric
+imposition later. It already gives the right landform: flat, well-drained
+lowlands along ranges, with the occasional long lake in an intermontane trough.
+
 ## River counts measured like a gazetteer
 
 Earth's 230–250 rivers longer than 1,000 km (Grill et al. 2019) include major

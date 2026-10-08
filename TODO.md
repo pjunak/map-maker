@@ -102,8 +102,8 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Earth-scale range widths, valley spacing and river lengths (3.2M-node builds).
   - [x] Composite orogens, strike-aligned lithology and a glacial buzzsaw
     ([evidence](docs/research/2026-10-08-orogens-glaciers-and-speed.md)).
-  - [ ] Conserving sediment deposition with flexure (alluvial plains, foreland basins);
-    per-node G term rejected.
+  - [x] Foreland and intermontane basins filled to spill level (geometric flexure).
+  - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.
   - [ ] Seasonal continentality (energy balance) and Köppen-driven colours.

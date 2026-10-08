@@ -43,6 +43,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
     Forcing,
     GeologyRegions,
     coast_distance,
+    fill_basins,
     geology_regions,
     land_on_mesh,
     ocean_floor,
@@ -263,6 +264,8 @@ def generate_planet(
     assert result is not None
     say(0.94, "Filling lakes")
     evolved = result.run.elevation
+    if result.forcing.basin_depth_m is not None:
+        evolved = fill_basins(mesh, water, evolved, result.forcing.basin_depth_m)
     depressions = young_depressions(
         mesh, land, coast, regions, None if climate is None else climate.warm_c, evolved,
         seeds[PLANET_FORCING_STAGE_ID],

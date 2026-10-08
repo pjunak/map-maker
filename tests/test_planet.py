@@ -336,3 +336,26 @@ def test_scale_metrics_measure_rivers_and_mountain_belts(world_path: Path) -> No
         assert basin["main_stem_km"] >= 0.5 * basin["area_km2"] ** 0.5
     mountains = metrics["mountains"]
     assert isinstance(mountains, dict) and 0 <= mountains["mountain_share_of_land"] <= 1
+
+
+def test_flexural_basins_fill_to_well_drained_plains() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import fill_basins
+    from dmtools.terrain.pipeline.planet_kernels import steepest_receivers
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    mesh = build_mesh(6_000, RADIUS, 4)
+    water = mesh.xyz[:, 2] < -0.4
+    rng = np.random.default_rng(2)
+    h = np.where(water, 0.0, 200 + 1500 * (mesh.xyz[:, 2] + 0.4) + 50 * rng.random(mesh.size))
+    centre = np.array([1.0, 0.0, 0.3]) / np.linalg.norm([1.0, 0.0, 0.3])
+    depth = np.where(water, 0.0, 1200 * np.clip(1 - np.arccos(mesh.xyz @ centre) / 0.25, 0, 1))
+    filled = fill_basins(mesh, water, h, depth)
+    outside = ~water & (depth <= 0)
+    receiver, _ = steepest_receivers(
+        filled, water, mesh.ptr, mesh.nbr, mesh.length_m, np.full(mesh.size, -1, np.int64)
+    )
+    assert np.all(receiver[~water] >= 0)  # every land node drains (no pits)
+    basin = depth > 600
+    assert filled[basin].std() < h[basin].std()  # the basin floor is smoother
+    # Outside basins the surface is only raised where closed pits are filled.
+    assert np.all(filled[outside] >= h[outside] - 1e-9)

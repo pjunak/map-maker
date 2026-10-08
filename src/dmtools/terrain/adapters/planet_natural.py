@@ -132,8 +132,21 @@ def display_fields(
     detail = eroded_fbm(
         points, ridged, DETAIL_SEED, DETAIL_OCTAVES, radius / DETAIL_WAVELENGTH_M, 0.55, 0.12
     ).reshape(shape) - 0.17 * ridged.reshape(shape)
+    rows, columns = shape
+    dy = np.pi * radius / rows
+    dx = 2 * np.pi * radius / columns * np.maximum(np.cos(raster.latitude), 0.05)[:, None]
+    # Detail follows the mesh-scale relief: flat alluvial plains and plateau tops
+    # stay smooth, as they look on Earth, while slopes get ridges and gullies.
+    base_slope = np.hypot(
+        np.gradient(base_land, axis=0) / dy,
+        (np.roll(base_land, -1, 1) - np.roll(base_land, 1, 1)) / (2 * dx),
+    )
+    ruggedness = 0.2 + 0.8 * _smooth(gaussian_filter(base_slope, 2.0), 0.001, 0.012)
     amplitude = (
-        (45 + 0.38 * base_land) * _smooth(coast, 0, 25e3) / (1 + np.sqrt(np.expm1(discharge)) / 12)
+        (45 + 0.38 * base_land)
+        * ruggedness
+        * _smooth(coast, 0, 25e3)
+        / (1 + np.sqrt(np.expm1(discharge)) / 12)
     )
     rough = np.where(land_px, base_land + amplitude * detail, 0.0)
     land = np.maximum(
@@ -149,9 +162,6 @@ def display_fields(
     ).reshape(shape)
     sea = base_sea + _smooth(-base_sea, 500, 3000) * SEA_TEXTURE_M * hills
     z = np.where(land_px, land, np.minimum(sea, -1.0))
-    rows, columns = shape
-    dy = np.pi * radius / rows
-    dx = 2 * np.pi * radius / columns * np.maximum(np.cos(raster.latitude), 0.05)[:, None]
     gy = np.gradient(z, axis=0) / dy
     gx = (np.roll(z, -1, 1) - np.roll(z, 1, 1)) / (2 * dx)
     slope, light = shading(gx, gy, EXAGGERATION)
