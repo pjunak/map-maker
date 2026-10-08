@@ -109,6 +109,7 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `elevation.tif` | Float32 elevation in metres (land, and an ocean floor with mid-ocean ridges, sea-floor ageing and trenches), on a geographic CRS for your world's sphere radius. |
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
+| `volcanoes.geojson` | Volcano points with kind (stratovolcano, shield, caldera, seamount), setting (arc, hotspot, rift, intraplate), activity, age, summit height and size. |
 | `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields. |
 | `world.dmworld.json`, `geology.dmgeology.json` | Snapshots of the inputs used. |
 | `manifest.json` | Settings, stage seeds, input hashes, runtime, calibration, metrics and output hashes ([schema](../schemas/world/planet-build-v1.schema.json)). |
@@ -131,7 +132,9 @@ SVG's size and it lies under your coastline drawing.
    recipe, the world is split into 18 rotating tectonic plates. Ranges rise
    where plates collide inside continents, rift valleys open where they pull
    apart, and coasts on a plate's leading edge get coastal ranges and offshore
-   trenches. Older, lower ranges, fold belts and hill country fill in at scales
+   trenches. Volcanoes follow the plates: arcs inland of leading-edge coasts,
+   hotspot tracks (shield volcanoes and calderas on land, seamount chains at
+   sea) and rift volcanoes. Older, lower ranges, fold belts and hill country fill in at scales
    from about 100 km to several thousand kilometres.
    Ranges have Earth-like widths (great ranges 120–350 km, minor ones 40–120 km)
    and lengths. Some great ranges carry a high plateau behind them, and broad

@@ -23,6 +23,7 @@
     "climate",
     "rivers",
     "lakes",
+    "volcanoes",
     "outputs",
     "build_sha256"
   ],
@@ -35,7 +36,7 @@
       "additionalProperties": false,
       "required": ["relief", "climate"],
       "properties": {
-        "relief": { "const": "sphere-mesh-stream-power-v8" },
+        "relief": { "const": "sphere-mesh-stream-power-v9" },
         "climate": { "enum": ["planet-climate-v3", null] }
       }
     },
@@ -62,11 +63,12 @@
     "stage_seeds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["planet.mesh", "planet.forcing", "planet.initial"],
+      "required": ["planet.mesh", "planet.forcing", "planet.initial", "planet.volcanism"],
       "properties": {
         "planet.mesh": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "planet.forcing": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
-        "planet.initial": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+        "planet.initial": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "planet.volcanism": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
       }
     },
     "inputs": {
@@ -147,6 +149,18 @@
         "features": { "type": "integer", "minimum": 0 }
       }
     },
+    "volcanoes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "active", "on_land", "by_kind", "by_setting"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "active": { "type": "integer", "minimum": 0 },
+        "on_land": { "type": "integer", "minimum": 0 },
+        "by_kind": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "by_setting": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    },
     "lakes": {
       "type": "object",
       "additionalProperties": false,
@@ -161,7 +175,7 @@
       "type": "object",
       "required": [
         "world.dmworld.json", "planet.npz", "elevation.tif", "relief.png",
-        "rivers.geojson", "lakes.geojson"
+        "rivers.geojson", "lakes.geojson", "volcanoes.geojson"
       ],
       "additionalProperties": {
         "type": "object",

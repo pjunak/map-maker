@@ -105,6 +105,8 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Foreland and intermontane basins filled to spill level (geometric flexure).
   - [x] Ocean floor from sea-floor age: mid-ocean ridges between continents, trenches.
   - [x] Plate tectonics: collision belts, rifts, leading-edge margins and trenches.
+  - [x] Volcanism: arcs, hotspot tracks, rift volcanoes, seamounts; volcano gazetteer.
+  - [ ] Flood-basalt plateaus; volcanic islands only if the author opts in.
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.

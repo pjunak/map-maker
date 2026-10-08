@@ -38,6 +38,7 @@ from dmtools.terrain.pipeline.planet_forcing import source_xy
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
+from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, edifice_height
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -49,6 +50,8 @@ REGION_VERSION = 1
 # ridges and valleys; slopes need far less exaggeration than the world preview.
 REGION_EXAGGERATION = 1.3
 REGION_MOSAIC_WAVELENGTH_M = 8e3
+# Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
+REGION_SLOPE_SCALE = 3.5
 REGION_DETAIL_SEED = 17
 REGION_DETAIL_WAVELENGTH_M = 30e3
 REGION_DETAIL_FLOOR_M = 70.0
@@ -144,6 +147,7 @@ class RegionWindow:
     tiles: tuple[int, ...]
     planet_m: float
     lapse_c_per_km: float
+    volcanic: F64  # 0..1 cover of young volcanic edifices near summits
 
     @property
     def pixel_m(self) -> float:
@@ -190,6 +194,16 @@ def compose_window(
     elevation = np.zeros(pixels * pixels)
     elevation[inside.ravel()] = blend(grid, surfaces, points[inside.ravel()])
     elevation = elevation.reshape(pixels, pixels)
+    volcanic = np.zeros((pixels, pixels))
+    if parent.volcanoes is not None and parent.volcanic_m is not None:
+        # Draw volcanoes sharply at pixel scale on the regional relief and sea floor.
+        sharp = edifice_height(points, planet_m, parent.volcanoes).reshape(pixels, pixels)
+        floor_only = sea - parent.sample(
+            points, np.where(parent.land, 0.0, parent.volcanic_m)
+        ).reshape(pixels, pixels)
+        sea = np.minimum(floor_only + sharp, np.maximum(floor_only, GUYOT_DEPTH_M))
+        elevation = np.where(land, elevation + sharp, elevation)
+        volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
@@ -236,6 +250,7 @@ def compose_window(
         tuple(sorted(tiles)),
         planet_m,
         parent.settings.climate.lapse_c_per_km,
+        volcanic,
     )
 
 
@@ -355,6 +370,8 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
         land_rgb = land_colour(
             window.points, window.planet_m, shown, z, slope, light, wet,
             window_position(z, window.pixel_m), REGION_MOSAIC_WAVELENGTH_M,
+            window.volcanic,
+            REGION_SLOPE_SCALE,
         )
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]

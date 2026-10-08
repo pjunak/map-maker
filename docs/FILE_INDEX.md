@@ -201,6 +201,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 
 | File | Purpose or document title |
 |---|---|
+| [docs/research/2026-10-08-volcanism.md](research/2026-10-08-volcanism.md) | Arc, hotspot, rift and intraplate volcanoes: placement, shapes, rendering, export and limits. |
 | [docs/research/2026-10-08-plate-tectonics-and-sediment.md](research/2026-10-08-plate-tectonics-and-sediment.md) | Plate-driven collision belts, rifts, leading-edge margins and trenches; old orogens; results and limits. |
 | [docs/research/2026-10-08-orogens-glaciers-and-speed.md](research/2026-10-08-orogens-glaciers-and-speed.md) | Methods survey; composite orogens, strike lithology, glacial buzzsaw, Horton gates, openness shading, speed-ups and rejected deposition trials. |
 | [docs/research/2026-10-07-earth-scale-landforms.md](research/2026-10-07-earth-scale-landforms.md) | Earth reference sizes of ranges, valleys, rivers and fjords; measured mismatch; explicit-width belts, shield erodibility, inherited surface, coarse climate and coupling meshes. |

@@ -37,6 +37,7 @@ from dmtools.terrain.adapters.planet_render import (
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, neighbour_mix
+from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, edifice_height
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -71,6 +72,7 @@ TUNDRA: RGB = (150, 146, 124)
 ROCK: RGB = (132, 122, 112)
 BARE_DRYLAND: RGB = (124, 102, 80)
 SNOW: RGB = (242, 244, 247)
+VOLCANIC_ROCK: RGB = (82, 74, 70)
 LAKE: RGB = (62, 106, 146)
 SALT_FLAT: RGB = (214, 210, 196)
 RIVER: RGB = (62, 104, 150)
@@ -118,6 +120,7 @@ class DisplayFields:
     slope: F64  # display slope (m/m)
     light: F64  # multi-directional hillshade, 1.0 on flat ground
     position: F64  # -1 (valley floor) .. +1 (ridge crest), multi-scale openness
+    volcanic: F64  # 0..1 cover of young volcanic edifices
 
 
 def display_fields(
@@ -131,6 +134,16 @@ def display_fields(
         mesh, np.maximum(np.where(np.isfinite(result.coast_m), result.coast_m, 0), 0)
     )
     discharge = raster.interpolate(mesh, np.log1p(np.maximum(result.lakes.discharge_m3_s, 0.0)))
+    # The mesh carries volcanoes widened to its resolution; redraw them sharply.
+    sharp = edifice_height(points, radius, result.volcanoes).reshape(shape)
+    coarse = raster.interpolate(mesh, result.volcanic_m)
+    base_land = np.where(land_px, base_land - coarse + sharp, base_land)
+    sea_floor = base_sea - coarse
+    base_sea = np.where(
+        land_px, base_sea, np.minimum(sea_floor + sharp, np.maximum(sea_floor, GUYOT_DEPTH_M))
+    )
+    # Fresh lava and ash show near summits; lower flanks weather like their surroundings.
+    volcanic = np.where(land_px, _smooth(sharp, 300.0, 2500.0), 0.0)
     ridged = _smooth(base_land, 500, 2200).ravel()
     detail = eroded_fbm(
         points, ridged, DETAIL_SEED, DETAIL_OCTAVES, radius / DETAIL_WAVELENGTH_M, 0.55, 0.12
@@ -148,6 +161,7 @@ def display_fields(
     amplitude = (
         (45 + 0.38 * base_land)
         * ruggedness
+        * (1 - 0.6 * volcanic)  # young cones have smooth, little-dissected flanks
         * _smooth(coast, 0, 25e3)
         / (1 + np.sqrt(np.expm1(discharge)) / 12)
     )
@@ -170,7 +184,7 @@ def display_fields(
     slope, light = shading(gx, gy, EXAGGERATION)
     position = openness(z, dy, dx[:, 0])
     light = light * (1 + OPENNESS_GAIN * position)
-    return DisplayFields(z, base_land, slope, light, position)
+    return DisplayFields(z, base_land - (sharp - coarse), slope, light, position, volcanic)
 
 
 def ice_surface(result: PlanetResult, ice: B) -> F64:
@@ -281,6 +295,8 @@ def land_colour(
     wet: F64 | None = None,
     position: F64 | None = None,
     fine_wavelength_m: float = 35e3,
+    volcanic: F64 | None = None,
+    slope_scale: float = 1.0,
 ) -> F64:
     """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
 
@@ -288,6 +304,8 @@ def land_colour(
     ``position`` (-1 valley floor .. +1 ridge crest) ties the vegetation mosaic
     to the terrain: valleys gather water and soil, ridges and steep slopes shed
     them. ``fine_wavelength_m`` sets the finest mosaic scale (smaller when zoomed).
+    ``slope_scale`` raises the slope thresholds for bare rock: slopes measured on
+    fine pixels are steeper than the same terrain averaged over coarse ones.
     """
     shape = z.shape
     zeros = np.zeros(len(points))
@@ -325,9 +343,14 @@ def land_colour(
     trees = _mix(trees, FOREST_TROPICAL, _smooth(temperature, 17, 23))
     colour = _mix(low, trees, forest)
     colour = _mix(colour, TUNDRA, 1 - _smooth(warm, 4, 11))
-    rocky = np.clip(_smooth(slope, 0.08, 0.3) * 0.75 + _smooth(z, 3000, 4500) * 0.25, 0, 0.8)
+    steep = _smooth(slope, 0.08 * slope_scale, 0.3 * slope_scale)
+    rocky = np.clip(steep * 0.75 + _smooth(z, 3000, 4500) * 0.25, 0, 0.8)
     colour = _mix(colour, ROCK, rocky)
-    colour = _mix(colour, BARE_DRYLAND, (1 - veg) * _smooth(slope, 0.015, 0.09) * 0.6)
+    if volcanic is not None:
+        # Young lava and ash are dark; vegetation soon covers them in wet climates.
+        colour = _mix(colour, VOLCANIC_ROCK, volcanic * (0.45 - 0.35 * forest))
+    hills = _smooth(slope, 0.015 * slope_scale, 0.09 * slope_scale)
+    colour = _mix(colour, BARE_DRYLAND, (1 - veg) * hills * 0.6)
     # The snowline wanders with local climate and lies lower on shaded slopes;
     # steep faces shed snow and stay bare.
     wander = eroded_fbm(points, zeros, 47, 4, radius_m / 40e3, 0.55, 0.0).reshape(shape)
@@ -367,6 +390,7 @@ def natural_colour(
         fields.light,
         0.6 * rivers,
         fields.position,
+        volcanic=fields.volcanic,
     )
 
 

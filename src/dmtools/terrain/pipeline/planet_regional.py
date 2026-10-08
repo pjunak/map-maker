@@ -29,6 +29,7 @@ from dmtools.terrain.pipeline.planet_evolution import EvolutionRun, evolve
 from dmtools.terrain.pipeline.planet_forcing import Forcing, land_on_mesh, smooth_over_land
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles, sample_field
 from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -63,6 +64,8 @@ class RegionalParent:
     coast_m: F64 | None = None
     sea_floor_m: F64 | None = None  # display bathymetry on water nodes; 0 on land
     basin_depth_m: F64 | None = None  # sediment-filled flexural basins (deposition zones)
+    volcanic_m: F64 | None = None  # edifice height the mesh carries from volcanoes
+    volcanoes: Volcanoes | None = None
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:
@@ -79,6 +82,8 @@ class RegionalParent:
             result.coast_m,
             np.where(result.land, 0.0, result.elevation_m),
             result.forcing.basin_depth_m,
+            result.volcanic_m,
+            result.volcanoes,
         )
 
     def sample(self, xyz: F64, values: F64) -> F64:
@@ -177,7 +182,11 @@ def enrich(
     mesh = region.mesh
     land = land_on_mesh(parent.world, mesh)
     water = ~land
-    target = np.maximum(parent.sample(mesh.xyz, parent.surface_m), 0.0)
+    surface = parent.surface_m
+    if parent.volcanic_m is not None:
+        # Volcanoes are drawn on top of the regional relief, not eroded from uplift.
+        surface = surface - np.where(parent.land, parent.volcanic_m, 0.0)
+    target = np.maximum(parent.sample(mesh.xyz, surface), 0.0)
     fixed = water | (region.boundary & land)
     level = np.where(water, 0.0, target)
     steady = parent.sample(mesh.xyz, parent.steady_uplift)

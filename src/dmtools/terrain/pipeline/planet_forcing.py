@@ -33,7 +33,7 @@ from dmtools.terrain.pipeline.planet_kernels import (
 )
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
-from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
+from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plate_tectonics
 from dmtools.terrain.pipeline.world import WorldMap
 from dmtools.terrain.pipeline.world_geology import resolve_geology
 
@@ -215,6 +215,7 @@ class ProceduralForcing:
     texture: F64  # dimensionless rock-erodibility variation (median ~1)
     uplift_texture: F64  # dimensionless uplift variation within regions (median ~1)
     basin_depth_m: F64  # flexural subsidence filled with sediment after erosion
+    tectonics: Tectonics
 
 
 def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> ProceduralForcing:
@@ -346,7 +347,11 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         + RIFT_DEPTH_M * rift_floor
     )
     return ProceduralForcing(
-        np.where(land, uplift, 0.0), texture, uplift_texture, np.where(land, basin_depth, 0.0)
+        np.where(land, uplift, 0.0),
+        texture,
+        uplift_texture,
+        np.where(land, basin_depth, 0.0),
+        plates,
     )
 
 
@@ -451,6 +456,7 @@ class Forcing:
     erodibility: F64
     procedural: B
     basin_depth_m: F64 | None = None  # filled after erosion (see fill_basins)
+    tectonics: Tectonics | None = None
 
 
 def build_forcing(
@@ -497,7 +503,7 @@ def build_forcing(
         factor = smooth_over_land(mesh, factor, land, half)
     erodibility = base_erodibility * factor * procedural.texture
     basin_depth = np.where(automatic, procedural.basin_depth_m, 0.0)
-    return Forcing(steady, pulse, erodibility, automatic, basin_depth)
+    return Forcing(steady, pulse, erodibility, automatic, basin_depth, procedural.tectonics)
 
 
 def fill_basins(mesh: SphereMesh, water: B, h: F64, depth_m: F64) -> F64:
@@ -538,6 +544,7 @@ def ocean_floor(
     water: B,
     seed: int,
     sediment: tuple[I64, F64] | None = None,
+    plates: Tectonics | None = None,
 ) -> F64:
     """Display bathymetry (m, negative) from continental margins and plate age.
 
@@ -570,7 +577,9 @@ def ocean_floor(
     # Rough young crust (abyssal hills, ridge flanks) smooths as sediment drapes it.
     hills = fbm3(p, seed + 909, 5, 6.0)
     depth -= blend * (120 + 280 * np.exp(-age_myr / 30)) * hills
-    gate = _smoothstep(plate_tectonics(mesh, ~water, coast_m, seed).leading, 0.15, 0.6)
+    if plates is None:
+        plates = plate_tectonics(mesh, ~water, coast_m, seed)
+    gate = _smoothstep(plates.leading, 0.15, 0.6)
     strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
     active = _smoothstep(gate * (0.35 + 0.65 * strike), 0.45, 0.85)
     depth += TRENCH_DEPTH_M * active * np.exp(-(((coast_m - width - 110e3) / 45e3) ** 2))

@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Volcanism — 2026-10-08](2026-10-08-volcanism.md) places arc, hotspot, rift and intraplate
+  volcanoes from the plate model, draws cones, calderas and seamount chains sharply, and
+  exports a volcano gazetteer.
+
 - [Plate tectonics and sediment — 2026-10-08](2026-10-08-plate-tectonics-and-sediment.md)
   places collision belts, rifts, active margins and trenches from 18 rotating plates, with
   old orogens kept as welded sutures.

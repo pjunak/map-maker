@@ -14,6 +14,7 @@ from dmtools.terrain.adapters.world_project import read_world_project
 from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
+from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
 from dmtools.terrain.pipeline.world import prepare_world_map
 
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
@@ -86,6 +87,18 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
             sea_floor_m=np.where(land, 0.0, data["elevation_m"].astype(np.float64)),
             basin_depth_m=(
                 data["basin_depth_m"].astype(np.float64) if "basin_depth_m" in data else None
+            ),
+            volcanic_m=data["volcanic_m"].astype(np.float64),
+            volcanoes=Volcanoes(
+                data["volcano_xyz"].astype(np.float64),
+                data["volcano_height_m"].astype(np.float64),
+                data["volcano_radius_m"].astype(np.float64),
+                data["volcano_kind"].astype(np.int64),
+                data["volcano_setting"].astype(np.int64),
+                data["volcano_active"].astype(bool),
+                data["volcano_age_myr"].astype(np.float64),
+                data["volcano_caldera_radius_m"].astype(np.float64),
+                data["volcano_caldera_depth_m"].astype(np.float64),
             ),
         )
     return LoadedPlanet(folder, str(claimed), parent)

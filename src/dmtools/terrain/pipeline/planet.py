@@ -16,6 +16,7 @@ from dmtools.terrain.domain.planet import (
     PLANET_FORCING_STAGE_ID,
     PLANET_INITIAL_STAGE_ID,
     PLANET_MESH_STAGE_ID,
+    PLANET_VOLCANISM_STAGE_ID,
     PlanetSettings,
 )
 from dmtools.terrain.domain.seeds import stage_seed
@@ -55,6 +56,12 @@ from dmtools.terrain.pipeline.planet_lakes import Lakes, balance_lakes, young_de
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_field
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
 from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.planet_volcanism import (
+    GUYOT_DEPTH_M,
+    Volcanoes,
+    edifice_height,
+    place_volcanoes,
+)
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -97,6 +104,8 @@ class PlanetResult:
     climate: Climate | None
     runoff_weight: F64 | None
     lakes: Lakes  # lake state and the final routing on the water surface
+    volcanoes: Volcanoes
+    volcanic_m: F64  # edifice height each node gained from volcanoes (display/regional)
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
@@ -135,7 +144,12 @@ def generate_planet(
     check_cancelled(cancellation)
     seeds = {
         stage: stage_seed(settings.seed, stage)
-        for stage in (PLANET_MESH_STAGE_ID, PLANET_FORCING_STAGE_ID, PLANET_INITIAL_STAGE_ID)
+        for stage in (
+            PLANET_MESH_STAGE_ID,
+            PLANET_FORCING_STAGE_ID,
+            PLANET_INITIAL_STAGE_ID,
+            PLANET_VOLCANISM_STAGE_ID,
+        )
     }
     radius_m = world.project.frame.radius_km * 1000
 
@@ -286,6 +300,18 @@ def generate_planet(
     evolved = result.run.elevation
     if result.forcing.basin_depth_m is not None:
         evolved = fill_basins(mesh, water, evolved, result.forcing.basin_depth_m)
+    plates = result.forcing.tectonics
+    volcanoes = (
+        Volcanoes.empty()
+        if plates is None
+        else place_volcanoes(
+            mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved
+        )
+    )
+    # Volcanoes are young: their edifices stand on the eroded relief. The mesh
+    # carries cones widened to its resolution; images redraw them sharply.
+    cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
+    evolved = np.where(land, evolved + cones, evolved)
     depressions = young_depressions(
         mesh, land, coast, regions, None if climate is None else climate.warm_c, evolved,
         seeds[PLANET_FORCING_STAGE_ID],
@@ -300,7 +326,12 @@ def generate_planet(
     bathymetry = ocean_floor(
         mesh, coast, water, seeds[PLANET_FORCING_STAGE_ID],
         river_sediment(mesh, land, lakes.flow, result.forcing),
+        plates,
     )
+    # Volcanoes at sea never break the surface (the coastline is authored).
+    seamounts = np.minimum(bathymetry + cones, np.maximum(bathymetry, GUYOT_DEPTH_M))
+    volcanic = np.where(water, seamounts - bathymetry, cones)
+    bathymetry = seamounts
     elevation = np.where(water, bathymetry, lakes.ground_m)
     metrics = relief_metrics(mesh, lakes.surface_m, water | (lakes.lake >= 0), lakes.flow)
     metrics["lakes"] = {
@@ -312,6 +343,6 @@ def generate_planet(
     say(1.0, "Planet relief ready")
     return PlanetResult(
         world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
-        regions, calibration, climate, runoff, lakes, seeds, metrics,
+        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, seeds, metrics,
     )
 

@@ -37,6 +37,10 @@ from dmtools.terrain.domain.planet import PLANET_CLIMATE_ALGORITHM, PLANET_RELIE
 from dmtools.terrain.domain.seeds import SEED_POLICY_ID
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_climate import BIOMES
+from dmtools.terrain.pipeline.planet_mesh import sample_field
+from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, SEAMOUNT
+from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
+from dmtools.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETTINGS
 
 PLANET_BUILD_SCHEMA = "dmtools.planet-build"
 PREVIEW_FILES = {
@@ -166,6 +170,40 @@ def lake_features(
     return {"type": "FeatureCollection", "features": features}
 
 
+def volcano_features(result: PlanetResult) -> dict[str, object]:
+    """Volcanoes as points in world longitude/latitude with their setting and activity."""
+    v = result.volcanoes
+    features: list[dict[str, object]] = []
+    if len(v):
+        base = sample_field(result.mesh, v.xyz, result.elevation_m - result.volcanic_m)
+        for k in range(len(v)):
+            x, y, z = (float(c) for c in v.xyz[k])
+            summit = float(base[k] + v.height_m[k])
+            if v.kind[k] == SEAMOUNT:
+                summit = min(summit, GUYOT_DEPTH_M)
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        round(float(np.degrees(np.arctan2(y, x))), 4),
+                        round(float(np.degrees(np.arcsin(np.clip(z, -1, 1)))), 4),
+                    ],
+                },
+                "properties": {
+                    "kind": VOLCANO_KINDS[int(v.kind[k])],
+                    "setting": VOLCANO_SETTINGS[int(v.setting[k])],
+                    "active": bool(v.active[k]),
+                    "age_myr": round(float(v.age_myr[k]), 2),
+                    "summit_m": round(summit),
+                    "edifice_height_m": round(float(v.height_m[k])),
+                    "basal_radius_km": round(float(v.radius_m[k]) / 1000, 1),
+                    "caldera_km": round(2 * float(v.caldera_radius_m[k]) / 1000, 1),
+                },
+            })
+    return {"type": "FeatureCollection", "features": features}
+
+
 def write_planet_build(
     result: PlanetResult,
     runtime: dict[str, object],
@@ -222,6 +260,19 @@ def write_planet_build(
         arrays["runoff_weight"] = result.runoff_weight.astype("<f8")
     if result.forcing.basin_depth_m is not None:
         arrays["basin_depth_m"] = result.forcing.basin_depth_m.astype("<f4")
+    v = result.volcanoes
+    arrays |= {
+        "volcanic_m": result.volcanic_m.astype("<f4"),
+        "volcano_xyz": v.xyz.astype("<f8"),
+        "volcano_height_m": v.height_m.astype("<f4"),
+        "volcano_radius_m": v.radius_m.astype("<f4"),
+        "volcano_kind": v.kind.astype("<i1"),
+        "volcano_setting": v.setting.astype("<i1"),
+        "volcano_active": v.active,
+        "volcano_age_myr": v.age_myr.astype("<f4"),
+        "volcano_caldera_radius_m": v.caldera_radius_m.astype("<f4"),
+        "volcano_caldera_depth_m": v.caldera_depth_m.astype("<f4"),
+    }
     if climate is not None:
         arrays |= {
             "temperature_c": climate.temperature_c.astype("<f4"),
@@ -257,6 +308,8 @@ def write_planet_build(
     save_bytes("rivers.geojson", json.dumps(rivers, separators=(",", ":")).encode("utf-8"))
     lakes = lake_features(result, raster, lakes_px)
     save_bytes("lakes.geojson", json.dumps(lakes, separators=(",", ":")).encode("utf-8"))
+    volcanoes = volcano_features(result)
+    save_bytes("volcanoes.geojson", json.dumps(volcanoes, separators=(",", ":")).encode("utf-8"))
     outputs = {
         name: {"sha256": file_sha256(target / name), "bytes": (target / name).stat().st_size}
         for name in names
@@ -309,6 +362,7 @@ def write_planet_build(
             "endorheic": int(result.lakes.endorheic.sum()),
             "features": len(cast(list[object], lakes["features"])),
         },
+        "volcanoes": _volcano_summary(result),
         "outputs": outputs,
     }
     manifest["build_sha256"] = sha256(canonical_json(manifest)).hexdigest()
@@ -322,6 +376,23 @@ def write_planet_build(
     complete = target / "manifest.json"
     pending.replace(complete)
     return complete
+
+
+def _volcano_summary(result: PlanetResult) -> dict[str, object]:
+    v = result.volcanoes
+    on_land = 0
+    if len(v):
+        nearest = sample_field(result.mesh, v.xyz, result.land.astype(np.float64))
+        on_land = int(np.sum(nearest > 0.5))
+    return {
+        "count": len(v),
+        "active": int(v.active.sum()),
+        "on_land": on_land,
+        "by_kind": {name: int(np.sum(v.kind == k)) for k, name in enumerate(VOLCANO_KINDS)},
+        "by_setting": {
+            name: int(np.sum(v.setting == k)) for k, name in enumerate(VOLCANO_SETTINGS)
+        },
+    }
 
 
 def _climate_summary(result: PlanetResult) -> dict[str, object]:

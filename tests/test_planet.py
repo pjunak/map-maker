@@ -421,3 +421,43 @@ def test_pit_catchments_are_found_from_receivers() -> None:
     water = np.array([False, False, False, False, False, True])
     trapped = draining_to(receiver, water, np.array([0], dtype=np.int64))
     assert trapped.tolist() == [True, True, True, False, False, False]
+
+
+def test_volcanoes_follow_tectonic_settings_and_stay_below_sea_level_offshore() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
+    from dmtools.terrain.pipeline.planet_volcanism import (
+        ARC,
+        CALDERA,
+        GUYOT_DEPTH_M,
+        SEAMOUNT,
+        Volcanoes,
+        edifice_height,
+        place_volcanoes,
+    )
+
+    mesh = build_mesh(40_000, RADIUS, 9)
+    land = mesh.xyz[:, 0] > 0.2
+    coast = coast_distance(mesh, land)
+    plates = plate_tectonics(mesh, land, coast, 5)
+    ground = np.where(land, 500.0, -4000.0)
+    first = place_volcanoes(mesh, land, coast, plates, 21, ground)
+    second = place_volcanoes(mesh, land, coast, plates, 21, ground)
+    assert len(first) > 0 and np.array_equal(first.xyz, second.xyz)
+    nearest = np.argmax(first.xyz @ mesh.xyz.T, axis=1)
+    arc = first.setting == ARC
+    # Arc volcanoes stand inland on leading-edge coasts.
+    assert np.all(land[nearest[arc]]) and np.all(plates.leading[nearest[arc]] > 0.4)
+    assert np.all(first.height_m[first.kind != SEAMOUNT] <= 6600 * 1.05)
+    # A lone caldera has a floor below its rim.
+    one = Volcanoes(
+        np.array([[1.0, 0.0, 0.0]]), np.array([2000.0]), np.array([20e3]),
+        np.array([CALDERA]), np.array([ARC]), np.array([True]), np.array([0.0]),
+        np.array([6e3]), np.array([500.0]),
+    )
+    angles = np.array([0.0, 5.5e3, 30e3]) / RADIUS
+    points = np.stack([np.cos(angles), np.sin(angles), np.zeros(3)], axis=1)
+    centre, rim, outside = edifice_height(points, RADIUS, one)
+    assert centre < rim and outside == 0.0
+    assert GUYOT_DEPTH_M < 0
