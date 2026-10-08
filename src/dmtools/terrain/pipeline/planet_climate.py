@@ -77,6 +77,9 @@ COLD_CURRENT_SUBSIDENCE = 0.85
 # Land travel over which air loses its marine character (e-folding, m).
 MARITIME_DECAY_M = 900e3
 MARITIME_TRAVEL_M = 8e6
+# Extra poleward shift (deg) of the summer rain belt over heated land, and its reach.
+MONSOON_EXTRA_DEG = 10.0
+MONSOON_REACH_M = 1.5e6
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +208,29 @@ def maritime_air(
     return np.where(land, 1.0 - np.maximum(result, breeze), 0.0)
 
 
+def monsoon_shift(mesh: SphereMesh, land: B, s: PlanetClimateSettings) -> tuple[F64, F64]:
+    """Seasonal latitude shift (degrees) of the wind and rain belts at each node.
+
+    Over open ocean the ITCZ follows the sun only a few degrees. Summer heating of
+    large low-latitude landmasses deepens a thermal low that pulls the rain belt
+    and onshore winds far poleward over and around them (South Asia to ~25 N,
+    the Sahel, northern Australia; Gadgil 2003). The extra shift grows with the
+    share of heatable land (5-35 deg of the summer hemisphere) within ~1,500 km.
+    Returns the (southern summer, northern summer) shifts.
+    """
+    base = 8.0 * s.obliquity_deg / 23.4
+    latitude = np.rad2deg(mesh.lat)
+    passes = max(1, round((MONSOON_REACH_M / mesh.spacing_m) ** 2))
+    weight = np.full(mesh.size, 0.5)
+    shifts = []
+    for sign in (-1.0, 1.0):
+        band = land & (sign * latitude > 5) & (sign * latitude < 35)
+        heat = neighbour_mix(band.astype(np.float64), mesh.ptr, mesh.nbr, weight, passes)
+        extra = MONSOON_EXTRA_DEG * np.clip(heat / 0.5, 0, 1) * s.obliquity_deg / 23.4
+        shifts.append(sign * (base + extra))
+    return shifts[0], shifts[1]
+
+
 def snowline_m(
     mesh: SphereMesh, land: B, coast_m: F64, settings: PlanetClimateSettings | None = None
 ) -> F64:
@@ -220,7 +246,7 @@ def snowline_m(
 
 
 def prevailing_wind(
-    lat: F64, s: PlanetClimateSettings, shift_deg: float = 0.0
+    lat: F64, s: PlanetClimateSettings, shift_deg: float | F64 = 0.0
 ) -> tuple[F64, F64]:
     """Surface wind (east, north) in m/s; ``shift_deg`` moves belts for a season."""
     lat_deg = np.rad2deg(lat) - shift_deg
@@ -325,8 +351,7 @@ def simulate_climate(
     mixing = 4 * _table(abs_lat, EDDY_DIFFUSIVITY) * dt / step_m**2
     substeps = max(1, int(np.ceil(float(mixing.max()) / 0.5)))
     mixing = mixing / substeps
-    shift = 8.0 * s.obliquity_deg / 23.4
-    seasons = (-shift, shift)  # southern, then northern summer
+    seasons = monsoon_shift(mesh, land, s)  # southern, then northern summer
     winds = [prevailing_wind(lat, s, season) for season in seasons]
     operators = [departure_operator(mesh, east, north, u, v, dt) for u, v in winds]
     continental = maritime_air(

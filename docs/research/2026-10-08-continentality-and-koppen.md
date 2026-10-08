@@ -28,6 +28,35 @@ Warm- and cold-half-year precipitation are mapped to each hemisphere's summer
 and winter and scaled with the annual total. This is what separates
 Mediterranean (summer-dry) from monsoon and savanna (winter-dry) climates.
 
+## Monsoons
+
+Over open ocean the ITCZ follows the sun only a few degrees. Summer heating of
+large low-latitude landmasses deepens a thermal low that pulls the rain belt
+and onshore winds far poleward (South Asia to about 25°N, the Sahel, northern
+Australia).
+
+- **Seasonal shift.** The shift of the wind and rain belts is now set per node:
+  the base 8° plus up to 10° more. The extra grows with the share of heatable
+  summer-hemisphere land (5–35° latitude) within about 1,500 km.
+- **Desert belt.** The subtropical dry belt moves poleward with it over the
+  continents.
+- **Aethelara at 800k nodes.**
+
+  | Köppen class or group | Before | After |
+  |---|---:|---:|
+  | Am (monsoon) | 1.7 % | 2.4 % |
+  | Aw (savanna) | 5.2 % | 6.0 % |
+  | Cwa (monsoon-influenced subtropical) | 0.5 % | 0.7 % |
+  | Cfa (humid subtropical) | 10.2 % | 13.4 % |
+  | B (arid) | 30.4 % | 27.4 % |
+  | Csa (Mediterranean) | 3.0 % | 2.4 % |
+
+  Arid land shrank as the desert belt moved poleward; Mediterranean climates
+  narrowed with it.
+- **Provenance.** The climate algorithm identifier is now `planet-climate-v5`.
+- **Test.** A synthetic northern subtropical continent pulls the northern-summer
+  belts at least 5° further poleward than open ocean at the same latitude.
+
 ## Köppen–Geiger classes
 
 `pipeline/planet_koppen.py` follows Kottek et al. 2006.
@@ -73,7 +102,7 @@ more maritime northern continents.
 
 - **Two seasons only.** Monthly values are a cosine fit to two seasons, so there
   are no two-peak rain regimes such as equatorial bimodal rains.
-- **Simplified monsoons.** The monsoon is the latitude shift of the rain belts
-  only; there is no thermal low over continents.
+- **Simplified monsoons.** Monsoons are a heating-weighted shift of the rain
+  belts; there is no explicit thermal low or onshore pressure gradient.
 - **Biomes and Köppen.** The Whittaker biome labels remain for ice detection and
   the biome summary; Köppen classes are the climate product to use.

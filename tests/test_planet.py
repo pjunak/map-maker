@@ -536,3 +536,19 @@ def test_air_is_more_continental_downwind_of_land() -> None:
     assert climate.continentality[east].mean() > climate.continentality[west].mean()
     span = climate.warm_c - climate.cold_c
     assert span[east].mean() > span[west].mean()
+
+
+def test_summer_rain_belts_reach_further_over_heated_subtropical_land() -> None:
+    from dmtools.terrain.domain.planet import PlanetClimateSettings
+    from dmtools.terrain.pipeline.planet_climate import monsoon_shift
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    mesh = build_mesh(20_000, RADIUS, 12)
+    lon = np.degrees(np.arctan2(mesh.xyz[:, 1], mesh.xyz[:, 0]))
+    lat = np.degrees(np.arcsin(mesh.xyz[:, 2]))
+    land = (np.abs(lon) < 50) & (lat > 5) & (lat < 40)  # a northern subtropical continent
+    south, north = monsoon_shift(mesh, land, PlanetClimateSettings())
+    over_land = land & (lat > 15) & (lat < 30)
+    open_ocean = (np.abs(lon) > 120) & (lat > 15) & (lat < 30)
+    assert north[over_land].mean() > north[open_ocean].mean() + 5
+    assert np.all(south <= 0) and np.all(north >= 0)
