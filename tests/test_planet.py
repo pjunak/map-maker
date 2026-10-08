@@ -375,3 +375,26 @@ def test_sea_floor_deepens_with_age_away_from_ridges_between_continents() -> Non
     flank = ocean & (np.abs(np.abs(mesh.xyz[:, 2]) - 0.3) < 0.05)
     assert np.median(depth[equator]) < np.median(depth[flank]) - 400
     assert np.all(depth[ocean] > 0) and np.all(depth[land] == 0)
+
+
+def test_plates_classify_boundaries_and_leading_edges_deterministically() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_tectonics import PLATE_COUNT, plate_tectonics
+
+    mesh = build_mesh(20_000, RADIUS, 7)
+    land = mesh.xyz[:, 0] > 0.3
+    coast = coast_distance(mesh, land)
+    first = plate_tectonics(mesh, land, coast, 11)
+    second = plate_tectonics(mesh, land, coast, 11)
+    assert np.array_equal(first.plate, second.plate)
+    assert np.array_equal(first.convergence, second.convergence)
+    assert 1 < len(np.unique(first.plate)) <= PLATE_COUNT
+    # Plates move at Earth-like rates (cm/yr), boundaries both open and close.
+    speed = np.hypot(first.velocity_east, first.velocity_north)
+    assert 0.001 < np.median(speed) < 0.15
+    near = first.boundary_m < 2 * mesh.spacing_m
+    assert first.convergence[near].max() > 0 > first.convergence[near].min()
+    # The signed across-strike distance flips sign across each boundary.
+    assert np.allclose(np.abs(first.across_m), first.boundary_m)
+    assert np.all((first.leading >= 0) & (first.leading <= 1))

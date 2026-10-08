@@ -128,8 +128,11 @@ SVG's size and it lies under your coastline drawing.
    example, young belts are high and sharp, 300 Ma belts are low and smooth,
    plateaus are uplifted late, and basins are soft and low. Uplift is re-scaled
    until each region's elevation statistic is close to its target. Without a
-   recipe, ranges, minor fold belts, hill country and active margins are placed
-   procedurally at scales from about 100 km to several thousand kilometres.
+   recipe, the world is split into 18 rotating tectonic plates. Ranges rise
+   where plates collide inside continents, rift valleys open where they pull
+   apart, and coasts on a plate's leading edge get coastal ranges and offshore
+   trenches. Older, lower ranges, fold belts and hill country fill in at scales
+   from about 100 km to several thousand kilometres.
    Ranges have Earth-like widths (great ranges 120–350 km, minor ones 40–120 km)
    and lengths. Some great ranges carry a high plateau behind them, and broad
    swells lift whole regions. Old shields erode slowly, so plateaus stay smooth

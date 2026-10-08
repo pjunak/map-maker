@@ -33,6 +33,7 @@ from dmtools.terrain.pipeline.planet_kernels import (
 )
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
 from dmtools.terrain.pipeline.world import WorldMap
 from dmtools.terrain.pipeline.world_geology import resolve_geology
 
@@ -82,6 +83,8 @@ FORELAND_DEPTH_M = 1500.0
 INTERMONTANE_DEPTH_M = 800.0
 ALLUVIAL_RELIEF = 0.04
 TRENCH_DEPTH_M = 3500.0
+RIFT_DEPTH_M = 900.0
+OLD_OROGEN_SHARE = 0.45
 HALF_SPREADING_M_PER_MYR = 40e3
 PLATE_CORE_KM2 = 2e6
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
@@ -218,19 +221,35 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     into a handful of huge, uniform plains and plateaus.
     """
     p = mesh.xyz
-    # Belts follow the zero lines of smooth noise, with explicit half-widths from
-    # Earth's ranges: great orogens 60-175 km (Himalaya 150-350 km wide, Andes
-    # ~200 km, Alps ~200 km), minor ranges and fold belts 20-60 km, broken into
-    # segments 1,000-3,000 km long instead of one continent-spanning network.
-    warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
-    major = fbm3(p + 0.35 * warp, seed + 101, 4, 1.4)
-    major_half = 50e3 + 80e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4)
-    # Signed distance across strike, positive towards the foreland side. Which
-    # side faces the foreland changes along strike, as it does between orogens.
-    across = signed_crest_distance(mesh, major) * np.sign(fbm3(p, seed + 191, 2, 1.0) + 1e-9)
-    segments = _smoothstep(fbm3(p, seed + 151, 3, 3.5), -0.15, 0.25)
+    # Great orogens rise where plates converge inside continents, with explicit
+    # half-widths from Earth's ranges (Himalaya 150-350 km wide, Andes ~200 km,
+    # Alps ~200 km) that grow with the closing rate. Minor ranges and fold belts
+    # (20-60 km) stay noise-placed: they stand for older, inactive sutures.
+    plates = plate_tectonics(mesh, land, coast_m, seed)
+    closing = plates.convergence
+    major_half = 50e3 + 80e3 * _smoothstep(closing, 0.01, 0.06)
+    # Signed distance across strike, positive on the foreland side.
+    across = plates.across_m
+    segments = _smoothstep(closing, 0.004, 0.02) * (
+        0.6 + 0.4 * _smoothstep(fbm3(p, seed + 151, 3, 3.5), -0.3, 0.3)
+    )
     inland_fade = _smoothstep(coast_m, 0.0, 150e3)
-    belts = orogen_profile(across, major_half, p, seed) * segments * inland_fade
+    active_belts = orogen_profile(across, major_half, p, seed) * segments * inland_fade
+    # Older orogens (Urals, Appalachians, Caledonides) mark sutures of plates long
+    # since welded: the same composite structure, lower and without active basins.
+    warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
+    old_field = fbm3(p + 0.35 * warp, seed + 101, 4, 1.4)
+    old_half = 40e3 + 60e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4)
+    old_across = signed_crest_distance(mesh, old_field) * np.sign(
+        fbm3(p, seed + 191, 2, 1.0) + 1e-9
+    )
+    old_belts = (
+        OLD_OROGEN_SHARE
+        * orogen_profile(old_across, old_half, p, seed + 7)
+        * _smoothstep(fbm3(p, seed + 152, 3, 3.5), -0.1, 0.3)
+        * inland_fade
+    )
+    belts = np.maximum(active_belts, old_belts)
     # A few great orogens carry a high plateau on their hinterland side (Tibet
     # 1,000 km wide, Altiplano 350-400 km).
     plateau = (
@@ -260,10 +279,17 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     hills = _smoothstep(hill_ridged, 0.65, 0.95) * _smoothstep(
         fbm3(p, seed + 222, 3, 3.5), -0.1, 0.4
     )
-    gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
-    # Active-margin ranges are 100-300 km wide (Andes, Coast Mountains) and vary
-    # along strike; a uniform coastal band erodes into a comb of identical valleys.
+    # Active-margin ranges (100-300 km wide: Andes, Coast Mountains) stand on
+    # plates' leading edges and vary along strike; a uniform coastal band erodes
+    # into a comb of identical valleys.
+    gate = _smoothstep(plates.leading, 0.15, 0.6)
     strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
+    # Divergent boundaries inside continents open rift valleys with raised
+    # shoulders (East Africa, Rhine Graben); the graben fills with sediment.
+    opening = _smoothstep(-closing, 0.004, 0.02) * inland_fade
+    rift_half = 25e3 + 20e3 * _smoothstep(-closing, 0.01, 0.04)
+    rift_floor = ridge_profile(np.abs(across), rift_half) * opening
+    rift_shoulders = ridge_profile(np.abs(np.abs(across) - 1.6 * rift_half), rift_half) * opening
     margins = (
         gate
         * (0.35 + 0.65 * strike)
@@ -284,6 +310,7 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         + MINOR_UPLIFT * minor
         + HILL_UPLIFT * hills
         + MARGIN_UPLIFT * margins
+        + MINOR_UPLIFT * rift_shoulders
     )
     active = np.clip(np.maximum(np.maximum(belts, minor), margins), 0.0, 1.0)
     # Lithology varies down to ~30 km; without it rivers run straight and parallel
@@ -293,6 +320,12 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     texture = (
         lithology
         * strike_lithology(across, major_half, orogen_zone, 3.0 * fbm3(p, seed + 272, 3, 8.0))
+        * strike_lithology(
+            old_across,
+            old_half,
+            ridge_profile(np.abs(old_across), 3.0 * old_half) * (old_belts > 0.05),
+            3.0 * fbm3(p, seed + 274, 3, 8.0),
+        )
         * (SHIELD_ERODIBILITY + (1 - SHIELD_ERODIBILITY) * active)
     )
     # Mountain loads flex the crust down in front of a range (foreland basins:
@@ -304,7 +337,8 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         (FORELAND_DEPTH_M * foreland + INTERMONTANE_DEPTH_M * intermontane)
         * segments
         * inland_fade
-        * (1 - belts)
+        * (1 - active_belts)
+        + RIFT_DEPTH_M * rift_floor
     )
     return ProceduralForcing(
         np.where(land, uplift, 0.0), texture, uplift_texture, np.where(land, basin_depth, 0.0)
@@ -519,7 +553,7 @@ def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
     # Rough young crust (abyssal hills, ridge flanks) smooths as sediment drapes it.
     hills = fbm3(p, seed + 909, 5, 6.0)
     depth -= blend * (120 + 280 * np.exp(-age_myr / 30)) * hills
-    gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
+    gate = _smoothstep(plate_tectonics(mesh, ~water, coast_m, seed).leading, 0.15, 0.6)
     strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
     active = _smoothstep(gate * (0.35 + 0.65 * strike), 0.45, 0.85)
     depth += TRENCH_DEPTH_M * active * np.exp(-(((coast_m - width - 110e3) / 45e3) ** 2))

@@ -9,6 +9,7 @@ mesh-independent moisture eddy diffusivity. [Earth-scale landforms](2026-10-07-e
 then gives ranges explicit Earth-like widths and smooth shields, and adds 3.2M-node builds with
 climate on coarser meshes. [Orogens, glaciers and speed](2026-10-08-orogens-glaciers-and-speed.md)
 adds composite orogens, a glacial buzzsaw and gate metrics, and halves build time.
+[Plate tectonics](2026-10-08-plate-tectonics-and-sediment.md) now places belts, rifts and margins.
 
 **2026-10-06 update:** the plan is world-first. An experimental
 [whole-planet erosion harness](2026-10-06-whole-planet-erosion-relief.md) evolves

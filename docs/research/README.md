@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Plate tectonics and sediment — 2026-10-08](2026-10-08-plate-tectonics-and-sediment.md)
+  places collision belts, rifts, active margins and trenches from 18 rotating plates, with
+  old orogens kept as welded sutures.
+
 - [Orogens, glaciers and speed — 2026-10-08](2026-10-08-orogens-glaciers-and-speed.md)
   surveys methods (analytic stream power, deposition, tectonics, climate, cartographic
   shading). It adds composite orogens with strike-aligned rock, a glacial buzzsaw,

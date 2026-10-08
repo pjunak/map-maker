@@ -104,6 +104,7 @@ Update them with the affected milestone and evidence in every substantive batch.
     ([evidence](docs/research/2026-10-08-orogens-glaciers-and-speed.md)).
   - [x] Foreland and intermontane basins filled to spill level (geometric flexure).
   - [x] Ocean floor from sea-floor age: mid-ocean ridges between continents, trenches.
+  - [x] Plate tectonics: collision belts, rifts, leading-edge margins and trenches.
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.
