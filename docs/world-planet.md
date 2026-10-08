@@ -106,7 +106,7 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `atlas.png` | Natural-colour shaded relief: vegetation from dryness and temperature, rock, snow, depth-tinted sea, lakes and rivers (needs climate). |
 | `relief.png` | Hypsometric shaded relief with rivers. |
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
-| `elevation.tif` | Float32 elevation (land and display ocean floor) in metres, on a geographic CRS for your world's sphere radius. |
+| `elevation.tif` | Float32 elevation in metres (land, and an ocean floor with mid-ocean ridges, sea-floor ageing and trenches), on a geographic CRS for your world's sphere radius. |
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
 | `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields. |

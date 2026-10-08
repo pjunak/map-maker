@@ -151,6 +151,34 @@ A conserving sediment model with flexure would replace this geometric
 imposition later. It already gives the right landform: flat, well-drained
 lowlands along ranges, with the occasional long lake in an intermontane trough.
 
+## Plate-aware ocean floor (fourth batch)
+
+The old abyss was a fixed profile from the coast plus random noise ridges. It is
+replaced by sea-floor age.
+
+- **Ridge placement.** Each large landmass (at least 2 M km²) claims its nearest
+  ocean. Ridges lie on the boundaries between those claims, as the Mid-Atlantic
+  Ridge does between the Americas and Africa/Europe.
+  - **Shape.** The distance metric is warped with noise, so ridge axes bend and
+    step instead of tracing Voronoi arcs.
+  - **Age.** Crust age is distance from the ridge divided by a half spreading
+    rate of 40 km/Myr (fast, East Pacific Rise-like). This gives broad swells.
+- **Depth** follows GDH1 (Stein & Stein 1992):
+  - **Young crust (t < 20 Myr):** d = 2600 + 365 √t, with the crest smoothed
+    over about 2 Myr.
+  - **Older crust:** d = 5651 − 2473 e^(−0.0278 t).
+  - **Rough floor.** Abyssal-hill roughness is larger on young crust.
+- **Trenches.** Up to 3.5 km extra depth, 110 km beyond the shelf, only where
+  the active-margin noise that raises coastal ranges is strong. They no longer
+  ring every coast.
+- **Effect.** Ocean depths have 5th / 50th / 95th percentiles of
+  about 0.1 / 4.3 / 5.4 km. Ridges read as faint lighter bands winding between
+  the continents, as on satellite bathymetry.
+- **Provenance.** The relief algorithm identifier is now
+  `sphere-mesh-stream-power-v6`.
+- **Test.** A synthetic two-continent world checks that the floor midway between
+  them is shallower than its flanks.
+
 ## River counts measured like a gazetteer
 
 Earth's 230–250 rivers longer than 1,000 km (Grill et al. 2019) include major

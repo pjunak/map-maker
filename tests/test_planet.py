@@ -359,3 +359,19 @@ def test_flexural_basins_fill_to_well_drained_plains() -> None:
     assert filled[basin].std() < h[basin].std()  # the basin floor is smoother
     # Outside basins the surface is only raised where closed pits are filled.
     assert np.all(filled[outside] >= h[outside] - 1e-9)
+
+
+def test_sea_floor_deepens_with_age_away_from_ridges_between_continents() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance, ocean_floor
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    mesh = build_mesh(20_000, RADIUS, 6)
+    # Two large polar caps of land with an ocean between them.
+    land = np.abs(mesh.xyz[:, 2]) > 0.6
+    coast = coast_distance(mesh, land)
+    depth = -ocean_floor(mesh, coast, ~land, 3)
+    ocean = ~land
+    equator = ocean & (np.abs(mesh.xyz[:, 2]) < 0.05)  # the ridge, midway between them
+    flank = ocean & (np.abs(np.abs(mesh.xyz[:, 2]) - 0.3) < 0.05)
+    assert np.median(depth[equator]) < np.median(depth[flank]) - 400
+    assert np.all(depth[ocean] > 0) and np.all(depth[land] == 0)

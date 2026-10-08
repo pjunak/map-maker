@@ -367,3 +367,33 @@ def downstream_order(receiver: I64, water: B) -> I64:
             size += 1
     return order[:size]
 
+
+
+@njit(cache=True)
+def multi_source_nearest(
+    seeds: I64, labels: I64, ptr: I64, nbr: I64, length: F64
+) -> tuple[F64, I64]:
+    """Dijkstra distance (m) to the nearest seed and that seed's label."""
+    n = ptr.size - 1
+    dist = np.full(n, np.inf)
+    owner = np.full(n, -1, np.int64)
+    heap = [(0.0, np.int64(0))]
+    heap.pop()
+    for s in range(seeds.size):
+        i = seeds[s]
+        if dist[i] > 0.0:
+            dist[i] = 0.0
+            owner[i] = labels[s]
+            heapq.heappush(heap, (0.0, i))
+    while heap:
+        d, c = heapq.heappop(heap)
+        if d > dist[c]:
+            continue
+        for k in range(ptr[c], ptr[c + 1]):
+            j = nbr[k]
+            nd = d + length[k]
+            if nd < dist[j]:
+                dist[j] = nd
+                owner[j] = owner[c]
+                heapq.heappush(heap, (nd, j))
+    return dist, owner

@@ -17,6 +17,8 @@ from math import exp
 import numpy as np
 import shapely
 from numpy.typing import NDArray
+from scipy.sparse import coo_matrix
+from scipy.sparse.csgraph import connected_components
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
@@ -24,7 +26,11 @@ from dmtools.terrain.domain.models import LandformSettings
 from dmtools.terrain.domain.world import WorldFrame
 from dmtools.terrain.domain.world_geology import GeologyProfile, WorldGeologyRecipe
 from dmtools.terrain.pipeline.planet_climate import surface_gradient, tangent_frame
-from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, priority_flood
+from dmtools.terrain.pipeline.planet_kernels import (
+    multi_source_distance,
+    multi_source_nearest,
+    priority_flood,
+)
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.world import WorldMap
@@ -75,6 +81,9 @@ FOLD_WAVELENGTH_M = 45e3
 FORELAND_DEPTH_M = 1500.0
 INTERMONTANE_DEPTH_M = 800.0
 ALLUVIAL_RELIEF = 0.04
+TRENCH_DEPTH_M = 3500.0
+HALF_SPREADING_M_PER_MYR = 40e3
+PLATE_CORE_KM2 = 2e6
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
 
 
@@ -485,19 +494,68 @@ def measure_regions(h: F64, regions: GeologyRegions) -> tuple[float | None, ...]
 
 
 def ocean_floor(mesh: SphereMesh, coast_m: F64, water: B, seed: int) -> F64:
-    """Display bathymetry (m, negative).
+    """Display bathymetry (m, negative) from continental margins and plate age.
 
-    A continental shelf whose width varies along the coast (about 10-260 km), a
-    sharp shelf break onto a steep slope, a continental rise into abyssal plains,
-    and broad mid-ocean ridges and swells. A uniform shelf would draw an
-    identical halo around every coast.
+    Near land: a shelf whose width varies along the coast (about 10-260 km), a
+    sharp shelf break and a steep slope. Offshore the floor follows sea-floor age
+    (Stein and Stein 1992, GDH1): mid-ocean ridges lie where the oceans of two
+    continents meet (like the Mid-Atlantic Ridge), crust ages with distance from
+    them at a half spreading rate, and depth grows from ~2.6 km at the ridge to
+    ~5.6 km on old floor. Trenches follow the active margins whose coastal
+    ranges the forcing raises.
     """
-    width = 10e3 + 250e3 * _smoothstep(fbm3(mesh.xyz, seed + 707, 4, 14.0), -0.3, 0.4) ** 1.5
-    shelf = 20 + 120 * _smoothstep(coast_m, 0, width)
-    slope = 3200 * _smoothstep(coast_m, width, width + 90e3)
-    rise = 1000 * _smoothstep(coast_m, width + 90e3, width + 900e3)
-    ridge = 1 - np.abs(fbm3(mesh.xyz, seed + 808, 3, 1.0))
-    abyss = _smoothstep(coast_m, width + 300e3, width + 900e3)
-    hills = fbm3(mesh.xyz, seed + 909, 5, 6.0)
-    swell = abyss * (1300 * _smoothstep(ridge, 0.72, 0.97) - 250 * hills)
-    return np.where(water, -(shelf + slope + rise - swell), 0.0)
+    p = mesh.xyz
+    width = 10e3 + 250e3 * _smoothstep(fbm3(p, seed + 707, 4, 14.0), -0.3, 0.4) ** 1.5
+    margin = 20 + 120 * _smoothstep(coast_m, 0, width) + 3200 * _smoothstep(
+        coast_m, width, width + 90e3
+    )
+    age_myr = sea_floor_age_myr(mesh, ~water)
+    # The ridge crest is a broad swell, not a cusp: smooth age over ~2 Myr.
+    young = 2600 + 365 * np.sqrt(np.sqrt(age_myr**2 + 4.0) - 2.0)
+    old = 5651 - 2473 * np.exp(-0.0278 * age_myr)
+    abyss = np.where(age_myr < 20, young, old)
+    blend = _smoothstep(coast_m, width + 90e3, width + 700e3)
+    depth = (1 - blend) * margin + blend * abyss
+    # Rough young crust (abyssal hills, ridge flanks) smooths as sediment drapes it.
+    hills = fbm3(p, seed + 909, 5, 6.0)
+    depth -= blend * (120 + 280 * np.exp(-age_myr / 30)) * hills
+    gate = _smoothstep(fbm3(p, seed + 202, 3, 1.1), 0.05, 0.35)
+    strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
+    active = _smoothstep(gate * (0.35 + 0.65 * strike), 0.45, 0.85)
+    depth += TRENCH_DEPTH_M * active * np.exp(-(((coast_m - width - 110e3) / 45e3) ** 2))
+    return np.where(water, -depth, 0.0)
+
+
+def sea_floor_age_myr(mesh: SphereMesh, land: B) -> F64:
+    """Approximate sea-floor age: distance from the nearest ridge / half spreading rate.
+
+    Ridges are placed on the boundaries between the oceans nearest to each large
+    landmass (continents >= PLATE_CORE_KM2). With a single continent there are no
+    ridges and all floor is old.
+    """
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    keep = land[src] & land[mesh.nbr]
+    graph = coo_matrix(
+        (np.ones(int(keep.sum())), (src[keep], mesh.nbr[keep])), shape=(mesh.size, mesh.size)
+    )
+    _, component = connected_components(graph, directed=False)
+    area = np.bincount(component[land], mesh.area_m2[land], int(component.max()) + 1)
+    core = land & (area[component] >= PLATE_CORE_KM2 * 1e6)
+    seeds = np.flatnonzero(core)
+    if len(np.unique(component[seeds])) < 2:
+        return np.full(mesh.size, 200.0)
+    # A noisy metric bends and segments the ridge axes; equidistance lines on a
+    # plain metric are smooth arcs unlike Earth's offset, zig-zag ridges.
+    middle = 0.5 * (mesh.xyz[src] + mesh.xyz[mesh.nbr])
+    warped = mesh.length_m * np.exp(0.6 * fbm3(middle, 4242, 4, 6.0))
+    _, owner = multi_source_nearest(
+        seeds, component[seeds].astype(np.int64), mesh.ptr, mesh.nbr, warped
+    )
+    boundary = ~land[src] & ~land[mesh.nbr] & (owner[src] != owner[mesh.nbr])
+    ridge = np.unique(src[boundary])
+    distance = multi_source_distance(
+        ridge, np.zeros(ridge.size), mesh.ptr, mesh.nbr, mesh.length_m
+    )
+    return distance / HALF_SPREADING_M_PER_MYR
+
+
