@@ -434,3 +434,51 @@ def draining_to(receiver: I64, water: B, sinks: I64) -> B:
                 stack[size] = donor
                 size += 1
     return inside
+
+
+@njit(cache=True)
+def erosion_step(
+    h: F64,
+    order: I64,
+    receiver: I64,
+    distance: F64,
+    water: B,
+    area: F64,
+    process_area: float,
+    erodibility: F64,
+    m: float,
+    uplift: F64,
+    dt: float,
+    snowline: F64,
+    glacial: tuple[float, float, float],
+    base: F64,
+    floor: float,
+) -> F64:
+    """One fused implicit stream-power step (Braun and Willett 2013, n = 1).
+
+    Drainage area includes the process area; erodibility rises above the
+    ``snowline`` (empty to disable) as 1 + boost * (z - ELA) / scale, capped.
+    Fixed (water) nodes take ``base``; land stays at least ``floor``.
+    """
+    boost, scale, cap = glacial
+    glaciers = snowline.size > 0
+    out = h.copy()
+    for idx in range(order.size):
+        i = order[idx]
+        r = receiver[i]
+        if r < 0:
+            out[i] = h[i] + dt * uplift[i]
+            continue
+        k = erodibility[i]
+        if glaciers:
+            above = (h[i] - snowline[i]) / scale
+            if above > 0.0:
+                k *= min(1.0 + boost * above, cap)
+        f = dt * k * (area[i] + process_area) ** m / distance[i]
+        out[i] = (h[i] + dt * uplift[i] + f * out[r]) / (1 + f)
+    for i in range(h.size):
+        if water[i]:
+            out[i] = base[i]
+        elif out[i] < floor:
+            out[i] = floor
+    return out

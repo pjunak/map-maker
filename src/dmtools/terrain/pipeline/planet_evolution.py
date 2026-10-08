@@ -24,9 +24,9 @@ from dmtools.terrain.pipeline.planet_kernels import (
     accumulate,
     downstream_order,
     draining_to,
+    erosion_step,
     priority_flood,
     steepest_receivers,
-    stream_power_implicit,
 )
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 
@@ -115,22 +115,18 @@ def evolve(
     h = np.where(water, base, np.maximum(initial, LAND_FLOOR_M))
     pulse_from = round(steps * (1 - PLATEAU_PULSE_FRACTION))
     pulsed = forcing.steady_uplift + forcing.pulse_uplift
+    glaciers = np.zeros(0) if snowline_m is None else np.ascontiguousarray(snowline_m)
     change = 0.0
     for step in range(steps):
         check_cancelled(cancellation)
         state = route(mesh, h, water, runoff, inflow_m2)
         before = state.filled
-        erodibility = forcing.erodibility
-        if snowline_m is not None:
-            above = np.clip((before - snowline_m) / GLACIAL_SCALE_M, 0.0, None)
-            erodibility = erodibility * np.minimum(1 + GLACIAL_BOOST * above, GLACIAL_CAP)
         uplift = forcing.steady_uplift if step < pulse_from else pulsed
-        flux = state.area_m2 + process_area_m2
-        h = stream_power_implicit(
-            before, state.order, state.receiver, state.distance_m, water, flux,
-            erodibility, area_exponent, uplift, step_yr,
+        h = erosion_step(
+            before, state.order, state.receiver, state.distance_m, water, state.area_m2,
+            process_area_m2, forcing.erodibility, area_exponent, uplift, step_yr,
+            glaciers, (GLACIAL_BOOST, GLACIAL_SCALE_M, GLACIAL_CAP), base, LAND_FLOOR_M,
         )
-        h = np.where(water, base, np.maximum(h, LAND_FLOOR_M))
         if step == steps - 1:
             change = float(np.mean(np.abs(h[~water] - before[~water]))) / step_yr
         if on_step is not None:
