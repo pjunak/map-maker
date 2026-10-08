@@ -23,6 +23,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
 from dmtools.terrain.pipeline.planet_kernels import (
     accumulate,
     downstream_order,
+    draining_to,
     priority_flood,
     steepest_receivers,
     stream_power_implicit,
@@ -70,8 +71,12 @@ def route(
         h, water, mesh.ptr, mesh.nbr, mesh.length_m, np.full(mesh.size, -1, np.int64)
     )
     filled = h
-    if np.any(~water & (receiver < 0)):
-        filled, parent = priority_flood(h, water, mesh.ptr, mesh.nbr, FILL_EPS_M)
+    pits = np.flatnonzero(~water & (receiver < 0))
+    if len(pits):
+        # Fill only the catchments that drain into pits, seeded from their
+        # well-drained rims: the rest of the land already reaches the sea.
+        trapped = draining_to(receiver, water, pits)
+        filled, parent = priority_flood(h, ~trapped, mesh.ptr, mesh.nbr, FILL_EPS_M)
         receiver, distance = steepest_receivers(
             filled, water, mesh.ptr, mesh.nbr, mesh.length_m, parent
         )

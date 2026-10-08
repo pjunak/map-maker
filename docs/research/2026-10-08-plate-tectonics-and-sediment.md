@@ -85,6 +85,26 @@ the relief, so forests and grassland formed blobs that crossed ridges.
 - **Result.** Forest now grows in dendritic patterns up the valleys and ridges
   read as open country, as on satellite imagery of humid hill country.
 
+## Speed: local depression filling
+
+A profile of a full 3.2M build showed flow routing at 177 of 332 s, almost all of
+it in the global Priority-Flood on steps that still had pits.
+
+- **Localised fill.**
+  - **Method.** Only catchments that drain into pits need filling. They are found
+    by walking up the receiver tree from the pits (`draining_to`), and
+    Priority-Flood then runs on them alone, seeded from their well-drained rims.
+  - **Accuracy.** Results match the global fill to within 1 µm.
+- **Parallel receivers.** The steepest-descent receiver kernel now runs in
+  parallel.
+- **Result.** Routing went from 177 s to 76 s, and a full 3.2M build with two
+  climate passes from about 5 to about 4 minutes.
+- **Remaining costs** (3.2M build):
+  - mesh construction, about 20 s per mesh;
+  - per-step array arithmetic in `evolve`, about 35 s;
+  - climate, about 30 s;
+  - plate tectonics, computed four times, about 18 s.
+
 ## Limits
 
 - **Ridges.** Mid-ocean ridges still come from the boundaries between the

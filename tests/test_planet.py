@@ -411,3 +411,13 @@ def test_big_river_mouths_build_wider_shelves() -> None:
     assert 250e3 < big <= 350e3 and 10e3 < small < 40e3
     distance = np.arccos(np.clip(mesh.xyz @ mesh.xyz[mouths].T, -1, 1)) * RADIUS
     assert np.all(width[np.all(distance > 800e3, axis=1)] == 0)
+
+
+def test_pit_catchments_are_found_from_receivers() -> None:
+    from dmtools.terrain.pipeline.planet_kernels import draining_to
+
+    # 0 <- 1 <- 2 (pit chain), 3 -> 4 -> sea (5)
+    receiver = np.array([-1, 0, 1, 4, 5, -1], dtype=np.int64)
+    water = np.array([False, False, False, False, False, True])
+    trapped = draining_to(receiver, water, np.array([0], dtype=np.int64))
+    assert trapped.tolist() == [True, True, True, False, False, False]

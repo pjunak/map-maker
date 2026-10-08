@@ -82,7 +82,7 @@ Typical times on a 16-thread desktop:
 |---|---:|
 | 100k nodes, geology and one climate pass | about 50 s |
 | 800k nodes, two climate passes | about 1.5 min |
-| 3.2M nodes, two climate passes | about 5 min |
+| 3.2M nodes, two climate passes | about 4 min |
 
 Regional detail for an exported planet:
 

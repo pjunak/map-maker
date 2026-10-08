@@ -65,7 +65,7 @@ def priority_flood(h: F64, water: B, ptr: I64, nbr: I64, eps: float) -> tuple[F6
     return filled, parent
 
 
-@njit(cache=True)
+@njit(cache=True, parallel=True)
 def steepest_receivers(
     z: F64, water: B, ptr: I64, nbr: I64, length: F64, parent: I64
 ) -> tuple[I64, F64]:
@@ -73,7 +73,7 @@ def steepest_receivers(
     n = z.size
     receiver = np.full(n, -1, np.int64)
     distance = np.zeros(n)
-    for i in range(n):
+    for i in prange(n):
         if water[i]:
             continue
         best = 0.0
@@ -397,3 +397,40 @@ def multi_source_nearest(
                 owner[j] = owner[c]
                 heapq.heappush(heap, (nd, j))
     return dist, owner
+
+
+@njit(cache=True)
+def draining_to(receiver: I64, water: B, sinks: I64) -> B:
+    """Land nodes whose steepest-descent path ends at one of ``sinks`` (pits)."""
+    n = receiver.size
+    count = np.zeros(n + 1, np.int64)
+    for i in range(n):
+        r = receiver[i]
+        if not water[i] and r >= 0:
+            count[r + 1] += 1
+    for i in range(n):
+        count[i + 1] += count[i]
+    donors = np.empty(count[n], np.int64)
+    fill = count[:n].copy()
+    for i in range(n):
+        r = receiver[i]
+        if not water[i] and r >= 0:
+            donors[fill[r]] = i
+            fill[r] += 1
+    inside = np.zeros(n, np.bool_)
+    stack = np.empty(n, np.int64)
+    size = 0
+    for s in range(sinks.size):
+        inside[sinks[s]] = True
+        stack[size] = sinks[s]
+        size += 1
+    while size:
+        size -= 1
+        node = stack[size]
+        for k in range(count[node], count[node + 1]):
+            donor = donors[k]
+            if not inside[donor]:
+                inside[donor] = True
+                stack[size] = donor
+                size += 1
+    return inside
