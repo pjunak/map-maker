@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Continentality and Köppen zones — 2026-10-08](2026-10-08-continentality-and-koppen.md)
+  carries maritime air downwind for seasonal ranges, keeps seasonal rainfall and classifies
+  Köppen–Geiger zones (new climate-zones layer); vegetation follows growing-season water.
+
 - [Volcanism — 2026-10-08](2026-10-08-volcanism.md) places arc, hotspot, rift and intraplate
   volcanoes from the plate model, draws cones, calderas and seamount chains sharply, and
   exports a volcano gazetteer.

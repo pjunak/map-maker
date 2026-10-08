@@ -283,6 +283,9 @@ class PixelClimate:
     warm_season_c: F64
     precipitation_mm: F64
     pet_mm: F64
+    # Warm-half-year rate (mm/yr): vegetation follows growing-season water, so
+    # summer-dry Mediterranean land browns and summer-wet monsoon land greens.
+    growing_mm: F64 | None = None
 
 
 def land_colour(
@@ -321,8 +324,13 @@ def land_colour(
         if position is None
         else -TERRAIN_MOISTURE * position - 0.8 * _smooth(slope, 0.1, 0.5)
     )
-    aridity = (
+    water = (
         climate.precipitation_mm
+        if climate.growing_mm is None
+        else 0.45 * climate.precipitation_mm + 0.55 * climate.growing_mm
+    )
+    aridity = (
+        water
         / np.maximum(climate.pet_mm, 1.0)
         * np.exp(0.45 * patch + 0.3 * fine + terrain)
     )
@@ -380,6 +388,7 @@ def natural_colour(
         raster.interpolate(mesh, climate.warm_c) - lapse * lift,
         raster.interpolate(mesh, climate.precipitation_mm),
         raster.interpolate(mesh, climate.pet_mm),
+        raster.interpolate(mesh, climate.precip_warm_mm),
     )
     return land_colour(
         raster.queries,

@@ -37,6 +37,7 @@ from dmtools.terrain.domain.planet import PLANET_CLIMATE_ALGORITHM, PLANET_RELIE
 from dmtools.terrain.domain.seeds import SEED_POLICY_ID
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_climate import BIOMES
+from dmtools.terrain.pipeline.planet_koppen import KOPPEN, koppen_group_share
 from dmtools.terrain.pipeline.planet_mesh import sample_field
 from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, SEAMOUNT
 from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
@@ -48,6 +49,7 @@ PREVIEW_FILES = {
     "Planet relief": "relief.png",
     "Planet rainfall": "precipitation.png",
     "Planet temperature": "temperature.png",
+    "Planet climate zones": "koppen.png",
 }
 PLANET_BUILD_VERSION = 1
 MAX_RIVER_FEATURES = 200_000
@@ -284,6 +286,10 @@ def write_planet_build(
             "biome": climate.biome.astype("i1"),
             "wind_east_m_s": climate.wind_east.astype("<f4"),
             "wind_north_m_s": climate.wind_north.astype("<f4"),
+            "continentality": climate.continentality.astype("<f4"),
+            "precipitation_warm_half_mm": climate.precip_warm_mm.astype("<f4"),
+            "precipitation_cold_half_mm": climate.precip_cold_mm.astype("<f4"),
+            "koppen": climate.koppen.astype("i1"),
         }
     with (target / "planet.npz").open("xb") as stream:
         np.savez_compressed(stream, allow_pickle=False, **arrays)
@@ -410,4 +416,12 @@ def _climate_summary(result: PlanetResult) -> dict[str, object]:
             for k, name in enumerate(BIOMES)
             if k > 0
         },
+        "koppen_share": {
+            name: round(float(weight[climate.koppen == k].sum() / total), 4)
+            for k, name in enumerate(KOPPEN)
+            if k > 0 and np.any(result.land & (climate.koppen == k))
+        },
+        "koppen_group_share": koppen_group_share(
+            climate.koppen[result.land], result.mesh.area_m2[result.land]
+        ),
     }

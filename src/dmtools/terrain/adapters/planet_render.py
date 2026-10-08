@@ -22,6 +22,7 @@ from shapely.geometry import Polygon, mapping
 from dmtools.terrain.domain.world import WorldFrame
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
+from dmtools.terrain.pipeline.planet_koppen import KOPPEN_COLOURS
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, vertex_triangles
 from dmtools.terrain.pipeline.world import WorldMap
 
@@ -136,7 +137,13 @@ def river_threshold_m3_s(result: PlanetResult, area_km2: float) -> float:
     return area_km2 * 1e6 * runoff_mm / 1000 / SECONDS_PER_YEAR
 
 
-PREVIEW_LAYERS = ("Planet atlas", "Planet relief", "Planet rainfall", "Planet temperature")
+PREVIEW_LAYERS = (
+    "Planet atlas",
+    "Planet relief",
+    "Planet climate zones",
+    "Planet rainfall",
+    "Planet temperature",
+)
 RAIN_COLOURS = ((150, 90, 40), (230, 210, 140), (120, 190, 90), (30, 120, 160), (20, 40, 140))
 TEMPERATURE_COLOURS = (
     (60, 40, 160), (90, 160, 220), (240, 240, 200), (240, 160, 60), (180, 40, 30)
@@ -173,4 +180,13 @@ def climate_images(result: PlanetResult, rasters: PlanetRasters) -> dict[str, Im
             raster.interpolate(mesh, climate.temperature_c), land_px, -25.0, 30.0,
             TEMPERATURE_COLOURS,
         ),
+        "Planet climate zones": koppen_image(climate.koppen, raster, land_px),
     }
+
+
+def koppen_image(koppen: NDArray[np.int8], raster: FrameRaster, land_px: B) -> Image.Image:
+    """Koppen-Geiger classes in their standard map colours (categorical: nearest node)."""
+    palette = np.asarray(KOPPEN_COLOURS, dtype=np.uint8)
+    classes = koppen[raster.nearest].reshape(raster.shape)
+    rgb = palette[np.where(land_px, classes, 0)]
+    return Image.fromarray(rgb)

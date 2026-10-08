@@ -66,6 +66,7 @@ class RegionalParent:
     basin_depth_m: F64 | None = None  # sediment-filled flexural basins (deposition zones)
     volcanic_m: F64 | None = None  # edifice height the mesh carries from volcanoes
     volcanoes: Volcanoes | None = None
+    precip_warm_mm: F64 | None = None  # warm-half-year precipitation rate
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:
@@ -84,6 +85,7 @@ class RegionalParent:
             result.forcing.basin_depth_m,
             result.volcanic_m,
             result.volcanoes,
+            None if climate is None else climate.precip_warm_mm,
         )
 
     def sample(self, xyz: F64, values: F64) -> F64:

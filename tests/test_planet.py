@@ -493,3 +493,46 @@ def test_flood_basalts_cover_land_at_the_old_end_of_a_hotspot_track() -> None:
     assert np.all((cover >= 0) & (cover <= 1))
     # Each province is at most a few times the nominal radius across.
     assert mesh.area_m2[cover > 0.5].sum() < len(plates.plumes) * np.pi * (1.5 * TRAP_RADIUS_M) ** 2
+
+
+def test_koppen_classes_follow_the_standard_rules() -> None:
+    from dmtools.terrain.pipeline.planet_koppen import KOPPEN, classify_koppen
+
+    def one(mean: float, warm: float, cold: float, p_warm: float, p_cold: float) -> str:
+        def a(v: float) -> np.ndarray:
+            return np.array([v])
+
+        classes = classify_koppen(a(mean), a(warm), a(cold), a(p_warm), a(p_cold), np.array([True]))
+        return KOPPEN[int(classes[0])]
+
+    assert one(26, 28, 24, 2600, 2400) == "Af"  # rainforest
+    assert one(27, 32, 20, 2200, 100) == "Aw"  # savanna, dry winter
+    assert one(24, 34, 12, 60, 40) == "BWh"  # hot desert
+    assert one(16, 24, 9, 60, 1100) == "Csa"  # Mediterranean, dry summer
+    assert one(9, 17, 2, 900, 800) == "Cfb"  # oceanic
+    assert one(-4, 16, -24, 700, 300) == "Dfc"  # boreal
+    assert one(-12, 4, -28, 300, 200) == "ET"  # tundra
+    assert one(-30, -8, -45, 100, 100) == "EF"  # ice cap
+
+
+def test_air_is_more_continental_downwind_of_land() -> None:
+    from dmtools.terrain.domain.planet import PlanetClimateSettings
+    from dmtools.terrain.pipeline.planet_climate import simulate_climate
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    mesh = build_mesh(20_000, RADIUS, 11)
+    lon = np.degrees(np.arctan2(mesh.xyz[:, 1], mesh.xyz[:, 0]))
+    lat = np.degrees(np.arcsin(mesh.xyz[:, 2]))
+    # A mid-latitude continent under the westerlies.
+    land = (np.abs(lon) < 40) & (lat > 35) & (lat < 60)
+    coast = coast_distance(mesh, land)
+    climate = simulate_climate(
+        mesh, np.where(land, 200.0, 0.0), land, coast, PlanetClimateSettings(), steps=200
+    )
+    near_coast = land & (coast < 400e3) & (lat > 42) & (lat < 53)
+    west = near_coast & (lon < -25)
+    east = near_coast & (lon > 25)
+    assert climate.continentality[east].mean() > climate.continentality[west].mean()
+    span = climate.warm_c - climate.cold_c
+    assert span[east].mean() > span[west].mean()

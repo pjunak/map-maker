@@ -36,6 +36,7 @@ from scipy.spatial import KDTree
 from dmtools.terrain.domain.planet import PlanetClimateSettings
 from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
 from dmtools.terrain.pipeline.planet_kernels import neighbour_mix
+from dmtools.terrain.pipeline.planet_koppen import classify_koppen
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, sample_field, vertex_triangles
 
 type F64 = NDArray[np.float64]
@@ -73,6 +74,9 @@ CURRENT_REACH_M = 700e3
 COAST_INFLUENCE_M = 250e3
 # Share of large-scale rain suppressed under the subsiding air of a full cold anomaly.
 COLD_CURRENT_SUBSIDENCE = 0.85
+# Land travel over which air loses its marine character (e-folding, m).
+MARITIME_DECAY_M = 900e3
+MARITIME_TRAVEL_M = 8e6
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +90,10 @@ class Climate:
     pet_mm: F64
     runoff_mm: F64
     biome: I8
+    continentality: F64  # 0 maritime .. 1 continental air (downwind distance from the sea)
+    precip_warm_mm: F64  # warm-half-year rate (mm/yr)
+    precip_cold_mm: F64  # cold-half-year rate (mm/yr)
+    koppen: I8  # index into planet_koppen.KOPPEN
 
 
 BIOMES = (
@@ -137,11 +145,23 @@ def _smooth(x: F64, a: float, b: float) -> F64:
 
 
 def temperatures(
-    mesh: SphereMesh, elevation: F64, land: B, coast_m: F64, s: PlanetClimateSettings
+    mesh: SphereMesh,
+    elevation: F64,
+    land: B,
+    coast_m: F64,
+    s: PlanetClimateSettings,
+    continental: F64 | None = None,
 ) -> tuple[F64, F64, F64]:
+    """Annual mean, warmest- and coldest-month temperature (deg C).
+
+    ``continental`` (0..1) sets how continental the air is; without it, the
+    distance from the coast stands in for it.
+    """
     lat = mesh.lat
     lapse = np.where(land, s.lapse_c_per_km * np.maximum(elevation, 0) / 1000, 0.0)
-    continental = np.where(land, np.clip(coast_m / 1.5e6, 0, 1), 0.0)
+    if continental is None:
+        continental = np.clip(coast_m / 1.5e6, 0, 1)
+    continental = np.where(land, continental, 0.0)
     mean = (
         sea_temperature(lat, s)
         + boundary_currents(mesh, land, coast_m)
@@ -153,6 +173,36 @@ def temperatures(
         0.35 + 0.65 * continental
     )
     return mean, mean + half_range, mean - half_range
+
+
+def maritime_air(
+    mesh: SphereMesh,
+    land: B,
+    coast_m: F64,
+    advect: list[csr_matrix],
+    mixing: F64,
+    substeps: int,
+    steps: int,
+) -> F64:
+    """Continentality (0..1): how far air has travelled over land, downwind.
+
+    Air leaves the sea maritime and loses its marine character over about
+    MARITIME_DECAY_M of land travel. West coasts under the westerlies stay mild
+    (Bergen, Vancouver); east coasts at the same latitude get continental air
+    from the interior (Halifax, Vladivostok). Sea breezes keep a thin strip
+    along every coast partly maritime.
+    """
+    decay = np.where(land, np.exp(-mesh.spacing_m / MARITIME_DECAY_M), 1.0)
+    result = np.zeros(mesh.size)
+    for operator in advect:
+        m = np.where(land, 0.0, 1.0)
+        for _ in range(steps):
+            m = operator @ m
+            m = neighbour_mix(m, mesh.ptr, mesh.nbr, mixing, substeps)
+            m = np.where(land, m * decay, 1.0)
+        result += m / len(advect)
+    breeze = 0.5 * np.exp(-np.maximum(coast_m, 0.0) / 150e3)
+    return np.where(land, 1.0 - np.maximum(result, breeze), 0.0)
 
 
 def snowline_m(
@@ -267,36 +317,41 @@ def simulate_climate(
     s = settings or PlanetClimateSettings()
     lat = mesh.lat
     abs_lat = np.abs(np.rad2deg(lat))
-    temp, warm, cold = temperatures(mesh, elevation, land, coast_m, s)
-    # Air over cold currents subsides and is stable: coastal fog, little rain
-    # (Atacama, Namib, Baja California).
-    stable = np.clip(-boundary_currents(mesh, land, coast_m) / COLD_CURRENT_C, 0, 1)
     east, north = tangent_frame(mesh.xyz)
     step_m = mesh.spacing_m
     dt = step_m / max(s.wind_speed_m_s, 1e-6)
-    cap = capacity(temp)
-    ground = np.where(land, np.maximum(elevation, 0), 0.0)
-    grad_e, grad_n = surface_gradient(mesh, ground, east, north)
     # Per-step relaxation towards the neighbour mean is a diffusion with
     # D = w * spacing^2 / (4 dt); split it into stable substeps of w <= 0.5.
     mixing = 4 * _table(abs_lat, EDDY_DIFFUSIVITY) * dt / step_m**2
     substeps = max(1, int(np.ceil(float(mixing.max()) / 0.5)))
     mixing = mixing / substeps
+    shift = 8.0 * s.obliquity_deg / 23.4
+    seasons = (-shift, shift)  # southern, then northern summer
+    winds = [prevailing_wind(lat, s, season) for season in seasons]
+    operators = [departure_operator(mesh, east, north, u, v, dt) for u, v in winds]
+    continental = maritime_air(
+        mesh, land, coast_m, operators, mixing, substeps,
+        max(1, int(MARITIME_TRAVEL_M / step_m)),
+    )
+    temp, warm, cold = temperatures(mesh, elevation, land, coast_m, s, continental)
+    # Air over cold currents subsides and is stable: coastal fog, little rain
+    # (Atacama, Namib, Baja California).
+    stable = np.clip(-boundary_currents(mesh, land, coast_m) / COLD_CURRENT_C, 0, 1)
+    cap = capacity(temp)
+    ground = np.where(land, np.maximum(elevation, 0), 0.0)
+    grad_e, grad_n = surface_gradient(mesh, ground, east, north)
     background = 0.6 * capacity(sea_temperature(lat, s))
     inland = np.exp(-coast_m / STORM_INLAND_DECAY_M)
     supply = np.where(land, _table(abs_lat, STORM_SUPPLY) * inland, 0.0)
     evaporation = np.where(land, 0.0, OCEAN_EVAPORATION)
     recycling = np.where(land, LAND_RECYCLING, 0.0)
-    shift = 8.0 * s.obliquity_deg / 23.4
     count = steps or max(1, int(MOISTURE_TRAVEL_M / step_m))
-    precip = np.zeros(mesh.size)
+    by_season: list[F64] = []
     u_mean = np.zeros(mesh.size)
     v_mean = np.zeros(mesh.size)
-    for season in (-shift, shift):
-        u, v = prevailing_wind(lat, s, season)
+    for season, (u, v), advect in zip(seasons, winds, operators, strict=True):
         u_mean += u / 2
         v_mean += v / 2
-        advect = departure_operator(mesh, east, north, u, v, dt)
         lift = np.maximum(0.0, u * grad_e + v * grad_n) * dt  # forced ascent per step, m
         large = _table(np.abs(np.rad2deg(lat) - season), ASCENT_PER_1000_KM) * step_m / 1e6
         large = large * (1 - COLD_CURRENT_SUBSIDENCE * stable)
@@ -315,9 +370,13 @@ def simulate_climate(
             rain = rain_fraction * (q - excess) + excess
             q = q - rain + recycling * rain
             seasonal = 0.9 * seasonal + 0.1 * rain
-        precip += seasonal / 2
+        by_season.append(seasonal)
+    north_summer = lat >= 0
+    warm_rain = np.where(north_summer, by_season[1], by_season[0])
+    cold_rain = np.where(north_summer, by_season[0], by_season[1])
     return _surface_climate(
-        mesh, elevation, land, coast_m, s, (temp, warm, cold), u_mean, v_mean, precip
+        mesh, elevation, land, coast_m, s, (temp, warm, cold), u_mean, v_mean,
+        (warm_rain, cold_rain), continental,
     )
 
 
@@ -330,19 +389,30 @@ def _surface_climate(
     temperature: tuple[F64, F64, F64],
     wind_east: F64,
     wind_north: F64,
-    precip: F64,
+    seasonal_precip: tuple[F64, F64],
+    continental: F64,
 ) -> Climate:
-    """Scale precipitation to the land mean, then local PET, runoff and biomes."""
+    """Scale precipitation to the land mean, then local PET, runoff, biomes and Koppen.
+
+    ``seasonal_precip`` holds relative warm- and cold-half-year precipitation.
+    """
     temp, warm, cold = temperature
+    warm_rain, cold_rain = seasonal_precip
+    precip = (warm_rain + cold_rain) / 2
     weight = mesh.area_m2 * land
     mean = float(np.sum(precip * weight) / np.sum(weight))
-    precip_mm = precip * (s.mean_land_precip_mm / max(mean, 1e-12))
+    scale = s.mean_land_precip_mm / max(mean, 1e-12)
+    precip_mm = precip * scale
     pet = potential_evapotranspiration(mesh.lat, temp, coast_m)
     ratio = pet / np.maximum(precip_mm, 1e-6)
     actual = precip_mm * (1 + ratio - (1 + ratio**BUDYKO_W) ** (1 / BUDYKO_W))
     runoff = np.where(land, np.maximum(precip_mm - actual, 0.0), 0.0)
     biome = classify(temp, warm, precip_mm, pet, elevation, land)
-    return Climate(temp, warm, cold, wind_east, wind_north, precip_mm, pet, runoff, biome)
+    koppen = classify_koppen(temp, warm, cold, warm_rain * scale, cold_rain * scale, land)
+    return Climate(
+        temp, warm, cold, wind_east, wind_north, precip_mm, pet, runoff, biome,
+        continental, warm_rain * scale, cold_rain * scale, koppen,
+    )
 
 
 def downscale_climate(
@@ -361,13 +431,16 @@ def downscale_climate(
     local and are recomputed from the fine relief.
     """
     s = settings or PlanetClimateSettings()
-    temperature = temperatures(mesh, elevation, land, coast_m, s)
-    precip = np.maximum(sample_field(coarse_mesh, mesh.xyz, coarse.precipitation_mm), 0.0)
+    continental = np.clip(sample_field(coarse_mesh, mesh.xyz, coarse.continentality), 0, 1)
+    temperature = temperatures(mesh, elevation, land, coast_m, s, continental)
+    warm_rain = np.maximum(sample_field(coarse_mesh, mesh.xyz, coarse.precip_warm_mm), 0.0)
+    cold_rain = np.maximum(sample_field(coarse_mesh, mesh.xyz, coarse.precip_cold_mm), 0.0)
     return _surface_climate(
         mesh, elevation, land, coast_m, s, temperature,
         sample_field(coarse_mesh, mesh.xyz, coarse.wind_east),
         sample_field(coarse_mesh, mesh.xyz, coarse.wind_north),
-        precip,
+        (warm_rain, cold_rain),
+        continental,
     )
 
 

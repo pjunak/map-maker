@@ -275,11 +275,17 @@ def regional_climate(
     )
     latitude = np.arcsin(np.clip(points[:, 2], -1, 1))
     pet = potential_evapotranspiration(latitude, temperature, coast)
+    growing = (
+        None
+        if parent.precip_warm_mm is None
+        else np.maximum(parent.sample(points, parent.precip_warm_mm), 0.0).reshape(shape)
+    )
     return PixelClimate(
         temperature.reshape(shape),
         warm.reshape(shape),
         precipitation.reshape(shape),
         pet.reshape(shape),
+        growing,
     )
 
 
@@ -365,6 +371,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             climate.warm_season_c - lapse,
             climate.precipitation_mm,
             climate.pet_mm,
+            climate.growing_mm,
         )
         wet = 0.6 * gaussian_filter(window.rivers, 2.0)
         land_rgb = land_colour(
