@@ -47,7 +47,8 @@ type B = NDArray[np.bool_]
 RIFT_DEPTH_M = 600.0
 SUBSIDING_BASIN_DEPTH_M = 160.0
 INTERIOR_SAG_DEPTH_M = 220.0
-GLACIAL_SCOUR_DEPTH_M = 140.0
+GLACIAL_SCOUR_DEPTH_M = 300.0
+GLACIAL_LAKE_SPACING_M = 60e3
 MIN_LAKE_NODES = 2
 LAKE_ITERATIONS = 6
 DEFAULT_RUNOFF_MM = 250.0
@@ -92,7 +93,12 @@ def young_depressions(
         # Recently de-glaciated lowlands: cool but ice-free summers, below 1,500 m.
         lowland = 1 - _smoothstep(elevation_m, 900, 1500)
         glaciated = _smoothstep(-warm_season_c, -19.0, -14.0) * lowland
-        scour = np.maximum(0.0, fbm3(p, seed + 707, 3, 32.0) - 0.1) / 0.9
+        # Ice sheets scour shield lowlands into dense lake districts of many
+        # small, irregular basins (Finland, Canadian Shield): ~40-70 km spacing
+        # at mesh scale, patchy at ~500 km where tills and eskers blanket rock.
+        knobs = fbm3(p, seed + 707, 3, mesh.radius_m / GLACIAL_LAKE_SPACING_M)
+        district = _smoothstep(fbm3(p, seed + 708, 2, 8.0), -0.2, 0.3)
+        scour = _smoothstep(knobs, -0.05, 0.3) * district
         depth += GLACIAL_SCOUR_DEPTH_M * glaciated * scour
     if warm_season_c is not None:
         # Land still under ice has no open water: its depressions hold ice, not lakes.

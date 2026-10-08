@@ -121,6 +121,26 @@ it in the global Priority-Flood on steps that still had pits.
 - **Provenance.** The relief algorithm identifier is now
   `sphere-mesh-stream-power-v11`.
 
+## Glacial lake districts
+
+Earth's lakes cover about 1.8–2 % of land, most of it in formerly glaciated
+shield lowlands (Finland about 10 %, the Canadian Shield 8–10 %). Glacial
+scour used a single noise field at about 190 km wavelength and up to 140 m
+depth, so it made a few large hollows that sloping ground rarely closed.
+
+- **Lake districts.** Glaciated lowlands are those with warm seasons of
+  2–14 °C, below 900–1,500 m and ice-free today. Scour there now forms dense
+  districts of many small basins, about 60 km apart, up to 300 m deep, and
+  patchy at about 500 km where till and eskers would blanket the rock.
+  Overdeepened beds of this depth are common, such as the Great Lakes and
+  Norwegian lakes.
+- **Aethelara at 800k nodes.**
+  - Lakes rose from 140 to 257 and from 1.06 % to 1.46 % of land.
+  - In glaciated lowlands lakes cover 4.6 %, up from 2 %.
+  - Higher, sloping ground and land still under ice stay lake-poor.
+- **Provenance.** The relief algorithm identifier is now
+  `sphere-mesh-stream-power-v12`.
+
 ## Limits
 
 - **No motion of land.** Plates never move land, because the coastline is
