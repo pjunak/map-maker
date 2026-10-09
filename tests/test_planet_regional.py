@@ -233,3 +233,15 @@ def test_regional_parent_reports_lake_cover_and_level(parent: PlanetResult) -> N
         assert np.allclose(level[on_lake], lakes.level_m[lakes.lake[on_lake]])
         assert np.array_equal(closed[on_lake], lakes.endorheic[lakes.lake[on_lake]])
     assert np.all(cover[~on_lake & parent.land] < 1.0 + 1e-9)
+
+
+def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
+    from dmtools.terrain.adapters.planet_natural import meander
+
+    path = np.stack((np.linspace(0, 400, 50), np.full(50, 100.0)), axis=1)
+    wound = meander(path, np.full(50, 40.0), 3, np.array([0.5]))
+    assert np.allclose(wound[0], path[0]) and np.allclose(wound[-1], path[-1], atol=1.5)
+    middle = int(0.5 * len(wound))
+    assert abs(wound[middle, 1] - 100.0) < 6.0  # pinned at the junction
+    length = np.hypot(*np.diff(wound, axis=0).T).sum()
+    assert 1.15 < length / 400 < 3.0  # sinuosity of a meandering river

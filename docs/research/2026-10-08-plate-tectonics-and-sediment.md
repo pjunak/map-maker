@@ -157,6 +157,24 @@ lakes vanished on zoom.
 - **Aethelara.** A rift-valley lake of about 1,500 × 300 km (441,000 km²,
   larger than the Caspian) zooms to Tanganyika-like shores.
 
+## Meandering rivers in regional zoom
+
+Regional rivers were smoothed mesh polylines. Alluvial rivers on gentle ground
+now meander at a size set by their discharge:
+
+- **Size.** Q comes from drainage area times an assumed 0.3 m/yr runoff.
+  Channel width is about 4.8 √Q m (Leopold & Maddock 1953) and meander wavelength
+  about 11 widths. A big river (Q ≈ 14,000 m³/s) bends every 6 km; small
+  streams stay straight at the pixel scale.
+- **Shape.** Bends follow the sine-generated curve of Langbein & Leopold (1966),
+  θ = ω sin(2πs/λ). The swing ω varies from bend to bend between 0.6 and
+  1.6 rad, and the whole meander belt wanders at about six wavelengths.
+- **Where.** Bends fade where the reach is steeper than about 0.3 %.
+- **Junctions.** Bends are pinned at junctions and river ends, so tributaries
+  still meet the main stem.
+- **Test.** A path keeps its ends, stays pinned at a junction and reaches
+  sinuosity between 1.15 and 3.
+
 ## Limits
 
 - **No motion of land.** Plates never move land, because the coastline is

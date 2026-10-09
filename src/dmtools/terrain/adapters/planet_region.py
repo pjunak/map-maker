@@ -52,6 +52,7 @@ REGION_VERSION = 1
 # ridges and valleys; slopes need far less exaggeration than the world preview.
 REGION_EXAGGERATION = 1.3
 REGION_MOSAIC_WAVELENGTH_M = 8e3
+MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
 LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
 REGION_SLOPE_SCALE = 3.5
@@ -239,6 +240,14 @@ def compose_window(
         x = (plane[:, 0] + radius_m) * scale
         y = (radius_m - plane[:, 1]) * scale
         stop = surface.elevation_m <= 0
+        # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
+        # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
+        discharge = flow.area_m2 * MEANDER_RUNOFF_M_YR / 3.156e7
+        wavelength = 11 * 4.8 * np.sqrt(discharge) * scale
+        receiver = np.maximum(flow.receiver, 0)
+        drop = surface.elevation_m - surface.elevation_m[receiver]
+        run = np.linalg.norm(mesh.xyz - mesh.xyz[receiver], axis=1) * planet_m
+        gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
         coverage = np.maximum(
             coverage,
             river_coverage(
@@ -250,6 +259,7 @@ def compose_window(
                 stop,
                 (pixels, pixels),
                 pixels / 1100,
+                meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0),
             ),
         )
     coverage = np.where(land & ~lakes, coverage, 0.0)

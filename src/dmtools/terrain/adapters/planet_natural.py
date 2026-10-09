@@ -478,6 +478,50 @@ def river_layer(
     )
 
 
+MIN_MEANDER_PX = 4.0
+
+
+def meander(path: F64, wavelength_px: F64, seed: int, anchors: F64 | None = None) -> F64:
+    """Wind a river path into meanders of the given (per-point) wavelength.
+
+    Meanders follow the sine-generated curve of Langbein and Leopold (1966): the
+    channel's direction swings as theta = omega sin(2 pi s / lambda), with the
+    swing omega varying from bend to bend (0.6-1.6 rad), which gives the rounded,
+    uneven loops of alluvial rivers. A slower wander of the whole meander belt
+    (about six wavelengths) is added. The lateral displacement tapers to zero at
+    both ends and at ``anchors`` (fractions of the path length, such as
+    tributary junctions) so junctions and mouths stay connected.
+    """
+    step = np.hypot(*np.diff(path, axis=0).T)
+    along = np.concatenate(([0.0], np.cumsum(step)))
+    total = float(along[-1])
+    if total < 2.0:
+        return path
+    s = np.linspace(0.0, total, max(2, int(total)))
+    ds = s[1] - s[0] if len(s) > 1 else 1.0
+    resampled = np.stack((np.interp(s, along, path[:, 0]), np.interp(s, along, path[:, 1])), 1)
+    wave = np.maximum(
+        np.interp(s / total, np.linspace(0, 1, len(wavelength_px)), wavelength_px), 1e-6
+    )
+    rng = np.random.default_rng(seed)
+    knots = max(4, int(total / max(float(wave.mean()), 1.0)) + 2)
+    swing = np.interp(s, np.linspace(0, total, knots), rng.uniform(0.6, 1.6, knots))
+    stretch = 1 + 0.3 * np.interp(s, np.linspace(0, total, knots), rng.uniform(-1, 1, knots))
+    phase = np.cumsum(2 * np.pi * ds / (wave * stretch)) + rng.uniform(0, 2 * np.pi)
+    lateral = np.cumsum(np.sin(swing * np.sin(phase))) * ds
+    belt = np.cumsum(2 * np.pi * ds / (6 * wave)) + rng.uniform(0, 2 * np.pi)
+    lateral = lateral + 0.6 * wave * np.sin(belt)
+    # Remove the drift so the river keeps its course, then taper the ends.
+    lateral -= np.interp(s, [0.0, total], [lateral[0], lateral[-1]])
+    pins = np.concatenate(([0.0, total], [] if anchors is None else np.asarray(anchors) * total))
+    nearest = np.min(np.abs(s[:, None] - pins[None, :]), axis=1)
+    taper = np.clip(nearest / np.maximum(wave, 1.0), 0, 1)
+    tangent = np.gradient(resampled, axis=0)
+    tangent /= np.maximum(np.linalg.norm(tangent, axis=1), 1e-9)[:, None]
+    normal = np.stack((-tangent[:, 1], tangent[:, 0]), 1)
+    return resampled + normal * (lateral * taper)[:, None]
+
+
 def river_coverage(
     x: F64,
     y: F64,
@@ -488,8 +532,13 @@ def river_coverage(
     shape: tuple[int, int],
     width_scale: float,
     supersample: int = 2,
+    meander_px: F64 | None = None,
 ) -> F64:
-    """Tapered, Chaikin-smoothed, anti-aliased river lines for nodes at pixel (x, y)."""
+    """Tapered, Chaikin-smoothed, anti-aliased river lines for nodes at pixel (x, y).
+
+    ``meander_px`` (per node, pixels; 0 for straight reaches) adds meanders of
+    that wavelength, as alluvial rivers wind on gentle ground.
+    """
     rows, columns = shape
     if not major.any():
         return np.zeros(shape)
@@ -523,6 +572,14 @@ def river_coverage(
             cut[0::2] = 0.75 * a + 0.25 * b
             cut[1::2] = 0.25 * a + 0.75 * b
             path = np.vstack((path[:1], cut, path[-1:]))
+        if meander_px is not None and float(meander_px[chain].max()) > MIN_MEANDER_PX:
+            # Tributaries join at nodes with several major donors: pin the bends there.
+            nodes_xy = np.stack((x[chain], y[chain]), axis=1)
+            reach = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(nodes_xy, axis=0).T))))
+            joins = np.flatnonzero(donors[chain] > 1)
+            path = meander(path, np.interp(
+                np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), meander_px[chain]
+            ), head, reach[joins] / max(float(reach[-1]), 1e-9))
         flow_along = np.interp(
             np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), discharge[chain]
         )
