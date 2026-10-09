@@ -9,7 +9,6 @@ from pathlib import Path
 from dmtools.terrain.adapters.planet_load import LoadedPlanet, read_planet_parent
 from dmtools.terrain.adapters.planet_region import (
     RegionWindow,
-    TileRivers,
     TileStore,
     compose_window,
     write_region,
@@ -60,7 +59,7 @@ def ensure_tiles(
     workers: int,
     progress: Callable[[int, int], None] | None = None,
     cancellation: CancellationToken | None = None,
-) -> dict[int, tuple[TileSurface, TileRivers]]:
+) -> dict[int, TileSurface]:
     missing = [tile for tile in tiles if not store.has(tile)]
     done = len(tiles) - len(missing)
     if progress is not None:

@@ -245,3 +245,21 @@ def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
     assert abs(wound[middle, 1] - 100.0) < 6.0  # pinned at the junction
     length = np.hypot(*np.diff(wound, axis=0).T).sum()
     assert 1.15 < length / 400 < 3.0  # sinuosity of a meandering river
+
+
+def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
+    from dmtools.terrain.pipeline.planet_detail import grid_flow
+
+    rows = columns = 30
+    _, x = np.mgrid[0:rows, 0:columns]
+    z = 10.0 * x + np.random.default_rng(4).random((rows, columns))
+    outlet = np.zeros((rows, columns), dtype=bool)
+    outlet[:, 0] = True
+    inflow = np.zeros((rows, columns))
+    inflow[15, -1] = 1e9
+    receiver, area = grid_flow(z, outlet, 100.0, inflow)
+    land = ~outlet.ravel()
+    assert np.all(receiver[land] >= 0)
+    # Everything (cells plus inflow) reaches the outlets.
+    into_outlet = land & outlet.ravel()[np.maximum(receiver, 0)]
+    assert area[into_outlet].sum() == pytest.approx(land.sum() * 100.0**2 + 1e9, rel=1e-9)

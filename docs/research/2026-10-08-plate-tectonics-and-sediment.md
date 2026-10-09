@@ -175,6 +175,21 @@ now meander at a size set by their discharge:
 - **Test.** A path keeps its ends, stays pinned at a junction and reaches
   sinuosity between 1.15 and 3.
 
+## Seamless rivers in regional zoom
+
+Each regional tile routed its own rivers on its own mesh, and a window drew a
+tile's rivers only where that tile had the largest blend weight. Where
+neighbouring tiles disagreed, rivers broke at the seams.
+
+- **Routing.** Windows now route rivers once over their own blended relief
+  (`grid_flow`: Priority-Flood, D8 receivers and accumulation, shared with
+  valley carving). The network follows the drawn valleys with no seams.
+- **Inflow.** Rivers entering from beyond the window carry the parent's upstream
+  area, spread over the rim pixels they cross (area × pixel / parent spacing).
+- **Lakes.** Lakes are flooded through, so their outflows continue.
+- **Cache.** Tiles no longer store routing. The regional algorithm identifier is
+  now `planet-blended-tiles-v3`, so old caches are not reused.
+
 ## Limits
 
 - **No motion of land.** Plates never move land, because the coastline is

@@ -128,43 +128,30 @@ def eroded_fbm(
 
 
 @njit(cache=True)
-def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int, wrap: bool) -> F64:
+def _route(
+    h: F64, fixed: B, dy: float, dx: F64, wrap: bool, source: F64
+) -> tuple[F64, I64, int, I64, F64, F64]:
+    """Priority-Flood fill, steepest receivers and accumulation on a pixel grid.
+
+    Returns the filled surface, cells in downstream-first order (and their
+    count), flat receiver indices (-1 at outlets), receiver distances and the
+    accumulated ``source`` (per-cell area plus any inflow).
+    """
     rows, columns = h.shape
     n = rows * columns
-    for _ in range(steps):
-        # Priority-Flood (Barnes et al. 2014) fills pits with a 1 mm gradient and
-        # pops cells in non-decreasing filled height: downstream cells first.
-        filled = h.copy()
-        closed = fixed.copy()
-        order = np.empty(n, np.int64)
-        count = 0
-        heap = [(0.0, np.int64(0))]
-        heap.pop()
-        for r in range(rows):
-            for c in range(columns):
-                if not fixed[r, c]:
-                    continue
-                edge = False
-                for dr in range(-1, 2):
-                    rr = r + dr
-                    if rr < 0 or rr >= rows:
-                        continue
-                    for dc in range(-1, 2):
-                        cc = c + dc
-                        if cc < 0 or cc >= columns:
-                            if not wrap:
-                                continue
-                            cc %= columns
-                        if not fixed[rr, cc]:
-                            edge = True
-                if edge:
-                    heapq.heappush(heap, (h[r, c], np.int64(r * columns + c)))
-        while heap:
-            level, index = heapq.heappop(heap)
-            r, c = index // columns, index % columns
+    # Priority-Flood (Barnes et al. 2014) fills pits with a 1 mm gradient and
+    # pops cells in non-decreasing filled height: downstream cells first.
+    filled = h.copy()
+    closed = fixed.copy()
+    order = np.empty(n, np.int64)
+    count = 0
+    heap = [(0.0, np.int64(0))]
+    heap.pop()
+    for r in range(rows):
+        for c in range(columns):
             if not fixed[r, c]:
-                order[count] = index
-                count += 1
+                continue
+            edge = False
             for dr in range(-1, 2):
                 rr = r + dr
                 if rr < 0 or rr >= rows:
@@ -175,46 +162,74 @@ def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int,
                         if not wrap:
                             continue
                         cc %= columns
-                    if closed[rr, cc]:
+                    if not fixed[rr, cc]:
+                        edge = True
+            if edge:
+                heapq.heappush(heap, (h[r, c], np.int64(r * columns + c)))
+    while heap:
+        level, index = heapq.heappop(heap)
+        r, c = index // columns, index % columns
+        if not fixed[r, c]:
+            order[count] = index
+            count += 1
+        for dr in range(-1, 2):
+            rr = r + dr
+            if rr < 0 or rr >= rows:
+                continue
+            for dc in range(-1, 2):
+                cc = c + dc
+                if cc < 0 or cc >= columns:
+                    if not wrap:
                         continue
-                    closed[rr, cc] = True
-                    if filled[rr, cc] < level + 1e-3:
-                        filled[rr, cc] = level + 1e-3
-                    heapq.heappush(heap, (filled[rr, cc], np.int64(rr * columns + cc)))
-        # Steepest-descent receivers on the filled surface.
-        receiver = np.full(n, -1, np.int64)
-        distance = np.ones(n)
-        for idx in range(count):
-            i = order[idx]
-            r, c = i // columns, i % columns
-            best = 0.0
-            for dr in range(-1, 2):
-                rr = r + dr
-                if rr < 0 or rr >= rows:
+                    cc %= columns
+                if closed[rr, cc]:
                     continue
-                for dc in range(-1, 2):
-                    if dr == 0 and dc == 0:
+                closed[rr, cc] = True
+                if filled[rr, cc] < level + 1e-3:
+                    filled[rr, cc] = level + 1e-3
+                heapq.heappush(heap, (filled[rr, cc], np.int64(rr * columns + cc)))
+    # Steepest-descent receivers on the filled surface.
+    receiver = np.full(n, -1, np.int64)
+    distance = np.ones(n)
+    for idx in range(count):
+        i = order[idx]
+        r, c = i // columns, i % columns
+        best = 0.0
+        for dr in range(-1, 2):
+            rr = r + dr
+            if rr < 0 or rr >= rows:
+                continue
+            for dc in range(-1, 2):
+                if dr == 0 and dc == 0:
+                    continue
+                cc = c + dc
+                if cc < 0 or cc >= columns:
+                    if not wrap:
                         continue
-                    cc = c + dc
-                    if cc < 0 or cc >= columns:
-                        if not wrap:
-                            continue
-                        cc %= columns
-                    step = np.sqrt((dx[r] * dc) ** 2 + (dy * dr) ** 2)
-                    slope = (filled[r, c] - filled[rr, cc]) / step
-                    if slope > best:
-                        best = slope
-                        receiver[i] = rr * columns + cc
-                        distance[i] = step
-        area = np.empty(n)
-        for idx in range(count):
-            i = order[idx]
-            area[i] = dx[i // columns] * dy
-        for idx in range(count - 1, -1, -1):
-            i = order[idx]
-            j = receiver[i]
-            if j >= 0 and not fixed[j // columns, j % columns]:
-                area[j] += area[i]
+                    cc %= columns
+                step = np.sqrt((dx[r] * dc) ** 2 + (dy * dr) ** 2)
+                slope = (filled[r, c] - filled[rr, cc]) / step
+                if slope > best:
+                    best = slope
+                    receiver[i] = rr * columns + cc
+                    distance[i] = step
+    area = source.copy()
+    for idx in range(count - 1, -1, -1):
+        i = order[idx]
+        j = receiver[i]
+        if j >= 0 and not fixed[j // columns, j % columns]:
+            area[j] += area[i]
+    return filled, order, count, receiver, distance, area
+
+
+@njit(cache=True)
+def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int, wrap: bool) -> F64:
+    rows, columns = h.shape
+    cells = np.empty(rows * columns)
+    for i in range(rows * columns):
+        cells[i] = dx[i // columns] * dy
+    for _ in range(steps):
+        filled, order, count, receiver, distance, area = _route(h, fixed, dy, dx, wrap, cells)
         # Implicit stream power (Braun and Willett 2013, n = 1), downstream first.
         for idx in range(count):
             i = order[idx]
@@ -226,6 +241,25 @@ def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int,
             filled[ri, ci] = (filled[ri, ci] + f * filled[j // columns, j % columns]) / (1 + f)
         h = filled
     return h
+
+
+def grid_flow(
+    z: F64, outlet: B, cell_m: float, inflow_m2: F64
+) -> tuple[NDArray[np.int64], F64]:
+    """Steepest-descent receivers (flat indices, -1 at outlets) and drainage area (m^2).
+
+    Depressions are filled to their spill level first, so every cell drains to
+    an ``outlet``. ``inflow_m2`` adds area entering from beyond the grid.
+    """
+    rows, columns = z.shape
+    source = np.full(rows * columns, cell_m * cell_m) + np.ascontiguousarray(
+        inflow_m2, dtype=np.float64
+    ).ravel()
+    _, _, _, receiver, _, area = _route(
+        np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet), float(cell_m),
+        np.full(rows, float(cell_m)), False, source,
+    )
+    return receiver, area
 
 
 def carve_valleys(

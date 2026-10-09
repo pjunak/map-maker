@@ -16,7 +16,7 @@ from affine import Affine
 from numpy.typing import NDArray
 from PIL import Image
 from rasterio.crs import CRS
-from scipy.ndimage import distance_transform_edt, gaussian_filter
+from scipy.ndimage import binary_erosion, distance_transform_edt, gaussian_filter
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
@@ -35,7 +35,7 @@ from dmtools.terrain.adapters.planet_natural import (
 )
 from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
 from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
-from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
+from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
 from dmtools.terrain.pipeline.planet_forcing import source_xy
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
@@ -62,12 +62,6 @@ REGION_DETAIL_FLOOR_M = 70.0
 REGION_DETAIL_SHARE = 0.6  # detail amplitude per metre of tile height
 REGION_CARVE_ERODIBILITY = 0.4  # K * dt for valley carving (m^0)
 REGION_CARVE_STEPS = 4
-
-
-@dataclass(frozen=True)
-class TileRivers:
-    receiver: NDArray[np.int64]
-    area_m2: F64
 
 
 class TileStore:
@@ -102,23 +96,17 @@ class TileStore:
                 xyz=result.region.mesh.xyz.astype("<f8"),
                 triangles=result.region.mesh.triangles.astype("<i4"),
                 elevation_m=np.where(result.land, result.elevation_m, 0.0).astype("<f8"),
-                receiver=result.run.flow.receiver.astype("<i4"),
-                area_m2=result.run.flow.area_m2.astype("<f8"),
             )
             stream.flush()
             os.fsync(stream.fileno())
         pending.replace(self.path(tile))
 
-    def load(self, tile: int, radius_m: float) -> tuple[TileSurface, TileRivers]:
+    def load(self, tile: int, radius_m: float) -> TileSurface:
         with np.load(self.path(tile), allow_pickle=False) as data:
             mesh = mesh_from_triangles(
                 data["xyz"].astype(np.float64), data["triangles"].astype(np.int64), radius_m
             )
-            surface = TileSurface(mesh, data["elevation_m"].astype(np.float64))
-            rivers = TileRivers(
-                data["receiver"].astype(np.int64), data["area_m2"].astype(np.float64)
-            )
-        return surface, rivers
+            return TileSurface(mesh, data["elevation_m"].astype(np.float64))
 
 
 def forward_aeqd(xyz: F64, lon0: float, lat0: float, radius_m: float) -> F64:
@@ -180,7 +168,7 @@ def window_land(parent: RegionalParent, points: F64) -> B:
 def compose_window(
     parent: RegionalParent,
     grid: TileGrid,
-    tiles: dict[int, tuple[TileSurface, TileRivers]],
+    tiles: dict[int, TileSurface],
     centre: tuple[float, float],
     radius_km: float,
     pixels: int,
@@ -191,7 +179,7 @@ def compose_window(
     points, inside = window_points(*centre, radius_m, pixels, planet_m)
     from dmtools.terrain.pipeline.planet_tiles import blend
 
-    surfaces = {tile: surface for tile, (surface, _) in tiles.items()}
+    surfaces = tiles
     land = window_land(parent, points).reshape(pixels, pixels) & inside
     floor = parent.sea_floor_m
     if floor is None:
@@ -223,45 +211,9 @@ def compose_window(
     salt = lakes & closed.reshape(pixels, pixels)
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
-    # Rivers: each tile draws only the reaches it owns (largest blend weight there).
-    coverage = np.zeros((pixels, pixels))
-    threshold = river_km2 * 1e6
-    scale = pixels / (2 * radius_m)
-    for tile, (surface, flow) in tiles.items():
-        mesh = surface.mesh
-        major = (flow.receiver >= 0) & (flow.area_m2 >= threshold)
-        nodes = np.flatnonzero(major)
-        if not len(nodes):
-            continue
-        ids, weights = grid.weights(mesh.xyz[nodes])
-        owned = np.zeros(mesh.size, dtype=bool)
-        owned[nodes[ids[np.arange(len(nodes)), np.argmax(weights, axis=1)] == tile]] = True
-        plane = forward_aeqd(mesh.xyz, *centre, planet_m)
-        x = (plane[:, 0] + radius_m) * scale
-        y = (radius_m - plane[:, 1]) * scale
-        stop = surface.elevation_m <= 0
-        # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
-        # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
-        discharge = flow.area_m2 * MEANDER_RUNOFF_M_YR / 3.156e7
-        wavelength = 11 * 4.8 * np.sqrt(discharge) * scale
-        receiver = np.maximum(flow.receiver, 0)
-        drop = surface.elevation_m - surface.elevation_m[receiver]
-        run = np.linalg.norm(mesh.xyz - mesh.xyz[receiver], axis=1) * planet_m
-        gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
-        coverage = np.maximum(
-            coverage,
-            river_coverage(
-                x,
-                y,
-                flow.receiver,
-                flow.area_m2,
-                owned & ~stop,
-                stop,
-                (pixels, pixels),
-                pixels / 1100,
-                meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0),
-            ),
-        )
+    coverage = window_rivers(
+        parent, points, elevation, land, lakes, inside, river_km2, 2 * radius_m / pixels
+    )
     coverage = np.where(land & ~lakes, coverage, 0.0)
     return RegionWindow(
         centre,
@@ -278,6 +230,50 @@ def compose_window(
         volcanic,
         lakes,
         salt,
+    )
+
+
+def window_rivers(
+    parent: RegionalParent,
+    points: F64,
+    elevation: F64,
+    land: B,
+    lakes: B,
+    inside: B,
+    river_km2: float,
+    pixel_m: float,
+) -> F64:
+    """River coverage routed on the window's blended relief.
+
+    One drainage network over the whole window follows the drawn valleys and
+    has no seams between tiles. Rivers entering from outside the window carry
+    the parent's upstream area, spread over the rim pixels the parent river
+    crosses.
+    """
+    pixels = elevation.shape[0]
+    z = np.where(inside, np.nan_to_num(elevation, nan=0.0), 0.0)
+    outlet = ~inside | ~land
+    # Parent drainage area at the rim: rivers entering from beyond the window.
+    rim = inside & ~np.asarray(binary_erosion(inside), dtype=bool)
+    upstream = parent.sample(points, parent.area_m2).reshape(pixels, pixels)
+    inflow = np.where(rim & land, upstream * pixel_m / parent.mesh.spacing_m, 0.0)
+    receiver, area = grid_flow(z, outlet, pixel_m, inflow)
+    flat = np.arange(pixels * pixels)
+    x = (flat % pixels + 0.5).astype(np.float64)
+    y = (flat // pixels + 0.5).astype(np.float64)
+    stop = (outlet | lakes).ravel()
+    major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
+    # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
+    # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
+    discharge = area * MEANDER_RUNOFF_M_YR / 3.156e7
+    wavelength = 11 * 4.8 * np.sqrt(discharge) / pixel_m
+    target = np.maximum(receiver, 0)
+    drop = z.ravel() - z.ravel()[target]
+    run = np.hypot(flat % pixels - target % pixels, flat // pixels - target // pixels) * pixel_m
+    gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
+    return river_coverage(
+        x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
+        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0),
     )
 
 
