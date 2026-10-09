@@ -57,6 +57,27 @@ Australia).
 - **Test.** A synthetic northern subtropical continent pulls the northern-summer
   belts at least 5° further poleward than open ocean at the same latitude.
 
+## Snow, glaciers and high massifs
+
+At regional zoom, high ranges drew as solid white because snow depended only on
+temperature.
+
+- **Snowfall.** The equilibrium line's summer temperature now follows Ohmura et
+  al. 1992, P = 645 + 296 T + 9 T². It is about −2 °C at 100 mm, +1 °C at
+  1,000 mm and +4 °C at 2,000 mm. Wet ranges hold ice lower, and dry ranges
+  keep only thin snowlines.
+- **Mass elevation effect** (Massenerhebung). Big high massifs heat the air above
+  them in summer, so the warm season rises by 1.5 °C per km of mean elevation
+  above 1 km within about 200 km. Snowlines and treelines rise on plateaus.
+  Polar (E) climates fall from 9.9 % to 9.3 % of Aethelara's land.
+- **Rock between snowfields.** Snow lies more in hollows. Steep faces and
+  wind-scoured crests (terrain position) show rock, so glaciated ranges read as
+  snowfields and rock rather than a solid white blob.
+- **Arc volcanoes.** They now need a stronger leading edge and have wider
+  flat-slab gaps: 360 instead of 540 at 800k nodes.
+- **Provenance.** The climate identifier is now `planet-climate-v6` and the
+  relief identifier `sphere-mesh-stream-power-v13`.
+
 ## Köppen–Geiger classes
 
 `pipeline/planet_koppen.py` follows Kottek et al. 2006.

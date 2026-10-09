@@ -359,16 +359,34 @@ def land_colour(
         colour = _mix(colour, VOLCANIC_ROCK, volcanic * (0.45 - 0.35 * forest))
     hills = _smooth(slope, 0.015 * slope_scale, 0.09 * slope_scale)
     colour = _mix(colour, BARE_DRYLAND, (1 - veg) * hills * 0.6)
-    # The snowline wanders with local climate and lies lower on shaded slopes;
-    # steep faces shed snow and stay bare.
+    # Perennial snow and glaciers need snowfall as well as cold: the summer
+    # temperature at the equilibrium line rises with precipitation (Ohmura et al.
+    # 1992), so wet coastal ranges carry ice low and dry plateaus stay bare. The
+    # snowline also wanders with local climate, lies lower on shaded slopes and
+    # in hollows, and steep faces shed snow.
     wander = eroded_fbm(points, zeros, 47, 4, radius_m / 40e3, 0.55, 0.0).reshape(shape)
     shade = np.clip(1 - light, -0.5, 0.8)
-    cold = -warm + 1.4 * wander + 2.5 * shade
-    snow = _smooth(cold, -0.8, 1.0) * (1 - 0.7 * _smooth(slope, 0.3, 0.7))
+    hollow = 0.0 if position is None else -0.8 * position
+    cold = equilibrium_line_c(climate.precipitation_mm) - warm + 1.4 * wander + 2.5 * shade + hollow
+    # Steep faces and wind-scoured crests show rock between snowfields.
+    exposed = 0.0 if position is None else 0.5 * _smooth(position, 0.3, 0.8)
+    shed = np.clip(0.85 * _smooth(slope, 0.3, 0.7) + exposed, 0.0, 0.9)
+    snow = _smooth(cold, -0.8, 1.0) * (1 - shed)
     colour = _mix(colour, SNOW, snow)
     texture = eroded_fbm(points, zeros, 23, 4, radius_m / 25e3, 0.6, 0.0).reshape(shape)
     colour *= (1 + 0.045 * texture + 0.05 * patch)[..., None]
     return colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+
+
+def equilibrium_line_c(precipitation_mm: F64) -> F64:
+    """Summer air temperature (deg C) at a glacier's equilibrium line.
+
+    Inverts Ohmura et al. (1992), P = 645 + 296 T + 9 T^2 (P in mm/yr, T the
+    summer mean at the ELA): about -2 C for 100 mm, +1 C for 1,000 mm and +4 C
+    for 2,000 mm of precipitation.
+    """
+    p = np.clip(precipitation_mm, 0.0, 6000.0)
+    return (-296.0 + np.sqrt(np.maximum(296.0**2 - 36.0 * (645.0 - p), 0.0))) / 18.0
 
 
 def _fill(shape: tuple[int, ...], colour: RGB) -> F64:

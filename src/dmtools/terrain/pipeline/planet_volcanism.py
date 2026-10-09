@@ -86,9 +86,9 @@ def place_volcanoes(
     # slab is flat (along-arc gaps, as in central Peru).
     arc_weight = (
         land
-        * np.clip((plates.leading - 0.5) / 0.4, 0, 1)
+        * np.clip((plates.leading - 0.6) / 0.3, 0, 1)
         * np.exp(-(((coast_m - ARC_FRONT_M) / 40e3) ** 2))
-        * (fbm3(mesh.xyz, seed + 5201, 3, 8.0) > 0.0)
+        * (fbm3(mesh.xyz, seed + 5201, 3, 8.0) > 0.08)
     )
     arc = _poisson(mesh.xyz, arc_weight, ARC_SPACING_M / radius, rng)
     if len(arc):

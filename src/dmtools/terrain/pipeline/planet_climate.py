@@ -74,6 +74,10 @@ CURRENT_REACH_M = 700e3
 COAST_INFLUENCE_M = 250e3
 # Share of large-scale rain suppressed under the subsiding air of a full cold anomaly.
 COLD_CURRENT_SUBSIDENCE = 0.85
+# Mass elevation effect: summer warming per km of massif mean elevation above 1 km.
+MASS_ELEVATION_C_PER_KM = 1.5
+MASS_ELEVATION_REACH_M = 200e3
+MASS_ELEVATION_PASSES = 300
 # Land travel over which air loses its marine character (e-folding, m).
 MARITIME_DECAY_M = 900e3
 MARITIME_TRAVEL_M = 8e6
@@ -175,7 +179,23 @@ def temperatures(
     half_range = (2 + 22 * np.sin(np.abs(lat)) * s.obliquity_deg / 23.4) * (
         0.35 + 0.65 * continental
     )
-    return mean, mean + half_range, mean - half_range
+    # Mass elevation effect: big high massifs heat the air above them in summer.
+    massif = mass_elevation_warming(mesh, np.where(land, elevation, 0.0))
+    return mean + massif / 2, mean + half_range + massif, mean - half_range
+
+
+def mass_elevation_warming(mesh: SphereMesh, ground_m: F64) -> F64:
+    """Summer warming (deg C) of large, high massifs (Massenerhebung).
+
+    A plateau's surface heats the air above it, so its snowline and treeline
+    sit far higher than free-air lapse rates suggest (Tibet is ~5-7 C warmer in
+    summer than the free air at 4.5 km). Warming grows by MASS_ELEVATION_C_PER_KM
+    per km of mean elevation above 1 km within ~MASS_ELEVATION_REACH_M.
+    """
+    reach = round((MASS_ELEVATION_REACH_M / mesh.spacing_m) ** 2)
+    passes = min(MASS_ELEVATION_PASSES, max(1, reach))
+    mean = neighbour_mix(ground_m, mesh.ptr, mesh.nbr, np.full(mesh.size, 0.5), passes)
+    return MASS_ELEVATION_C_PER_KM * np.maximum(mean - 1000.0, 0.0) / 1000.0
 
 
 def maritime_air(

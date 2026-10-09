@@ -552,3 +552,18 @@ def test_summer_rain_belts_reach_further_over_heated_subtropical_land() -> None:
     open_ocean = (np.abs(lon) > 120) & (lat > 15) & (lat < 30)
     assert north[over_land].mean() > north[open_ocean].mean() + 5
     assert np.all(south <= 0) and np.all(north >= 0)
+
+
+def test_snowline_rises_with_dryness_and_massifs_warm_in_summer() -> None:
+    from dmtools.terrain.adapters.planet_natural import equilibrium_line_c
+    from dmtools.terrain.pipeline.planet_climate import mass_elevation_warming
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    ela = equilibrium_line_c(np.array([100.0, 1000.0, 2000.0]))
+    assert ela[0] < ela[1] < ela[2]
+    assert -2.5 < ela[0] < -1.5 and 0.5 < ela[1] < 1.5 and 3.5 < ela[2] < 4.5
+    mesh = build_mesh(20_000, RADIUS, 13)
+    plateau = np.where(mesh.xyz[:, 2] > 0.8, 4500.0, 200.0)
+    warming = mass_elevation_warming(mesh, plateau)
+    assert warming[mesh.xyz[:, 2] > 0.95].mean() > 3.0
+    assert np.all(warming[mesh.xyz[:, 2] < 0.0] == 0.0)
