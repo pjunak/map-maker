@@ -263,6 +263,8 @@ def write_planet_build(
         arrays["runoff_weight"] = result.runoff_weight.astype("<f8")
     if result.forcing.basin_depth_m is not None:
         arrays["basin_depth_m"] = result.forcing.basin_depth_m.astype("<f4")
+    if result.forcing.flood_basalt is not None:
+        arrays["flood_basalt"] = result.forcing.flood_basalt.astype("<f4")
     v = result.volcanoes
     arrays |= {
         "volcanic_m": result.volcanic_m.astype("<f4"),

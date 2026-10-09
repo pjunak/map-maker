@@ -53,6 +53,7 @@ REGION_VERSION = 1
 REGION_EXAGGERATION = 1.3
 REGION_MOSAIC_WAVELENGTH_M = 8e3
 MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
+TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
 LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
 REGION_SLOPE_SCALE = 3.5
@@ -142,6 +143,7 @@ class RegionWindow:
     volcanic: F64  # 0..1 cover of young volcanic edifices near summits
     lakes: B  # lake water (parent lakes with shores on the regional relief)
     salt: B  # dry salt pans of hot, arid closed lakes
+    basalt: F64  # 0..1 flood-basalt cover
 
     @property
     def pixel_m(self) -> float:
@@ -230,6 +232,11 @@ def compose_window(
         volcanic,
         lakes,
         salt,
+        (
+            np.zeros((pixels, pixels))
+            if parent.flood_basalt is None
+            else np.clip(parent.sample(points, parent.flood_basalt), 0, 1).reshape(pixels, pixels)
+        ),
     )
 
 
@@ -368,6 +375,13 @@ def display_relief(window: RegionWindow) -> F64:
     # Blurring the incision widens one-pixel D8 channels into valleys.
     depth = gaussian_filter(np.clip(rough - carved, 0, amplitude) * steep, 1.3)
     relief = gaussian_filter(rough - depth, 0.5)
+    # Flood basalts weather into stepped escarpments: each resistant lava flow
+    # holds a bench (the "trap" stairs of the Deccan and Columbia River plateaus).
+    if window.basalt.any():
+        level = np.floor(relief / TRAP_STEP_M) * TRAP_STEP_M
+        riser = np.clip((relief - level) / TRAP_STEP_M, 0, 1)
+        benches = level + TRAP_STEP_M * np.clip((riser - 0.7) / 0.3, 0, 1) ** 2
+        relief = relief + (benches - relief) * 0.8 * window.basalt
     return np.where(land, np.maximum(relief, 1.0), z)
 
 
@@ -402,6 +416,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             window_position(z, window.pixel_m), REGION_MOSAIC_WAVELENGTH_M,
             window.volcanic,
             REGION_SLOPE_SCALE,
+            window.basalt,
         )
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]

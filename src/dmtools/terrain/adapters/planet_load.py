@@ -103,6 +103,9 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
             lake=data["lake"].astype(np.int64),
             lake_level_m=data["lake_level_m"].astype(np.float64),
             lake_endorheic=data["lake_endorheic"].astype(bool),
+            flood_basalt=(
+                data["flood_basalt"].astype(np.float64) if "flood_basalt" in data else None
+            ),
             precip_warm_mm=(
                 data["precipitation_warm_half_mm"].astype(np.float64)
                 if "precipitation_warm_half_mm" in data

@@ -73,6 +73,7 @@ ROCK: RGB = (132, 122, 112)
 BARE_DRYLAND: RGB = (124, 102, 80)
 SNOW: RGB = (242, 244, 247)
 VOLCANIC_ROCK: RGB = (82, 74, 70)
+BASALT_SOIL: RGB = (96, 86, 72)
 LAKE: RGB = (62, 106, 146)
 SALT_FLAT: RGB = (214, 210, 196)
 RIVER: RGB = (62, 104, 150)
@@ -300,6 +301,7 @@ def land_colour(
     fine_wavelength_m: float = 35e3,
     volcanic: F64 | None = None,
     slope_scale: float = 1.0,
+    basalt: F64 | None = None,
 ) -> F64:
     """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
 
@@ -357,6 +359,10 @@ def land_colour(
     if volcanic is not None:
         # Young lava and ash are dark; vegetation soon covers them in wet climates.
         colour = _mix(colour, VOLCANIC_ROCK, volcanic * (0.45 - 0.35 * forest))
+    if basalt is not None:
+        # Weathered flood basalt gives dark clay soils (the Deccan's black
+        # cotton soil); forest hides them.
+        colour = _mix(colour, BASALT_SOIL, basalt * (0.45 - 0.3 * forest))
     hills = _smooth(slope, 0.015 * slope_scale, 0.09 * slope_scale)
     colour = _mix(colour, BARE_DRYLAND, (1 - veg) * hills * 0.6)
     # Perennial snow and glaciers need snowfall as well as cold: the summer
@@ -418,6 +424,11 @@ def natural_colour(
         0.6 * rivers,
         fields.position,
         volcanic=fields.volcanic,
+        basalt=(
+            None
+            if result.forcing.flood_basalt is None
+            else raster.interpolate(mesh, result.forcing.flood_basalt)
+        ),
     )
 
 

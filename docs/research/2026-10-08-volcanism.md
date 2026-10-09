@@ -75,10 +75,12 @@ and drawn as young constructional landforms.
 - **Aethelara.** One province of about 370,000 km² lands on the southern polar
   continent. It overlaps an active collision belt, so it reads only as a
   gently raised tableland.
-- **Not yet drawn.** Stepped "trap" escarpments and dark basalt soils are not
-  rendered yet.
+- **Drawn.** The trap cover is stored (forcing, `planet.npz` field
+  `flood_basalt`) and rendered: dark basaltic clay soils, like the Deccan's
+  black cotton soil, which forest hides. Regional windows add stepped benches of
+  150 m lava-flow packages where the relief crosses them.
 - **Provenance.** The relief algorithm identifier is now
-  `sphere-mesh-stream-power-v10`.
+  `sphere-mesh-stream-power-v10` (v14 once the trap cover was stored).
 
 ## In the app
 

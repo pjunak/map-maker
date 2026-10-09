@@ -246,6 +246,7 @@ class ProceduralForcing:
     uplift_texture: F64  # dimensionless uplift variation within regions (median ~1)
     basin_depth_m: F64  # flexural subsidence filled with sediment after erosion
     tectonics: Tectonics
+    flood_basalt: F64  # 0..1 cover of flood-basalt plateaus (traps)
 
 
 def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> ProceduralForcing:
@@ -385,6 +386,7 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
         uplift_texture,
         np.where(land, basin_depth, 0.0),
         plates,
+        traps,
     )
 
 
@@ -490,6 +492,7 @@ class Forcing:
     procedural: B
     basin_depth_m: F64 | None = None  # filled after erosion (see fill_basins)
     tectonics: Tectonics | None = None
+    flood_basalt: F64 | None = None  # 0..1 trap cover (display: dark soils, terraces)
 
 
 def build_forcing(
@@ -536,7 +539,10 @@ def build_forcing(
         factor = smooth_over_land(mesh, factor, land, half)
     erodibility = base_erodibility * factor * procedural.texture
     basin_depth = np.where(automatic, procedural.basin_depth_m, 0.0)
-    return Forcing(steady, pulse, erodibility, automatic, basin_depth, procedural.tectonics)
+    return Forcing(
+        steady, pulse, erodibility, automatic, basin_depth, procedural.tectonics,
+        np.where(automatic, procedural.flood_basalt, 0.0),
+    )
 
 
 def fill_basins(mesh: SphereMesh, water: B, h: F64, depth_m: F64) -> F64:
