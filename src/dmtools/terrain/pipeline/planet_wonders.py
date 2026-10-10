@@ -129,6 +129,8 @@ def level_crater_floors(mesh: SphereMesh, ground_m: F64, craters: Craters) -> F6
         s = np.arccos(np.clip(mesh.xyz @ xyz, -1, 1)) * mesh.radius_m / radius
         near = s < 1.2
         inside = s < 1.0
+        if not inside.any():  # a coarse mesh may have no node inside the rim
+            inside = s <= s.min()
         mean = float(np.average(out[inside], weights=mesh.area_m2[inside]))
         weight = 1 - _smooth(s[near], 0.85, 1.2)
         out[near] = out[near] * (1 - weight) + mean * weight

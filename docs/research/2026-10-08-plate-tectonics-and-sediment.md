@@ -188,7 +188,7 @@ neighbouring tiles disagreed, rivers broke at the seams.
   area, spread over the rim pixels they cross (area × pixel / parent spacing).
 - **Lakes.** Lakes are flooded through, so their outflows continue.
 - **Cache.** Tiles no longer store routing. The regional algorithm identifier is
-  now `planet-blended-tiles-v3`, so old caches are not reused.
+  then `planet-blended-tiles-v3`, so old caches were not reused.
 
 ## Segmented trenches
 

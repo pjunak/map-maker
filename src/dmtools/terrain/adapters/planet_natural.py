@@ -27,6 +27,7 @@ from PIL import Image, ImageDraw
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
 
 from dmtools.terrain.adapters.map_thematic import thematic_images
+from dmtools.terrain.adapters.map_topographic import topographic_image
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
     PlanetRasters,
@@ -721,6 +722,15 @@ def preview_images(
     if "Planet atlas" in images and len(result.volcanoes):
         images["Planet volcanoes"] = volcano_markers(images["Planet atlas"], result, rasters.raster)
     images |= climate_images(result, rasters)
+    rows, columns = land_px.shape
+    radius = result.mesh.radius_m
+    covered = rasters.raster.interpolate(result.mesh, ice_covered(result).astype(np.float64)) > 0.5
+    images["Planet topographic"] = topographic_image(
+        fields.elevation_m, land_px, rasters.lakes_px >= 0, rivers, fields.light,
+        np.pi * radius / rows,
+        2 * np.pi * radius / columns * np.maximum(np.cos(rasters.raster.latitude), 0.05),
+        covered,
+    )
     images |= thematic_images(result, rasters, fields.light, rivers)
     return images
 

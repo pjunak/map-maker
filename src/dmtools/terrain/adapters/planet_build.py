@@ -261,6 +261,10 @@ def write_planet_build(
         arrays["flood_basalt"] = result.forcing.flood_basalt.astype("<f4")
     v = result.volcanoes
     arrays |= {
+        "crater_m": result.crater_m.astype("<f4"),
+        "crater_xyz": result.craters.xyz.astype("<f8"),
+        "crater_radius_m": result.craters.radius_m.astype("<f8"),
+        "crater_depth_m": result.craters.depth_m.astype("<f8"),
         "volcanic_m": result.volcanic_m.astype("<f4"),
         "volcano_xyz": v.xyz.astype("<f8"),
         "volcano_height_m": v.height_m.astype("<f4"),

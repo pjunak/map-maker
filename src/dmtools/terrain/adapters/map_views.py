@@ -49,6 +49,11 @@ THEMES: tuple[MapTheme, ...] = (
         needs_climate=True,
     ),
     MapTheme(
+        "topographic", "Planet topographic",
+        "Atlas-style hypsometric tints with contour lines (interval set by the map scale, "
+        "every fifth bold), isobaths, soft hillshade, rivers and lakes.",
+    ),
+    MapTheme(
         "plates", "Planet plates",
         "Tectonic plates in distinct colours. Boundaries: red = converging, blue = "
         "spreading, yellow = sliding past. Arrows show plate motion (8 cm/yr fills a cell).",

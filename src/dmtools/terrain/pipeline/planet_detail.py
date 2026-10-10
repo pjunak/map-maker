@@ -245,8 +245,9 @@ def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int,
 
 def grid_flow(
     z: F64, outlet: B, cell_m: float, inflow_m2: F64
-) -> tuple[NDArray[np.int64], F64]:
-    """Steepest-descent receivers (flat indices, -1 at outlets) and drainage area (m^2).
+) -> tuple[NDArray[np.int64], F64, F64]:
+    """Steepest-descent receivers (flat indices, -1 at outlets), drainage area (m^2)
+    and the filled surface.
 
     Depressions are filled to their spill level first, so every cell drains to
     an ``outlet``. ``inflow_m2`` adds area entering from beyond the grid.
@@ -255,11 +256,11 @@ def grid_flow(
     source = np.full(rows * columns, cell_m * cell_m) + np.ascontiguousarray(
         inflow_m2, dtype=np.float64
     ).ravel()
-    _, _, _, receiver, _, area = _route(
+    filled, _, _, receiver, _, area = _route(
         np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet), float(cell_m),
         np.full(rows, float(cell_m)), False, source,
     )
-    return receiver, area
+    return receiver, area, filled.reshape(rows, columns)
 
 
 def carve_valleys(

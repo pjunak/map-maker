@@ -10,7 +10,7 @@ from uuid import uuid4
 import numpy as np
 from PIL import ImageTk
 
-from dmtools.terrain.adapters.planet_region import window_image
+from dmtools.terrain.adapters.planet_region import window_image, window_topographic
 from dmtools.terrain.application.planet_region import RegionRun
 
 
@@ -39,7 +39,11 @@ class RegionViewer(tk.Toplevel):
         )
         bar = ttk.Frame(self, padding=6)
         bar.pack(fill="x")
-        choices = ("Atlas", "Relief") if run.window.climate is not None else ("Relief",)
+        choices = (
+            ("Atlas", "Relief", "Topographic")
+            if run.window.climate is not None
+            else ("Relief", "Topographic")
+        )
         self.layer_input = ttk.Combobox(
             bar, textvariable=self.layer, values=choices, state="readonly", width=10
         )
@@ -57,7 +61,11 @@ class RegionViewer(tk.Toplevel):
         self._render()
 
     def _render(self) -> None:
-        image = window_image(self.run.window, atlas=self.layer.get() == "Atlas")
+        image = (
+            window_topographic(self.run.window)
+            if self.layer.get() == "Topographic"
+            else window_image(self.run.window, atlas=self.layer.get() == "Atlas")
+        )
         self._photo = ImageTk.PhotoImage(image, master=self)
         self.canvas.delete("all")
         self.canvas.create_image(0, 0, image=self._photo, anchor="nw")

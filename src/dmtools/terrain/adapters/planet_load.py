@@ -17,6 +17,7 @@ from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
+from dmtools.terrain.pipeline.planet_wonders import Craters
 from dmtools.terrain.pipeline.world import prepare_world_map
 
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
@@ -103,6 +104,12 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
                 data["basin_depth_m"].astype(np.float64) if "basin_depth_m" in data else None
             ),
             volcanic_m=data["volcanic_m"].astype(np.float64),
+            crater_m=data["crater_m"].astype(np.float64),
+            craters=Craters(
+                data["crater_xyz"].astype(np.float64).reshape(-1, 3),
+                data["crater_radius_m"].astype(np.float64),
+                data["crater_depth_m"].astype(np.float64),
+            ),
             volcanoes=Volcanoes(
                 data["volcano_xyz"].astype(np.float64),
                 data["volcano_height_m"].astype(np.float64),

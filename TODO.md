@@ -114,7 +114,8 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Mid-ocean ridge transform faults and ocean-wide fracture zones.
   - [x] Opt-in wonders: a titan shield volcano.
   - [x] Opt-in wonders: impact craters with level floors and ring lakes.
-  - [ ] More wonders (a great chasm); authored placement; sharp craters in regional windows.
+  - [x] Sharp craters, crater lakes and playas in regional windows.
+  - [ ] More wonders (a great chasm); authored placement.
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.
@@ -144,7 +145,8 @@ Update them with the affected milestone and evidence in every substantive batch.
 - [ ] **Map views** (ADR-0087): a theme registry, and projections for any theme.
   - [x] Globe and polar projections, `dmtools world view`, the app's globe window.
   - [x] Thematic maps: tectonic plates, drainage basins, geology, sea-floor age.
-  - [ ] Topographic map with contours; fantasy / parchment style.
+  - [x] Topographic map with contours (world and regional windows).
+  - [ ] Fantasy / parchment style.
   - [ ] Political and civilization views from authored overlays (later).
   See M7/M8 for selected materials, specialized landforms and ecological extensions.
 

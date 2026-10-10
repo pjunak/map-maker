@@ -140,6 +140,29 @@ def test_region_build_reuses_cached_tiles_and_publishes_a_manifest(
         build_region(planet, tmp_path / "a", (lon, lat), 400, settings, cache=cache)
 
 
+def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    from dmtools.terrain.adapters.planet_load import read_planet_parent
+    from dmtools.terrain.application.planet import export_planet, generate_planet_run
+
+    settings = replace(parent.settings, wonders=True)
+    run = generate_planet_run(parent.world.project, None, settings, preview_width=0)
+    result = run.result
+    regional = RegionalParent.from_result(result)
+    young = regional.young_m()
+    # Regional erosion starts from the surface without volcanoes and craters, which
+    # windows draw back sharply (erosion would fill a crater).
+    assert np.allclose(young, np.where(result.land, result.volcanic_m + result.crater_m, 0.0))
+    assert len(result.craters) >= 1 and np.any(result.crater_m < 0)
+    loaded = read_planet_parent(export_planet(run, tmp_path / "planet", width=128).parent)
+    assert loaded.parent.craters is not None
+    assert np.allclose(loaded.parent.craters.xyz, result.craters.xyz)
+    assert np.allclose(loaded.parent.young_m(), young, atol=0.1)
+
+
 def test_world_path_fixture_is_reusable(tmp_path: Path) -> None:
     assert build_world(WorldSpec(seed=3, columns=256), tmp_path, "x").exists()
 
@@ -257,7 +280,8 @@ def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
     outlet[:, 0] = True
     inflow = np.zeros((rows, columns))
     inflow[15, -1] = 1e9
-    receiver, area = grid_flow(z, outlet, 100.0, inflow)
+    receiver, area, filled = grid_flow(z, outlet, 100.0, inflow)
+    assert np.all(filled >= z - 1e-9)
     land = ~outlet.ravel()
     assert np.all(receiver[land] >= 0)
     # Everything (cells plus inflow) reaches the outlets.

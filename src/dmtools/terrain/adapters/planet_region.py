@@ -21,6 +21,7 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
+from dmtools.terrain.adapters.map_topographic import topographic_image
 from dmtools.terrain.adapters.planet_natural import (
     HYPSOMETRIC,
     LAKE,
@@ -42,6 +43,7 @@ from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
+from dmtools.terrain.pipeline.planet_wonders import crater_relief
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -57,6 +59,8 @@ MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
 DUNE_SPACING_M = 2500.0
 DUNE_HEIGHT_M = 45.0
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
+POND_DEPTH_M = 10.0  # filled depressions deeper than this hold water or a playa
+POND_LAKE_ARIDITY = 0.65  # ponds hold standing water above this P/PET
 LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
 REGION_SLOPE_SCALE = 3.5
@@ -148,6 +152,7 @@ class RegionWindow:
     salt: B  # dry salt pans of hot, arid closed lakes
     basalt: F64  # 0..1 flood-basalt cover
     wind: F64 | None  # (pixels, pixels, 2) annual mean wind (east, north) in m/s
+    playa: B  # dry closed basins of the regional relief (ephemeral lakes)
 
     @property
     def pixel_m(self) -> float:
@@ -211,23 +216,45 @@ def compose_window(
         volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
     else:
         islands = np.zeros((pixels, pixels), dtype=bool)
+    craters = parent.craters
+    if craters is not None and len(craters):
+        elevation = np.where(
+            land, elevation + crater_relief(points, planet_m, craters).reshape(pixels, pixels),
+            elevation,
+        )
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
     elevation = np.where(islands, sea, elevation)
     # Lakes fill the regional relief up to the parent lake level, so shores
     # follow the fine terrain instead of the coarse parent mesh.
     cover, level, closed = parent.lakes_at(points)
+    cover = cover.reshape(pixels, pixels)
+    if craters is not None:
+        # A crater lake fills the sharp crater to its level (a ring around the
+        # central plateau), which the parent mesh cannot resolve.
+        for xyz, radius in zip(craters.xyz, craters.radius_m, strict=True):
+            zone = (points @ xyz > np.cos(1.05 * radius / planet_m)).reshape(pixels, pixels)
+            cover = np.where(zone & (cover > 0.01), 1.0, cover)
     lakes = (
         land
         & inside
-        & (cover.reshape(pixels, pixels) > 0.15)
+        & (cover > 0.15)
         & (elevation <= level.reshape(pixels, pixels) + LAKE_SHORE_M)
     )
     salt = lakes & closed.reshape(pixels, pixels)
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
-    coverage = window_rivers(
+    coverage, ponds = window_rivers(
         parent, points, elevation, land, lakes, inside, river_km2, 2 * radius_m / pixels
     )
+    # Ponds are closed basins: lakes where it is wet enough, playas where it is dry.
+    dry = np.zeros_like(ponds)
+    if climate is not None:
+        dry = (
+            climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < POND_LAKE_ARIDITY
+        )
+    playa = ponds & dry
+    lakes = lakes | (ponds & ~dry)
+    salt = salt | (ponds & ~dry)
     coverage = np.where(land & ~lakes, coverage, 0.0)
     return RegionWindow(
         centre,
@@ -257,6 +284,7 @@ def compose_window(
                 axis=-1,
             ).reshape(pixels, pixels, 2)
         ),
+        playa,
     )
 
 
@@ -269,13 +297,14 @@ def window_rivers(
     inside: B,
     river_km2: float,
     pixel_m: float,
-) -> F64:
-    """River coverage routed on the window's blended relief.
+) -> tuple[F64, B]:
+    """River coverage routed on the window's blended relief, and closed ponds.
 
     One drainage network over the whole window follows the drawn valleys and
     has no seams between tiles. Rivers entering from outside the window carry
     the parent's upstream area, spread over the rim pixels the parent river
-    crosses.
+    crosses. Depressions deeper than POND_DEPTH_M (crater troughs, calderas)
+    hold water or a playa: rivers end there instead of crossing a filled flat.
     """
     pixels = elevation.shape[0]
     z = np.where(inside, np.nan_to_num(elevation, nan=0.0), 0.0)
@@ -284,11 +313,12 @@ def window_rivers(
     rim = inside & ~np.asarray(binary_erosion(inside), dtype=bool)
     upstream = parent.sample(points, parent.area_m2).reshape(pixels, pixels)
     inflow = np.where(rim & land, upstream * pixel_m / parent.mesh.spacing_m, 0.0)
-    receiver, area = grid_flow(z, outlet, pixel_m, inflow)
+    receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow)
+    ponds = land & inside & ~lakes & (filled - z > POND_DEPTH_M)
     flat = np.arange(pixels * pixels)
     x = (flat % pixels + 0.5).astype(np.float64)
     y = (flat // pixels + 0.5).astype(np.float64)
-    stop = (outlet | lakes).ravel()
+    stop = (outlet | lakes | ponds).ravel()
     major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
     # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
     # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
@@ -298,10 +328,11 @@ def window_rivers(
     drop = z.ravel() - z.ravel()[target]
     run = np.hypot(flat % pixels - target % pixels, flat // pixels - target // pixels) * pixel_m
     gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
-    return river_coverage(
+    coverage = river_coverage(
         x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
         meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0),
     )
+    return coverage, ponds
 
 
 def regional_climate(
@@ -312,10 +343,9 @@ def regional_climate(
         return None
     shape = elevation.shape
     z = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0).ravel()
-    # Volcanoes rise after the climate is simulated: lapse-correct whole edifices.
-    surface = parent.surface_m
-    if parent.volcanic_m is not None:
-        surface = surface - np.where(parent.land, parent.volcanic_m, 0.0)
+    # Volcanoes and craters form after the climate is simulated: lapse-correct
+    # them whole.
+    surface = parent.surface_m - parent.young_m()
     lift = (z - parent.sample(points, surface)) / 1000
     lapse = parent.settings.climate.lapse_c_per_km
     temperature = parent.sample(points, parent.temperature_c) - lapse * lift
@@ -496,10 +526,24 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             pan = np.zeros_like(pan)
         rgb[window.lakes & ~pan] = LAKE
         rgb[pan] = SALT_FLAT
+    rgb[window.playa] = SALT_FLAT
     alpha = (0.9 * window.rivers)[..., None]
     rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
     rgb[~np.isfinite(window.elevation_m)] = (36, 54, 82)
     return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
+
+
+def window_topographic(window: RegionWindow) -> Image.Image:
+    """Topographic view of a regional window: tints, contours, hillshade and water."""
+    z = display_relief(window)
+    gy = np.gradient(z, axis=0) / window.pixel_m
+    gx = np.gradient(z, axis=1) / window.pixel_m
+    _, light = shading(gx, gy, REGION_EXAGGERATION)
+    shown = np.where(np.isfinite(window.elevation_m), z, np.nan)
+    return topographic_image(
+        shown, window.land, window.lakes, window.rivers, light, window.pixel_m, window.pixel_m,
+        local=True, playa=window.playa,
+    )
 
 
 def aeqd_crs_wkt(lon0: float, lat0: float, radius_m: float) -> str:
@@ -550,6 +594,8 @@ def write_region(
     if window.climate is not None:
         window_image(window, atlas=True).save(target / "atlas.png")
         names.append("atlas.png")
+    window_topographic(window).save(target / "topographic.png")
+    names.append("topographic.png")
     manifest: dict[str, object] = {
         "schema": REGION_SCHEMA,
         "version": REGION_VERSION,

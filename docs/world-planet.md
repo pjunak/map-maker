@@ -49,6 +49,10 @@ With a planet shown, pan and zoom the map to the area you care about and click
 - A window opens with that region at about 5 km detail: ridges, valley networks,
   altitude zones and rivers.
 - Its radius follows how far you zoomed in, from 150 to 1,200 km.
+- Choose **Atlas**, **Relief** or **Topographic**. The topographic view stretches its
+  tints over the window's own height range and draws contours at true heights.
+- Volcanoes and impact craters are drawn sharply. Closed hollows deeper than 10 m
+  (crater troughs, calderas) hold lakes where it is wet and dry playas where it is not.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
 
 The region is built from fixed, cached tiles. Zooming the same place again is
@@ -72,7 +76,9 @@ dmtools world view my-planet --theme koppen --projection north-polar --limit 30 
 `--theme` is a build image's name without `.png`: `atlas`, `relief`, `koppen`,
 `volcanoes`, `precipitation`, `temperature`, and the thematic maps `plates`
 (tectonic plates, boundary types and motion), `seafloor` (ocean-crust age),
-`basins` (drainage basins) and `geology` (geological provinces). A polar view's `--lon` is the
+`basins` (drainage basins) and `geology` (geological provinces), and `topographic`
+(hypsometric tints with contours every 500 m on a 4,096-5,760 px world, every
+fifth bold, and isobaths). A polar view's `--lon` is the
 meridian below (north) or above (south) the pole, and `--limit` is the latitude
 at its edge (0 = the equator). Views are deterministic and never overwrite a
 file ([ADR-0087](adr/0087-map-themes-and-projections.md)).
@@ -118,7 +124,8 @@ dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
 Use `--spacing-km` for a different detail spacing. A region writes `elevation.tif`
-(the blended tile relief), `relief.png` and, with climate, a natural-colour `atlas.png`.
+(the blended tile relief), `relief.png`, `topographic.png` and, with climate, a
+natural-colour `atlas.png`.
 
 **What the images add.** Atlas and relief images draw small ridges, valleys and
 texture below the mesh resolution, so slopes do not shade as smooth ramps. This

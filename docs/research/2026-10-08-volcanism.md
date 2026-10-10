@@ -176,6 +176,12 @@ moved them between a 800k preview and a 3.2M build. Now the titan and the
 craters land in the same places at 200k and 800k nodes. Only crater depth,
 which is limited by the local ground, varies.
 
+Regional windows draw craters too. Their target surface leaves out volcanoes and
+craters, as regional erosion would otherwise fill a crater, and each window adds the
+sharp crater back. Crater lakes fill the sharp trough to the parent level. The
+regional tile algorithm is now `planet-blended-tiles-v4`. Dry crater troughs, and
+other closed hollows deeper than 10 m, show as playas.
+
 Volcanoes rise after the climate is simulated, but the atlas and regional
 windows had lapse-corrected only the sharp detail above the mesh's widened
 cones. Big edifices therefore kept the temperature of the plain they stand on.
