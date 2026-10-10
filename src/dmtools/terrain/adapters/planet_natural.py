@@ -26,6 +26,7 @@ from numpy.typing import NDArray
 from PIL import Image, ImageDraw
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
 
+from dmtools.terrain.adapters.map_thematic import thematic_images
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
     PlanetRasters,
@@ -720,6 +721,7 @@ def preview_images(
     if "Planet atlas" in images and len(result.volcanoes):
         images["Planet volcanoes"] = volcano_markers(images["Planet atlas"], result, rasters.raster)
     images |= climate_images(result, rasters)
+    images |= thematic_images(result, rasters, fields.light, rivers)
     return images
 
 

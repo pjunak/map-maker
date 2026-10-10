@@ -224,6 +224,27 @@ def test_planet_build_publishes_verified_world_aligned_products(
         export_view(target, tmp_path / "y.png", "relief", MapProjection("globe"), 128)
 
 
+def test_thematic_maps_cover_plates_basins_geology_and_sea_floor(world_path: Path) -> None:
+    from dmtools.terrain.adapters.map_thematic import (
+        PROVINCES,
+        drainage_roots,
+        geology_provinces,
+    )
+    from dmtools.terrain.adapters.map_views import THEME_BY_ID
+    from dmtools.terrain.adapters.planet_natural import render_previews
+
+    # Drainage roots follow receivers to the sea or to a closed-basin sink.
+    receiver = np.array([-1, 0, 1, 3, 3, 2])
+    assert drainage_roots(receiver).tolist() == [0, 0, 0, 3, 3, 0]
+    result = generate_planet(open_world(world_path), FAST)
+    province = geology_provinces(result)
+    assert np.all(province[~result.land] == -1)
+    assert set(np.unique(province[result.land]).tolist()) <= set(range(len(PROVINCES)))
+    previews = render_previews(result, 256, 25_000.0)
+    for theme in ("plates", "seafloor", "basins", "geology"):
+        assert previews[THEME_BY_ID[theme].label].size == (256, 128)
+
+
 def test_cancelled_planet_build_never_looks_complete(world_path: Path, tmp_path: Path) -> None:
     token = CancellationToken()
     seen: list[str] = []

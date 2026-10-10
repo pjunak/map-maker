@@ -143,7 +143,7 @@ Update them with the affected milestone and evidence in every substantive batch.
     its parent; window-independent display detail, rivers and lakes.
 - [ ] **Map views** (ADR-0087): a theme registry, and projections for any theme.
   - [x] Globe and polar projections, `dmtools world view`, the app's globe window.
-  - [ ] Thematic maps: tectonic plates, drainage basins, geology, sea-floor age.
+  - [x] Thematic maps: tectonic plates, drainage basins, geology, sea-floor age.
   - [ ] Topographic map with contours; fantasy / parchment style.
   - [ ] Political and civilization views from authored overlays (later).
   See M7/M8 for selected materials, specialized landforms and ecological extensions.

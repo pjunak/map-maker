@@ -69,7 +69,10 @@ dmtools world view my-planet --theme atlas --projection globe --lon 40 --lat 20 
 dmtools world view my-planet --theme koppen --projection north-polar --limit 30 --output arctic.png
 ```
 
-`--theme` is a build image's name without `.png`. A polar view's `--lon` is the
+`--theme` is a build image's name without `.png`: `atlas`, `relief`, `koppen`,
+`volcanoes`, `precipitation`, `temperature`, and the thematic maps `plates`
+(tectonic plates, boundary types and motion), `seafloor` (ocean-crust age),
+`basins` (drainage basins) and `geology` (geological provinces). A polar view's `--lon` is the
 meridian below (north) or above (south) the pole, and `--limit` is the latitude
 at its edge (0 = the equator). Views are deterministic and never overwrite a
 file ([ADR-0087](adr/0087-map-themes-and-projections.md)).

@@ -48,6 +48,26 @@ THEMES: tuple[MapTheme, ...] = (
         "Annual mean: violet = -25 °C; cream ≈ 5 °C; red = 30 °C.",
         needs_climate=True,
     ),
+    MapTheme(
+        "plates", "Planet plates",
+        "Tectonic plates in distinct colours. Boundaries: red = converging, blue = "
+        "spreading, yellow = sliding past. Arrows show plate motion (8 cm/yr fills a cell).",
+    ),
+    MapTheme(
+        "seafloor", "Planet sea-floor age",
+        "Ocean crust age: red = new at spreading ridges, through yellow and green, to "
+        "violet = 180+ million years. Fracture zones step the bands.",
+    ),
+    MapTheme(
+        "basins", "Planet drainage basins",
+        "Each river system to the sea in its own colour; the great basins (100,000+ km²) "
+        "are stronger, with their divides drawn. Hatched grey = closed basins.",
+    ),
+    MapTheme(
+        "geology", "Planet geology",
+        "Provinces: pink = shield, orange = old fold belt, brown = active mountain belt, "
+        "yellow = sedimentary basin, olive = rift, purple = flood basalt, red = volcanic.",
+    ),
 )
 THEME_BY_ID = {theme.id: theme for theme in THEMES}
 THEME_BY_LABEL = {theme.label: theme for theme in THEMES}
