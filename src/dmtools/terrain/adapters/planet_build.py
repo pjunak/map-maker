@@ -277,6 +277,9 @@ def write_planet_build(
         "volcano_age_myr": v.age_myr.astype("<f4"),
         "volcano_caldera_radius_m": v.caldera_radius_m.astype("<f4"),
         "volcano_caldera_depth_m": v.caldera_depth_m.astype("<f4"),
+        "volcano_summit_m": v.summit_m.astype("<f4"),
+        "volcano_emergent": v.emergent,
+        "volcanic_island": result.islands,
     }
     if climate is not None:
         arrays |= {
@@ -371,7 +374,9 @@ def write_planet_build(
             "endorheic": int(result.lakes.endorheic.sum()),
             "features": len(cast(list[object], lakes["features"])),
         },
-        "volcanoes": _volcano_summary(result),
+        "volcanoes": _volcano_summary(
+            result, _pixel_area_km2(rasters.raster, rasters.islands_px)
+        ),
         "outputs": outputs,
     }
     manifest["build_sha256"] = sha256(canonical_json(manifest)).hexdigest()
@@ -387,7 +392,15 @@ def write_planet_build(
     return complete
 
 
-def _volcano_summary(result: PlanetResult) -> dict[str, object]:
+def _pixel_area_km2(raster: FrameRaster, mask: NDArray[np.bool_]) -> float:
+    """Area (km^2) of masked pixels on the world-frame raster."""
+    rows, columns = raster.shape
+    radius = raster.frame.radius_km
+    cell = (2 * np.pi * radius / columns) * (np.pi * radius / rows) * np.cos(raster.latitude)
+    return float((mask * cell[:, None]).sum())
+
+
+def _volcano_summary(result: PlanetResult, island_area_km2: float) -> dict[str, object]:
     v = result.volcanoes
     on_land = 0
     if len(v):
@@ -397,6 +410,8 @@ def _volcano_summary(result: PlanetResult) -> dict[str, object]:
         "count": len(v),
         "active": int(v.active.sum()),
         "on_land": on_land,
+        "islands": int(v.emergent.sum()),
+        "island_area_km2": round(island_area_km2, 1),
         "by_kind": {name: int(np.sum(v.kind == k)) for k, name in enumerate(VOLCANO_KINDS)},
         "by_setting": {
             name: int(np.sum(v.setting == k)) for k, name in enumerate(VOLCANO_SETTINGS)

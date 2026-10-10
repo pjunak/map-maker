@@ -40,7 +40,7 @@ from dmtools.terrain.pipeline.planet_forcing import source_xy
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
-from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, edifice_height
+from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -197,10 +197,18 @@ def compose_window(
         floor_only = sea - parent.sample(
             points, np.where(parent.land, 0.0, parent.volcanic_m)
         ).reshape(pixels, pixels)
-        sea = np.minimum(floor_only + sharp, np.maximum(floor_only, GUYOT_DEPTH_M))
+        sea = sea_floor_with_volcanoes(
+            points, planet_m, parent.volcanoes, floor_only.ravel()
+        ).reshape(pixels, pixels)
         elevation = np.where(land, elevation + sharp, elevation)
+        # Opt-in volcanic islands rise from the sea floor beyond the authored coast.
+        islands = inside & ~land & (sea > 0)
+        land = land | islands
         volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
+    else:
+        islands = np.zeros((pixels, pixels), dtype=bool)
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
+    elevation = np.where(islands, sea, elevation)
     # Lakes fill the regional relief up to the parent lake level, so shores
     # follow the fine terrain instead of the coarse parent mesh.
     cover, level, closed = parent.lakes_at(points)

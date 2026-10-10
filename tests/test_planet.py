@@ -468,7 +468,7 @@ def test_volcanoes_follow_tectonic_settings_and_stay_below_sea_level_offshore() 
     one = Volcanoes(
         np.array([[1.0, 0.0, 0.0]]), np.array([2000.0]), np.array([20e3]),
         np.array([CALDERA]), np.array([ARC]), np.array([True]), np.array([0.0]),
-        np.array([6e3]), np.array([500.0]),
+        np.array([6e3]), np.array([500.0]), np.array([np.nan]), np.array([False]),
     )
     angles = np.array([0.0, 5.5e3, 30e3]) / RADIUS
     points = np.stack([np.cos(angles), np.sin(angles), np.zeros(3)], axis=1)
@@ -567,3 +567,40 @@ def test_snowline_rises_with_dryness_and_massifs_warm_in_summer() -> None:
     warming = mass_elevation_warming(mesh, plateau)
     assert warming[mesh.xyz[:, 2] > 0.95].mean() > 3.0
     assert np.all(warming[mesh.xyz[:, 2] < 0.0] == 0.0)
+
+
+def test_planned_islands_emerge_while_other_seamounts_stay_drowned() -> None:
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_volcanism import (
+        GUYOT_DEPTH_M,
+        HOTSPOT,
+        INTRAPLATE,
+        SEAMOUNT,
+        Volcanoes,
+        emerge,
+        sea_floor_with_volcanoes,
+    )
+
+    mesh = build_mesh(20_000, RADIUS, 14)
+    water = np.ones(mesh.size, dtype=bool)
+    floor = np.full(mesh.size, -4500.0)
+    a = mesh.xyz[100]
+    b = mesh.xyz[int(np.argmin(mesh.xyz @ a))]  # the far side of the planet
+    volcanoes = Volcanoes(
+        np.stack((a, b)), np.array([3000.0, 3000.0]), np.array([25e3, 25e3]),
+        np.array([SEAMOUNT, SEAMOUNT]), np.array([HOTSPOT, INTRAPLATE]),
+        np.array([True, False]), np.array([0.0, 50.0]), np.zeros(2), np.zeros(2),
+        np.array([3500.0, np.nan]), np.array([False, False]),
+    )
+    risen = emerge(volcanoes, mesh, water, floor)
+    assert risen.emergent.tolist() == [True, False]
+    assert risen.height_m[0] == pytest.approx(8000.0)
+    surface = sea_floor_with_volcanoes(np.stack((a, b)), RADIUS, risen, np.full(2, -4500.0))
+    assert surface[0] == pytest.approx(3500.0, rel=0.02)
+    assert surface[1] <= GUYOT_DEPTH_M
+
+
+def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
+    result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
+    assert not result.settings.volcanic_islands
+    assert not result.volcanoes.emergent.any() and not result.islands.any()

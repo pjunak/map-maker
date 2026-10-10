@@ -108,7 +108,7 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Volcanism: arcs, hotspot tracks, rift volcanoes, seamounts; volcano gazetteer.
   - [x] Flood-basalt plateaus at old plume heads (forcing).
   - [x] Trap basalt soils and stepped benches in rendering.
-  - [ ] Volcanic islands, only if the author opts in.
+  - [x] Opt-in volcanic islands: hotspot shields and island arcs.
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.

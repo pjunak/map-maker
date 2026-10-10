@@ -50,6 +50,16 @@ MAX_SUMMIT_M = 6600.0
 MIN_EDIFICE_M = 500.0
 CALDERA_SHARE = 0.45  # caldera radius at most this share of the basal radius
 GUYOT_DEPTH_M = -150.0  # sea volcanoes stop below the surface (authored coastline)
+# Opt-in volcanic islands.
+ISLAND_SUMMIT_M = 4200.0  # summit of a fresh ocean-island shield (Mauna Kea 4.2 km)
+ISLAND_DECAY_MYR = 10.0
+ISLAND_VENT_SUMMIT_M = 1500.0  # islands above this gain satellite shield vents
+ISLAND_DROWN_M = 600.0  # subsidence and wave erosion that drown old islands to guyots
+ISLAND_SHIELD_ASPECT = 0.09
+ISLAND_ARC_ASPECT = 0.12
+ISLAND_ARC_OFFSET_M = 160e3  # arc front behind the trench, on the overriding plate
+ISLAND_ARC_SPACING_M = 90e3
+LOBE_AMPLITUDE = 0.35  # outline irregularity of shields and islands (share of radius)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,21 +73,37 @@ class Volcanoes:
     age_myr: F64
     caldera_radius_m: F64  # 0 without a caldera
     caldera_depth_m: F64
+    summit_m: F64  # planned summit above sea level if it may emerge as an island; NaN never
+    emergent: B  # stands above sea level as a volcanic island
 
     @classmethod
     def empty(cls) -> Volcanoes:
         z = np.zeros(0)
         i = np.zeros(0, dtype=np.int64)
-        return cls(np.zeros((0, 3)), z, z, i, i, np.zeros(0, dtype=bool), z, z, z)
+        b = np.zeros(0, dtype=bool)
+        return cls(np.zeros((0, 3)), z, z, i, i, b, z, z, z, z, b)
 
     def __len__(self) -> int:
         return len(self.height_m)
 
+    def subset(self, mask: B) -> Volcanoes:
+        return Volcanoes(*(getattr(self, name)[mask] for name in _FIELDS))
+
 
 def place_volcanoes(
-    mesh: SphereMesh, land: B, coast_m: F64, plates: Tectonics, seed: int, ground_m: F64
+    mesh: SphereMesh,
+    land: B,
+    coast_m: F64,
+    plates: Tectonics,
+    seed: int,
+    ground_m: F64,
+    islands: bool = False,
 ) -> Volcanoes:
-    """Volcanoes for this world; ``ground_m`` is the eroded land surface they stand on."""
+    """Volcanoes for this world; ``ground_m`` is the eroded land surface they stand on.
+
+    With ``islands``, young hotspot volcanoes at sea are planned to break the
+    surface and island arcs rise behind ocean-ocean trenches (see ``emerge``).
+    """
     rng = np.random.default_rng([seed, 5150])
     radius = mesh.radius_m
     parts: list[Volcanoes] = []
@@ -109,7 +135,7 @@ def place_volcanoes(
             _build(mesh.xyz[rift], height, kind, RIFT, rng.random(len(rift)) < 0.55, rng)
         )
 
-    parts.append(_hotspots(mesh, land, plates, rng))
+    parts.append(_hotspots(mesh, land, plates, rng, islands))
 
     # Random intraplate seamounts on the ocean floor.
     ocean = np.flatnonzero(~land & (coast_m > 150e3))
@@ -124,6 +150,8 @@ def place_volcanoes(
                 age_myr=rng.uniform(5, 100, len(chosen)),
             )
         )
+    if islands:
+        parts.append(_island_arcs(mesh, land, coast_m, plates, seed, rng))
     volcanoes = _concat(parts)
     if not len(volcanoes):
         return volcanoes
@@ -141,10 +169,44 @@ def place_volcanoes(
         volcanoes.active, volcanoes.age_myr,
         np.minimum(volcanoes.caldera_radius_m, CALDERA_SHARE * radius),
         volcanoes.caldera_depth_m * scale,
+        volcanoes.summit_m, volcanoes.emergent,
     )
 
 
-def _hotspots(mesh: SphereMesh, land: B, plates: Tectonics, rng: np.random.Generator) -> Volcanoes:
+def _island_arcs(
+    mesh: SphereMesh,
+    land: B,
+    coast_m: F64,
+    plates: Tectonics,
+    seed: int,
+    rng: np.random.Generator,
+) -> Volcanoes:
+    """Intra-oceanic island arcs: volcanoes ~100-200 km behind ocean-ocean trenches.
+
+    Where two oceanic plates converge, the down-going slab melts at ~100 km
+    depth under the overriding plate, building a curved chain of volcanic
+    islands (Marianas, Aleutians, Lesser Antilles, Tonga).
+    """
+    closing = np.clip((plates.convergence - 0.02) / 0.03, 0, 1)
+    behind = np.exp(-(((plates.across_m + ISLAND_ARC_OFFSET_M) / 35e3) ** 2))
+    open_sea = (~land) & (coast_m > 150e3)
+    gaps = fbm3(mesh.xyz, seed + 5301, 3, 9.0) > 0.1
+    weight = closing * behind * open_sea * gaps
+    chosen = _poisson(mesh.xyz, weight, ISLAND_ARC_SPACING_M / mesh.radius_m, rng)
+    if not len(chosen):
+        return Volcanoes.empty()
+    summit = np.clip(rng.lognormal(np.log(900.0), 0.5, len(chosen)), 150, 3000)
+    placeholder = np.full(len(chosen), 3000.0)
+    kind = np.full(len(chosen), STRATO)
+    return _build(
+        mesh.xyz[chosen], placeholder, kind, ARC, rng.random(len(chosen)) < 0.6, rng,
+        summit_m=summit,
+    )
+
+
+def _hotspots(
+    mesh: SphereMesh, land: B, plates: Tectonics, rng: np.random.Generator, islands: bool
+) -> Volcanoes:
     radius = mesh.radius_m
     tree = KDTree(mesh.xyz)
     xyz: list[F64] = []
@@ -152,33 +214,64 @@ def _hotspots(mesh: SphereMesh, land: B, plates: Tectonics, rng: np.random.Gener
     kinds: list[int] = []
     actives: list[bool] = []
     ages: list[float] = []
+    summits: list[float] = []
     for index in range(len(plates.plumes)):
         speed = float(plates.plume_speed_m_yr[index])
         if speed < 1e-4:
             continue
         length = min(HOTSPOT_TRACK_MAX_MYR * 1e6 * speed, 4000e3)
         steps = int(length // HOTSPOT_TRACK_SPACING_M)
-        track = plume_track(
-            plates, index, np.arange(steps + 1, dtype=np.float64) * HOTSPOT_TRACK_SPACING_M, radius
+        # Volcanoes along a track are unevenly spaced and step off its axis.
+        along = np.concatenate(
+            ([0.0], np.cumsum(HOTSPOT_TRACK_SPACING_M * rng.uniform(0.7, 1.3, steps)))
         )
+        track = plume_track(plates, index, along, radius)
+        side = np.cross(plates.plumes[index], plates.plume_heading[index])
+        side /= max(float(np.linalg.norm(side)), 1e-12)
+        track = track + side * rng.uniform(-25e3, 25e3, (len(track), 1)) / radius
+        track /= np.linalg.norm(track, axis=1)[:, None]
         for k, point in enumerate(track):
-            age = k * HOTSPOT_TRACK_SPACING_M / speed / 1e6
+            age = along[k] / speed / 1e6
             on_land = bool(land[int(tree.query(point)[1])])
             fresh = np.exp(-age / (8.0 if on_land else 40.0))
             height = (2500.0 if on_land else 4500.0) * (0.35 + 0.65 * fresh)
-            xyz.append(point)
-            heights.append(height * float(rng.uniform(0.8, 1.2)))
-            if on_land:
-                kinds.append(CALDERA if k == 0 and rng.random() < 0.5 else SHIELD)
-            else:
-                kinds.append(SEAMOUNT)
-            actives.append(k == 0)
-            ages.append(age)
+            # Ocean islands build to ~4 km above sea level over the plume, then
+            # subside and erode as the plate carries them away, drowning to
+            # guyots within ~15-20 Myr (Hawaii to Midway and the Emperor chain).
+            emerges = islands and not on_land
+            summit = (
+                ISLAND_SUMMIT_M * np.exp(-age / ISLAND_DECAY_MYR) - ISLAND_DROWN_M
+                if emerges
+                else np.nan
+            )
+            # Young ocean islands coalesce from several shield vents.
+            vents = [(point, summit)]
+            if emerges and summit > ISLAND_VENT_SUMMIT_M:
+                for _ in range(2):
+                    angle = rng.uniform(0, 2 * np.pi)
+                    offset = rng.uniform(40e3, 75e3) / radius
+                    east = np.cross([0.0, 0.0, 1.0], point)
+                    east /= max(float(np.linalg.norm(east)), 1e-12)
+                    north = np.cross(point, east)
+                    shifted = point + offset * (np.cos(angle) * east + np.sin(angle) * north)
+                    vents.append(
+                        (shifted / np.linalg.norm(shifted), summit * rng.uniform(0.45, 0.8))
+                    )
+            for number, (where, top) in enumerate(vents):
+                xyz.append(where)
+                heights.append(height * float(rng.uniform(0.8, 1.2)))
+                if on_land:
+                    kinds.append(CALDERA if k == 0 and rng.random() < 0.5 else SHIELD)
+                else:
+                    kinds.append(SEAMOUNT)
+                actives.append(k == 0 and number == 0)
+                ages.append(age)
+                summits.append(top)
     if not xyz:
         return Volcanoes.empty()
     return _build(
         np.array(xyz), np.array(heights), np.array(kinds), HOTSPOT, np.array(actives), rng,
-        age_myr=np.array(ages),
+        age_myr=np.array(ages), summit_m=np.array(summits),
     )
 
 
@@ -191,6 +284,7 @@ def _build(
     rng: np.random.Generator,
     *,
     age_myr: F64 | None = None,
+    summit_m: F64 | None = None,
 ) -> Volcanoes:
     n = len(height)
     # Flank slope: stratovolcanoes ~0.2-0.3 (11-17 deg mean), shields ~0.06-0.1,
@@ -212,20 +306,67 @@ def _build(
         age_myr,
         np.where(caldera, rng.uniform(4e3, 15e3, n), 0.0),
         np.where(caldera, rng.uniform(300, 800, n), 0.0),
+        np.full(n, np.nan) if summit_m is None else np.asarray(summit_m, dtype=np.float64),
+        np.zeros(n, dtype=bool),
     )
+
+
+_FIELDS = (
+    "xyz", "height_m", "radius_m", "kind", "setting", "active", "age_myr",
+    "caldera_radius_m", "caldera_depth_m", "summit_m", "emergent",
+)
 
 
 def _concat(parts: list[Volcanoes]) -> Volcanoes:
     parts = [p for p in parts if len(p)]
     if not parts:
         return Volcanoes.empty()
+    return Volcanoes(*(np.concatenate([getattr(p, f) for p in parts]) for f in _FIELDS))
+
+
+def emerge(volcanoes: Volcanoes, mesh: SphereMesh, water: B, floor_m: F64) -> Volcanoes:
+    """Raise volcanoes with a planned positive summit above the sea as islands.
+
+    The edifice spans from the local sea floor to the planned summit; ocean
+    islands are broad shields (Hawaii's flanks average ~5 deg), arc islands
+    steeper composite cones on a wide submarine base.
+    """
+    if not len(volcanoes):
+        return volcanoes
+    node = np.asarray(KDTree(mesh.xyz).query(volcanoes.xyz)[1], dtype=np.int64)
+    at_sea = water[node]
+    summit = volcanoes.summit_m
+    rises = at_sea & np.isfinite(summit) & (summit > 0)
+    if not rises.any():
+        return volcanoes
+    depth = np.maximum(-floor_m[node], 0.0)
+    height = np.where(rises, depth + np.nan_to_num(summit), volcanoes.height_m)
+    hotspot = volcanoes.setting == HOTSPOT
+    kind = np.where(rises & hotspot, SHIELD, volcanoes.kind)
+    aspect = np.where(hotspot, ISLAND_SHIELD_ASPECT, ISLAND_ARC_ASPECT)
+    radius = np.where(rises, height / aspect, volcanoes.radius_m)
     return Volcanoes(
-        np.concatenate([p.xyz for p in parts]),
-        *(np.concatenate([getattr(p, f) for p in parts]) for f in (
-            "height_m", "radius_m", "kind", "setting", "active", "age_myr",
-            "caldera_radius_m", "caldera_depth_m",
-        )),
+        volcanoes.xyz, height, radius, kind.astype(np.int64), volcanoes.setting,
+        volcanoes.active, volcanoes.age_myr, volcanoes.caldera_radius_m,
+        volcanoes.caldera_depth_m, volcanoes.summit_m, rises,
     )
+
+
+def sea_floor_with_volcanoes(
+    points: F64, radius_m: float, volcanoes: Volcanoes, floor_m: F64, minimum_radius_m: float = 0.0
+) -> F64:
+    """Sea floor (m) with seamounts (stopped below the surface) and emergent islands."""
+    drowned = volcanoes.subset(~volcanoes.emergent)
+    surface = np.minimum(
+        floor_m + edifice_height(points, radius_m, drowned, minimum_radius_m),
+        np.maximum(floor_m, GUYOT_DEPTH_M),
+    )
+    if volcanoes.emergent.any():
+        islands = volcanoes.subset(volcanoes.emergent)
+        surface = np.maximum(
+            surface, floor_m + edifice_height(points, radius_m, islands, minimum_radius_m)
+        )
+    return surface
 
 
 def _poisson(xyz: F64, weight: F64, spacing: float, rng: np.random.Generator) -> I64:
@@ -277,7 +418,19 @@ def edifice_height(
         return out
     radius = np.maximum(volcanoes.radius_m, minimum_radius_m)
     height = volcanoes.height_m * (volcanoes.radius_m / radius) ** 2
-    reach = float(radius.max()) / planet_radius_m
+    # Shields and volcanic islands spread along rift zones and coalesce from
+    # several vents (Hawaii's Big Island is five), so their outlines are lobed.
+    irregular = volcanoes.emergent | (volcanoes.kind == SHIELD)
+    lobes = (
+        LOBE_AMPLITUDE
+        * (
+            fbm3(points, 9101, 3, planet_radius_m / 80e3)
+            + 0.5 * fbm3(points, 9102, 3, planet_radius_m / 25e3)
+        )
+        if irregular.any()
+        else np.zeros(len(points))
+    )
+    reach = float(radius.max()) * (1 + 1.5 * LOBE_AMPLITUDE) / planet_radius_m
     tree = KDTree(volcanoes.xyz)
     found_distance, found_index = tree.query(
         points, k=min(4, len(volcanoes)), distance_upper_bound=2 * np.sin(reach / 2),
@@ -291,7 +444,8 @@ def edifice_height(
             continue
         v = index[hit, column]
         r = 2 * np.arcsin(np.clip(distance[hit, column] / 2, 0, 1)) * planet_radius_m
-        s = np.clip(r / radius[v], 0, 1)
+        stretch = np.where(irregular[v], 1 + lobes[hit], 1.0)
+        s = np.clip(r / (radius[v] * stretch), 0, 1)
         kind = volcanoes.kind[v]
         # Concave stratovolcano and seamount flanks; broad convex shields.
         profile = np.where(kind == SHIELD, (1 - s**2) ** 0.7, (1 - s) ** 1.8)

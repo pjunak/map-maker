@@ -77,7 +77,11 @@ class RegionalParent:
         climate = result.climate
         return cls(
             result.world, result.settings, result.mesh, result.land,
-            np.where(result.land, result.lakes.surface_m, 0.0),
+            np.where(
+                result.land,
+                result.lakes.surface_m,
+                np.where(result.islands, result.elevation_m, 0.0),
+            ),
             result.forcing.steady_uplift, result.forcing.pulse_uplift, result.forcing.erodibility,
             result.runoff_weight, result.flow.receiver, result.flow.area_m2,
             None if climate is None else climate.temperature_c,

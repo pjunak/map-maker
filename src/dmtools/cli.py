@@ -152,6 +152,9 @@ def create_parser() -> argparse.ArgumentParser:
                         help="Smallest resolved drainage area (keeps relief mesh-independent).")
     planet.add_argument("--calibrate", type=int, default=3,
                         help="Geology target corrections (only with --geology).")
+    planet.add_argument("--volcanic-islands", action="store_true",
+                        help="Let young volcanoes at sea rise as islands (adds land "
+                             "beyond your coastline).")
     planet.add_argument("--climate-passes", type=int, default=1,
                         help="Climate/erosion couplings; 0 disables climate and biomes.")
     planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")
@@ -231,6 +234,7 @@ def _run_world_planet(arguments: argparse.Namespace) -> int:
             process_area_km2=arguments.process_km2,
             calibration_iterations=arguments.calibrate,
             climate_passes=arguments.climate_passes,
+            volcanic_islands=arguments.volcanic_islands,
         )
         path = build_planet(
             arguments.project, arguments.output, arguments.geology, settings,

@@ -5,7 +5,7 @@ from math import isfinite
 
 from dmtools.terrain.domain.seeds import validate_master_seed
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v14"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v15"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v6"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"
@@ -70,9 +70,14 @@ class PlanetSettings:
     calibration_iterations: int = 3
     climate_passes: int = 1
     climate: PlanetClimateSettings = field(default_factory=PlanetClimateSettings)
+    # Opt-in: young volcanoes at sea may break the surface as new islands, which
+    # adds land beyond the authored coastline.
+    volcanic_islands: bool = False
 
     def __post_init__(self) -> None:
         validate_master_seed(self.seed)
+        if type(self.volcanic_islands) is not bool:
+            raise ValueError("Volcanic islands must be true or false.")
         if (
             type(self.nodes) is not int
             or not MIN_PLANET_NODES <= self.nodes <= MAX_PLANET_NODES

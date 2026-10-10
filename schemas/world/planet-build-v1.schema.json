@@ -36,7 +36,7 @@
       "additionalProperties": false,
       "required": ["relief", "climate"],
       "properties": {
-        "relief": { "const": "sphere-mesh-stream-power-v14" },
+        "relief": { "const": "sphere-mesh-stream-power-v15" },
         "climate": { "enum": ["planet-climate-v6", null] }
       }
     },
@@ -44,7 +44,8 @@
       "type": "object",
       "required": [
         "seed", "nodes", "duration_myr", "step_kyr", "erodibility", "area_exponent",
-        "process_area_km2", "calibration_iterations", "climate_passes", "climate"
+        "process_area_km2", "calibration_iterations", "climate_passes", "climate",
+        "volcanic_islands"
       ],
       "properties": {
         "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
@@ -56,7 +57,8 @@
         "process_area_km2": { "type": "number", "minimum": 0 },
         "calibration_iterations": { "type": "integer", "minimum": 0 },
         "climate_passes": { "type": "integer", "minimum": 0 },
-        "climate": { "type": "object" }
+        "climate": { "type": "object" },
+        "volcanic_islands": { "type": "boolean" }
       }
     },
     "seed_policy": { "const": "named-stage-sha256@1" },
@@ -152,9 +154,11 @@
     "volcanoes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["count", "active", "on_land", "by_kind", "by_setting"],
+      "required": ["count", "active", "on_land", "islands", "island_area_km2", "by_kind", "by_setting"],
       "properties": {
         "count": { "type": "integer", "minimum": 0 },
+        "islands": { "type": "integer", "minimum": 0 },
+        "island_area_km2": { "type": "number", "minimum": 0 },
         "active": { "type": "integer", "minimum": 0 },
         "on_land": { "type": "integer", "minimum": 0 },
         "by_kind": { "type": "object", "additionalProperties": { "type": "integer" } },

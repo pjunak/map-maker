@@ -125,7 +125,12 @@ class DisplayFields:
 
 
 def display_fields(
-    result: PlanetResult, raster: FrameRaster, land_px: B, base_land: F64, base_sea: F64
+    result: PlanetResult,
+    raster: FrameRaster,
+    land_px: B,
+    base_land: F64,
+    base_sea: F64,
+    islands_px: B | None = None,
 ) -> DisplayFields:
     mesh = result.mesh
     radius = mesh.radius_m
@@ -138,7 +143,9 @@ def display_fields(
     # The mesh carries volcanoes widened to its resolution; redraw them sharply.
     sharp = edifice_height(points, radius, result.volcanoes).reshape(shape)
     coarse = raster.interpolate(mesh, result.volcanic_m)
-    base_land = np.where(land_px, base_land - coarse + sharp, base_land)
+    islands = np.zeros(shape, dtype=bool) if islands_px is None else islands_px
+    # Island pixels already carry their sharp volcano surface.
+    base_land = np.where(land_px & ~islands, base_land - coarse + sharp, base_land)
     sea_floor = base_sea - coarse
     base_sea = np.where(
         land_px, base_sea, np.minimum(sea_floor + sharp, np.maximum(sea_floor, GUYOT_DEPTH_M))
@@ -185,7 +192,14 @@ def display_fields(
     slope, light = shading(gx, gy, EXAGGERATION)
     position = openness(z, dy, dx[:, 0])
     light = light * (1 + OPENNESS_GAIN * position)
-    return DisplayFields(z, base_land - (sharp - coarse), slope, light, position, volcanic)
+    # The surface the climate fields refer to: mesh land, or a volcanic island's
+    # coarse mesh height (its temperatures are lapse-corrected to that height).
+    base = np.where(
+        islands,
+        raster.interpolate(mesh, np.where(result.islands, result.elevation_m, 0.0)),
+        base_land - (sharp - coarse),
+    )
+    return DisplayFields(z, base, slope, light, position, volcanic)
 
 
 def ice_surface(result: PlanetResult, ice: B) -> F64:
@@ -627,7 +641,9 @@ def preview_images(
     land_px = rasters.land_px
     base_land = np.where(land_px, rasters.elevation_m, 0.0)
     base_sea = np.where(land_px, 0.0, rasters.elevation_m)
-    fields = display_fields(result, rasters.raster, land_px, base_land, base_sea)
+    fields = display_fields(
+        result, rasters.raster, land_px, base_land, base_sea, rasters.islands_px
+    )
     rivers = river_layer(result, rasters.raster, threshold_m3_s)
     sea = sea_colour(fields)
     images: dict[str, Image.Image] = {}

@@ -82,6 +82,46 @@ and drawn as young constructional landforms.
 - **Provenance.** The relief algorithm identifier is now
   `sphere-mesh-stream-power-v10` (v14 once the trap cover was stored).
 
+## Opt-in volcanic islands
+
+The authored coastline is authoritative, so volcanoes at sea stop 150 m below
+the surface by default. With `volcanic_islands` (CLI `--volcanic-islands`,
+Planet page checkbox) they may break the surface.
+
+- **Hotspot islands.** Ocean volcanoes on hotspot tracks get a planned summit
+  of 4,200 e^(−age/10 Myr) − 600 m. They rise from the local sea floor as
+  broad shields while young and drown to guyots after about 20 Myr, as from
+  Hawaii to Midway and the Emperor chain.
+  - **Track.** Spacing along the track varies ±30 % and volcanoes step up to
+    25 km off its axis.
+  - **Vents.** Islands with summits above 1,500 m gain two satellite shield
+    vents 40–75 km away, so islands coalesce from several volcanoes, like
+    Hawaii's Big Island.
+- **Island arcs.** Ocean–ocean convergent boundaries closing faster than
+  2 cm/yr get arc volcanoes 160 km behind the trench, on the overriding plate,
+  at least 90 km apart with gaps (Marianas, Aleutians, Lesser Antilles). Their
+  summits are lognormal with a median of 900 m.
+- **Shapes.**
+  - **Lobes.** Shields and islands have lobed outlines: their radius varies
+    ±35 % with noise at 80 km and 25 km, for rift zones and coalesced vents.
+  - **Slopes.** Island shields have a slope of about 0.09 and arc islands
+    about 0.12.
+- **Drawing.** Coastlines come from the volcano shapes at pixel resolution on
+  the volcano-free sea floor, at world scale and in regional windows. Islands
+  appear in `elevation.tif`, in the atlas and in the climate layers.
+- **Climate.** Island nodes keep the simulated moisture of the surrounding
+  ocean. Their temperature is lapse-corrected, and PET, runoff, biome and
+  Köppen class are recomputed as land.
+- **Not on islands.** Islands get no rivers or lakes on the world mesh; they
+  are too small for it. Regional windows route rivers on them.
+- **Aethelara at 800k nodes.** 238 emergent volcanoes form the islands, most of
+  them small arc islands, plus a few large coalesced hotspot islands.
+- **Off by default.** With the option off, builds are unchanged except for the
+  lobed outlines of land shield volcanoes.
+- **Provenance.** The relief identifier is now `sphere-mesh-stream-power-v15`.
+- **Manifest.** It reports island volcanoes and the island area drawn on the
+  raster.
+
 ## In the app
 
 - **Layer.** A "Planet volcanoes" layer shows the atlas with land volcanoes

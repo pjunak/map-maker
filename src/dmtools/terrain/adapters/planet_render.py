@@ -24,6 +24,7 @@ from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
 from dmtools.terrain.pipeline.planet_koppen import KOPPEN_COLOURS
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, vertex_triangles
+from dmtools.terrain.pipeline.planet_volcanism import edifice_height
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -159,13 +160,35 @@ class PlanetRasters:
     land_px: B
     elevation_m: F64
     lakes_px: NDArray[np.int64]
+    islands_px: B  # volcanic islands beyond the authored coastline (opt-in)
 
 
 def planet_rasters(result: PlanetResult, width: int) -> PlanetRasters:
     raster = FrameRaster.build(result.mesh, result.world.project.frame, width)
-    land_px = land_mask(result.world, raster)
-    z = elevation_raster(result, raster, land_px)
-    return PlanetRasters(raster, land_px, z, lake_raster(result, raster, land_px))
+    authored = land_mask(result.world, raster)
+    islands_px, island_z = island_pixels(result, raster, authored)
+    land_px = authored | islands_px
+    z = np.where(islands_px, island_z, elevation_raster(result, raster, land_px))
+    return PlanetRasters(raster, land_px, z, lake_raster(result, raster, land_px), islands_px)
+
+
+def island_pixels(result: PlanetResult, raster: FrameRaster, authored: B) -> tuple[B, F64]:
+    """Pixels of emergent volcanic islands and their surface height (m).
+
+    The mesh resolves islands coarsely; their coastlines are drawn from the
+    volcano shapes at pixel resolution on the volcano-free sea floor.
+    """
+    v = result.volcanoes
+    if not len(v) or not v.emergent.any():
+        return np.zeros(raster.shape, dtype=bool), np.zeros(raster.shape)
+    water = ~result.land
+    floor = raster.interpolate(
+        result.mesh, np.where(water, result.elevation_m - result.volcanic_m, 0.0)
+    )
+    islands = v.subset(v.emergent)
+    sharp = edifice_height(raster.queries, result.mesh.radius_m, islands).reshape(raster.shape)
+    surface = floor + sharp
+    return ~authored & (surface > 0), surface
 
 
 def climate_images(result: PlanetResult, rasters: PlanetRasters) -> dict[str, Image.Image]:

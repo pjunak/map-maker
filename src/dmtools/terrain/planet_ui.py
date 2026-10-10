@@ -122,7 +122,13 @@ class PlanetPanel(ttk.Frame):
         self.climate_input = ttk.Checkbutton(
             self, text="Climate, lakes and biomes", variable=self.climate
         )
-        self.climate_input.pack(anchor="w", pady=(0, 8))
+        self.climate_input.pack(anchor="w", pady=(0, 4))
+        self.islands = tk.BooleanVar(self, value=False)
+        self.islands_input = ttk.Checkbutton(
+            self, text="Volcanic islands (adds land beyond your coastline)",
+            variable=self.islands,
+        )
+        self.islands_input.pack(anchor="w", pady=(0, 8))
         seed_row = ttk.Frame(self, style="Panel.TFrame")
         seed_row.pack(fill="x", pady=(0, 8))
         ttk.Label(seed_row, text="Seed", style="Body.TLabel").pack(side="left")
@@ -175,6 +181,7 @@ class PlanetPanel(ttk.Frame):
             seed=seed,
             nodes=DETAIL_PRESETS[self.detail_preset.get()],
             climate_passes=1 if self.climate.get() else 0,
+            volcanic_islands=bool(self.islands.get()),
         )
 
     def request_generate(self) -> None:
@@ -188,7 +195,7 @@ class PlanetPanel(ttk.Frame):
     def set_busy(self, busy: bool, cancellable: bool = False) -> None:
         state = "disabled" if busy else "normal"
         self.preset_input.configure(state="disabled" if busy else "readonly")
-        for widget in (self.climate_input, self.seed_input, self.geology_button,
+        for widget in (self.climate_input, self.islands_input, self.seed_input, self.geology_button,
                        self.generate_button):
             widget.configure(state=state)
         self.clear_geology_button.configure(

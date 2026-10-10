@@ -460,6 +460,40 @@ def _surface_climate(
     )
 
 
+def with_islands(
+    climate: Climate,
+    mesh: SphereMesh,
+    land: B,
+    islands: B,
+    elevation: F64,
+    coast_m: F64,
+    settings: PlanetClimateSettings | None = None,
+) -> Climate:
+    """Climate on new volcanic islands: the sea-level fields there, lapse-corrected.
+
+    Island nodes keep the simulated moisture of their ocean surroundings; their
+    temperature falls with height, and PET, runoff, biome and Koppen class are
+    recomputed as land.
+    """
+    if not islands.any():
+        return climate
+    s = settings or PlanetClimateSettings()
+    lapse = np.where(islands, s.lapse_c_per_km * np.maximum(elevation, 0.0) / 1000, 0.0)
+    temp, warm, cold = climate.temperature_c - lapse, climate.warm_c - lapse, climate.cold_c - lapse
+    pet = np.where(islands, potential_evapotranspiration(mesh.lat, temp, coast_m), climate.pet_mm)
+    precip = climate.precipitation_mm
+    ratio = pet / np.maximum(precip, 1e-6)
+    actual = precip * (1 + ratio - (1 + ratio**BUDYKO_W) ** (1 / BUDYKO_W))
+    runoff = np.where(islands, np.maximum(precip - actual, 0.0), climate.runoff_mm)
+    ground = land | islands
+    return Climate(
+        temp, warm, cold, climate.wind_east, climate.wind_north, precip, pet, runoff,
+        classify(temp, warm, precip, pet, elevation, ground),
+        climate.continentality, climate.precip_warm_mm, climate.precip_cold_mm,
+        classify_koppen(temp, warm, cold, climate.precip_warm_mm, climate.precip_cold_mm, ground),
+    )
+
+
 def downscale_climate(
     coarse_mesh: SphereMesh,
     coarse: Climate,

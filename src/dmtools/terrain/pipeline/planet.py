@@ -32,6 +32,7 @@ from dmtools.terrain.pipeline.planet_climate import (
     downscale_climate,
     simulate_climate,
     snowline_m,
+    with_islands,
 )
 from dmtools.terrain.pipeline.planet_evolution import (
     CalibratedRelief,
@@ -57,10 +58,11 @@ from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_volcanism import (
-    GUYOT_DEPTH_M,
     Volcanoes,
     edifice_height,
+    emerge,
     place_volcanoes,
+    sea_floor_with_volcanoes,
 )
 from dmtools.terrain.pipeline.world import WorldMap
 
@@ -106,6 +108,7 @@ class PlanetResult:
     lakes: Lakes  # lake state and the final routing on the water surface
     volcanoes: Volcanoes
     volcanic_m: F64  # edifice height each node gained from volcanoes (display/regional)
+    islands: B  # water nodes standing above sea level as volcanic islands (opt-in)
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
@@ -305,7 +308,8 @@ def generate_planet(
         Volcanoes.empty()
         if plates is None
         else place_volcanoes(
-            mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved
+            mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved,
+            settings.volcanic_islands,
         )
     )
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
@@ -328,10 +332,21 @@ def generate_planet(
         river_sediment(mesh, land, lakes.flow, result.forcing),
         plates,
     )
-    # Volcanoes at sea never break the surface (the coastline is authored).
-    seamounts = np.minimum(bathymetry + cones, np.maximum(bathymetry, GUYOT_DEPTH_M))
+    # Volcanoes at sea stop below the surface unless volcanic islands are enabled;
+    # then young ones rise from the sea floor to their planned summits.
+    if settings.volcanic_islands:
+        volcanoes = emerge(volcanoes, mesh, water, bathymetry)
+    seamounts = sea_floor_with_volcanoes(
+        mesh.xyz, mesh.radius_m, volcanoes, bathymetry, 1.5 * mesh.spacing_m
+    )
     volcanic = np.where(water, seamounts - bathymetry, cones)
     bathymetry = seamounts
+    islands = water & (seamounts > 0)
+    if climate is not None:
+        climate = with_islands(
+            climate, mesh, land, islands, np.where(water, seamounts, 0.0), coast,
+            settings.climate,
+        )
     elevation = np.where(water, bathymetry, lakes.ground_m)
     metrics = relief_metrics(mesh, lakes.surface_m, water | (lakes.lake >= 0), lakes.flow)
     metrics["lakes"] = {
@@ -343,6 +358,7 @@ def generate_planet(
     say(1.0, "Planet relief ready")
     return PlanetResult(
         world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
-        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, seeds, metrics,
+        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, seeds,
+        metrics,
     )
 
