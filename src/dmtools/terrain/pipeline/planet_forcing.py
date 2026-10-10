@@ -627,8 +627,14 @@ def ocean_floor(
     # Ocean-ocean convergence: a trench on the down-going side of the boundary
     # (Marianas, Tonga); the volcanic arc would be new land, so it is left out.
     closing = _smoothstep(plates.convergence, 0.01, 0.05) * _smoothstep(coast_m, 150e3, 400e3)
-    offset = plates.across_m - 40e3
-    depth += 0.8 * TRENCH_DEPTH_M * closing * np.exp(-((offset / 50e3) ** 2))
+    # Trenches wander off the plate boundary, deepen and shallow along strike
+    # and break into segments at fracture zones and subducting ridges.
+    offset = plates.across_m - 40e3 - 30e3 * fbm3(p, seed + 1401, 3, 12.0)
+    segments = _smoothstep(fbm3(p, seed + 1402, 3, 10.0), -0.35, 0.05)
+    strength = 0.55 + 0.45 * _smoothstep(fbm3(p, seed + 1403, 3, 6.0), -0.4, 0.4)
+    depth += (
+        0.8 * TRENCH_DEPTH_M * closing * segments * strength * np.exp(-((offset / 50e3) ** 2))
+    )
     return np.where(water, -depth, 0.0)
 
 

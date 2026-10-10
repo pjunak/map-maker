@@ -190,6 +190,17 @@ neighbouring tiles disagreed, rivers broke at the seams.
 - **Cache.** Tiles no longer store routing. The regional algorithm identifier is
   now `planet-blended-tiles-v3`, so old caches are not reused.
 
+## Segmented trenches
+
+Ocean–ocean trenches drew as long, unbroken, uniform grooves.
+
+- **Axis.** It wanders up to about ±30 km off the plate boundary, with noise at
+  about 500 km.
+- **Depth.** It varies between 55 % and 100 % along strike.
+- **Segments.** Trenches break into segments where noise at about 600 km
+  falls low, as at fracture zones and subducting ridges.
+- **Provenance.** The relief identifier is now `sphere-mesh-stream-power-v16`.
+
 ## Limits
 
 - **No motion of land.** Plates never move land, because the coastline is

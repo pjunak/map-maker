@@ -29,7 +29,7 @@ Only the current formats are supported:
   result hashes. Neither a land DEM nor physical transport/heat capacity.
 
 - [Planet build v1](world/planet-build-v1.schema.json): experimental whole-planet relief
-  (`sphere-mesh-stream-power-v15`) and provisional climate. Node elevation on the sphere
+  (`sphere-mesh-stream-power-v16`) and provisional climate. Node elevation on the sphere
   mesh is authoritative; world-frame GeoTIFF/images are derived. Not a world parent.
 
 - [Planet region v1](world/planet-region-v1.schema.json): experimental regional detail
