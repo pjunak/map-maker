@@ -116,3 +116,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0085: Generate whole-planet relief by erosion on an irregular sphere mesh](0085-generate-planet-relief-on-a-sphere-mesh.md)
 - [ADR-0086: Generate regional planet detail from blended fixed tiles](0086-regional-planet-detail-from-blended-tiles.md)
 - [ADR-0087: Render map themes on the world frame and project them as views](0087-map-themes-and-projections.md)
+- [ADR-0088: Nest regional detail levels, each enriched from the level above](0088-nested-regional-detail-levels.md)

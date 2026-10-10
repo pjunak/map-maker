@@ -123,8 +123,25 @@ dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-
 ```
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
+Go deeper with `--level`. Each level is enriched from the level above it, and
+windows at the same level agree wherever they overlap
+([ADR-0088](adr/0088-nested-regional-detail-levels.md)).
+
+| Level | Detail | Window radius | Example |
+|---|---|---|---|
+| 1 region | 5 km | up to 5,000 km | a kingdom, a mountain range |
+| 2 province | 1 km | up to 300 km | valleys, a crater, a coast |
+| 3 local | 200 m | up to 60 km | a few valleys, a town's surroundings |
+
+```powershell
+dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 120 --level 2 --output my-province
+```
+
+The first deep window takes a few minutes, because it also generates the coarser
+tiles it needs. Later windows nearby reuse the cache.
+
 Options:
-- `--spacing-km` sets the detail spacing (5 km by default).
+- `--spacing-km` sets the level-1 detail spacing (5 km by default).
 - `--pixels` sets the image size (1,024 by default).
 - `--cache` puts the tile cache elsewhere.
 - `--workers` sets how many tile processes run (0 = automatic).

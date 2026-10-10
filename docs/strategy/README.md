@@ -18,17 +18,16 @@ backlog, and [status](../research/status.md) records what works now.
 | **M3** | implemented, experimental | **Provisional climate:** seasonal temperature, winds, moisture with orographic lift, runoff, biomes and Köppen. | Controlled windward/leeward and coastal/interior responses; closed water budget ([report](../research/2026-10-08-continentality-and-koppen.md)). |
 | **M4** | partly implemented | **Coupled, inspectable workflow:** runoff-weighted erosion and lakes (done); a World-tab stage with cancel and stale state (done); compare and regenerate. A UI rework runs in a separate session. | A user can run, inspect, change an input and regenerate, and sees nonconvergence. |
 | **M5** | queued | **Accepted parent and native core:** reference-world realism gates, an adoption ADR, and a port of the stable kernels to a native core with differential tests. Decide what replaces the local composed generator. | Metric thresholds; Python/native agreement within tolerance; dependency audit. |
-| **M6** | **ACTIVE** | **Regional and local zoom.** Fixed blended tiles are done (ADR-0086). Next: nested levels (region → province → local), each consistent with its parent, with display detail, rivers and lakes that do not depend on the window. | Overlapping and nested requests agree; inherited flow is conserved; revisits do not age terrain again (ADR-0048). |
+| **M6** | **ACTIVE** | **Regional and local zoom.** Fixed blended tiles (ADR-0086) and nested levels are done: region (5 km), province (1 km) and local (200 m), each enriched from the level above (ADR-0088). Next: display detail, rivers and lakes that do not depend on the window. | Overlapping and nested requests agree; inherited flow is conserved; revisits do not age terrain again (ADR-0048). |
 | **Views** | implemented, experimental | **Map themes and projections** (ADR-0087): globe and polar views; atlas, relief, climate, topographic, parchment, plates, sea-floor age, basins and geology themes. Political and civilization views will need authored overlays. | Themes are registered once; projections are deterministic and verified against the build. |
 | **M7** | deferred | Water and materials, plus selected landforms (discharge widths, lake storage, glacial, karst), when integrated results show a need. | A control and a conservation ledger for each mechanism. |
 | **M8** | deferred | Accepted ecology and stronger planetary models. | Traceable classifications and uncertainty. |
 
 ## Next
 
-1. **M6 nested zoom.** Write an ADR and build levels below the 5 km regional tiles:
-   - a fixed tile lattice per level;
-   - seeds from `planet.tile.L<level>.<id>`;
-   - display detail anchored to the world, not the window.
+1. **M6 seamless local maps.** Anchor display detail, river tracing and lake
+   shores to the world instead of the window, and offer drill-down in the app
+   (UI session).
 2. **Authored placement.** Let users place wonders and geology by hand in the world
    file.
 3. **Political and civilization overlays** as registered themes.

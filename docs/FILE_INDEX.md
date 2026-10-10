@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**228 Markdown files + 1 legal notice = 229 documentation files.**
+**229 Markdown files + 1 legal notice = 230 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 20 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 87 |
+| Architecture decision records | 88 |
 | Dated research reports | 93 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **229** |
+| **Total** | **230** |
 
 ## Project entry and guidance (4)
 
@@ -97,7 +97,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (87)
+## Architecture decision records (88)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -190,6 +190,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0085-generate-planet-relief-on-a-sphere-mesh.md](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) | Whole-planet relief by uplift/stream-power erosion on an irregular sphere mesh; node+TIN authority; Numba runtime. |
 | [docs/adr/0086-regional-planet-detail-from-blended-tiles.md](adr/0086-regional-planet-detail-from-blended-tiles.md) | Window-independent regional detail from fixed blended tiles, tile cache, lapse-corrected biomes and limits. |
 | [docs/adr/0087-map-themes-and-projections.md](adr/0087-map-themes-and-projections.md) | Map themes rendered once on the world frame; globe, polar and flat projections of any theme; `world view` and the globe window. |
+| [docs/adr/0088-nested-regional-detail-levels.md](adr/0088-nested-regional-detail-levels.md) | Nested regional detail levels (region 5 km, province 1 km, local 200 m), each enriched from a level parent built from the coarser level's tiles. |
 
 ## Dated research reports (93)
 

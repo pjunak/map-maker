@@ -38,7 +38,9 @@ world.dmworld.json (+ geology recipe)
       as a flat world, globe or polar view (ADR-0087)
    -> application/planet_region.py: fixed blended tiles enriched from the
       verified build (pipeline/planet_regional.py, planet_tiles.py), composed into
-      regional windows (adapters/planet_region.py, ADR-0086)
+      regional windows (adapters/planet_region.py, ADR-0086); deeper levels are
+      enriched from level parents built from the coarser tiles
+      (pipeline/planet_levels.py, ADR-0088)
 ```
 
 Stages take typed values and named stage seeds. Display detail in images is derived

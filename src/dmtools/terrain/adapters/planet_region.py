@@ -78,12 +78,15 @@ REGION_CARVE_STEPS = 4
 class TileStore:
     """Tiles for one parent and one set of regional settings, written atomically."""
 
-    def __init__(self, root: Path, parent_sha256: str, settings: RegionalSettings) -> None:
+    def __init__(
+        self, root: Path, parent_sha256: str, settings: RegionalSettings, level: int = 1
+    ) -> None:
         key = sha256(
             canonical_json(
                 {
                     "parent": parent_sha256,
                     "algorithm": REGIONAL_ALGORITHM,
+                    "level": level,
                     "settings": asdict(settings),
                 }
             )
@@ -588,6 +591,7 @@ def write_region(
     store_key: str,
     destination: Path,
     planet_m: float,
+    level: int = 1,
 ) -> Path:
     target = destination.absolute()
     if target.exists() or target.is_symlink():
@@ -637,6 +641,7 @@ def write_region(
         "parent_build_sha256": parent_sha256,
         "centre_lonlat_deg": [lon0, lat0],
         "radius_km": window.radius_m / 1000,
+        "level": level,
         "pixels": window.pixels,
         "settings": asdict(settings),
         "tile_store": store_key,

@@ -15,7 +15,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
-from dmtools.terrain.domain.planet import TILE_STAGE_PREFIX, RegionalSettings
+from dmtools.terrain.domain.planet import RegionalSettings, tile_stage_prefix
 from dmtools.terrain.domain.seeds import stage_seed
 from dmtools.terrain.pipeline.control import CancellationToken
 from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
@@ -84,8 +84,8 @@ class TileGrid:
         return tuple(sorted({int(t) for t in np.unique(ids[weights > 0])}))
 
 
-def tile_seed(master: int, tile: int) -> int:
-    return stage_seed(master, f"{TILE_STAGE_PREFIX}{tile}")
+def tile_seed(master: int, tile: int, level: int = 1) -> int:
+    return stage_seed(master, f"{tile_stage_prefix(level)}{tile}")
 
 
 def generate_tile(
@@ -94,10 +94,11 @@ def generate_tile(
     tile: int,
     settings: RegionalSettings,
     *,
+    level: int = 1,
     cancellation: CancellationToken | None = None,
 ) -> RegionalResult:
     lon, lat = grid.lonlat(tile)
-    seed = tile_seed(parent.settings.seed, tile)
+    seed = tile_seed(parent.settings.seed, tile, level)
     region = regional_mesh(
         lon, lat, (grid.support_m + grid.halo_m) / 1e3, settings.spacing_km,
         parent.mesh.radius_m, seed,

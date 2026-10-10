@@ -27,9 +27,9 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Port the stable kernels to a native core.
   - [ ] Decide what replaces the local composed generator.
 - [ ] **M6 regional and local zoom:**
-  - [ ] Nested local maps (region → province → local), each consistent with its
-    parent.
-  - [ ] Display detail, rivers and lakes that do not depend on the window.
+  - [ ] Display detail, rivers and lakes that do not depend on the window
+    (nested levels exist: ADR-0088).
+  - [ ] Drill-down from the world map through the levels in the app.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
 - [ ] **Map views (ADR-0087):** political and civilization views from authored
   overlays.
