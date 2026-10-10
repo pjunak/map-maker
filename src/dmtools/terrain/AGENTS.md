@@ -1,84 +1,59 @@
 # AGENTS.md — Terrain tool
 
-These instructions govern `src/dmtools/terrain/`. The root `AGENTS.md` also
-explicitly routes terrain tests, schemas, examples, benchmarks and documentation
-here; they are not automatically discovered from this sibling directory.
+These rules govern `src/dmtools/terrain/`. The root `AGENTS.md` routes terrain
+tests, schemas, examples, benchmarks and documentation here as well.
 
 ## Product contract
 
-The terrain tool compiles authored constraints into deterministic elevation
-products. It does not invent or silently change canonical
-geography. A run may offer alternatives, but adopting one remains a user
-decision.
+- The tool turns authored geography into deterministic elevation and map
+  products. It never invents or silently changes canonical geography; adopting
+  an alternative is the user's decision.
+- **Build identity.** Authored inputs, settings, master seed, schema and algorithm
+  versions, grid or mesh, and runtime together identify a build. The seed alone
+  does not.
+- **Authoritative surfaces.**
+  - Planet builds: node elevation on the sphere mesh, with triangle-linear
+    interpolation (ADR-0085).
+  - Local terrain builds: a Float32 DEM in metres.
+  - Everything else is derived and identifies its source build: rasters,
+    contours, hillshade, map themes, rivers, regional windows.
 
-The build identity is the combination of authored inputs, effective profile,
-master seed, schema and generator versions, working grid, algorithm versions,
-and runtime environment. Never describe the seed alone as sufficient for exact
-reproduction.
+## Source layout
 
-## Source boundaries
+- **`domain/`** holds dependency-light types, settings, invariants and units.
+- **`pipeline/`** holds named deterministic stages and Numba kernels.
+- **`adapters/`** holds files, GIS, rendering and map themes:
+  - `map_views.py`: the theme registry;
+  - `map_projection.py`: projections;
+  - `map_*.py`: theme renderers.
+- **`application/`** holds use cases for the CLI and UI: generate, export, region,
+  views.
+- **`*_ui.py`, `workbench.py`, `viewport.py`** hold the Tkinter interface. They
+  call the application layer and never pipeline internals.
+- **Public schemas** under `/schemas/terrain/` and `/schemas/world/` own
+  serialized field names.
 
-- `domain/` owns dependency-light types, invariants, units, errors, and ports.
-- `pipeline/` owns named deterministic stages and orchestration.
-- `adapters/` owns concrete files, GIS libraries, rendering libraries, and
-  external processes.
-- This `README.md` owns the current terrain-tool overview. Public schemas under
-  `/schemas/terrain/` and `/schemas/world/` own serialized field names and
-  validation rules for their respective project/product families.
-
-Dependencies point inward. Domain modules must not import adapters or interface
-frameworks. Pipeline stages operate on typed domain values rather than loose
-dictionaries or global settings.
-
-## Authoritative data
-
-- Vector constraints express coastlines, water levels, spot heights, ridges,
-  valleys, divides, breaklines, and terrain-character regions.
-- A Float32 raster DEM in metres is the authoritative generated elevation
-  surface for a local terrain build. Whole-planet builds instead use node
-  elevation on the sphere mesh with triangle-linear interpolation (ADR-0085);
-  their rasters and images are derived.
-- Contours, hillshade, colour relief, drainage, catchments, and meshes are
-  derived outputs and must identify their source DEM.
-- Editing changes authored generation inputs only. A generated map may remain
-  visible as a read-only placement reference, with explicit stale/current status.
-  Regenerate from inputs to apply changes; never patch a completed DEM.
-- Zoom-driven local enrichment remains in scope as a planned generation operation.
-  Its immutable parent context, coordinate frame, overlap/downsample tolerances
-  and inherited hydrology require explicit validation; shared samples alone do
-  not establish the complete contract. See ADR-0048.
-- Keep numerical sampling and shared-coordinate checks separate from user editing.
-
-## Current delivery priorities
-
-Follow [M1-M8 and its update checklist](../../../docs/strategy/README.md).
-Connect context, rough terrain, runoff and aging into a testable experimental
-workflow before further isolated refinements. Keep hard correctness checks;
-full quality acceptance governs default adoption, not every integration step.
-Consult the [research decision catalog](../../../docs/research/decision-catalog.md)
-before repeating an investigation, and update decisions/status/backlog with evidence.
-Keep new geometry, projection,
-serialization, application orchestration and UI responsibilities in cohesive
-separate modules. Consult the user before tests expected to exceed roughly two
-minutes or with uncertain long duration; state purpose, estimate and stop limit.
+Domain code must not import adapters or UI frameworks. Stages take typed values,
+not loose dictionaries or global settings.
 
 ## Stage rules
 
-- Give every stochastic stage a stable identifier and a separately derived
-  seed.
-- Make units, nodata behavior, boundary conditions, and projection explicit.
-- Do not mutate input objects or overwrite authored files.
-- Write build artifacts to a new output directory and publish the manifest only
-  after all authoritative outputs succeed.
-- A failed run must not look complete.
+- Give every stochastic stage a stable identifier and its own derived seed.
+- Make units, nodata, boundary conditions and projection explicit.
+- Never mutate inputs or overwrite authored files. Write builds to new
+  directories, with the manifest last.
+- Keep new geometry, projection, serialization, orchestration and UI concerns in
+  separate cohesive modules.
 
-## Testing
+## Planning and testing
 
-- Test hard constraints numerically, not only through image snapshots.
-- Include invariants for finite values, land/sea masks, units, deterministic
-  hashes, drainage connectivity where promised, and shared-coordinate agreement.
-- Use small synthetic fixtures with known intent. Large private world maps are
-  not test data.
-- Document changes to schemas, seed derivation, algorithms and numeric
-  tolerances. Follow the root early-development policy: remove superseded
-  behavior and test the current implementation without legacy support.
+- **Planning.** Pick work from the [living plan](../../../docs/strategy/README.md)
+  and check the [decision catalog](../../../docs/research/decision-catalog.md)
+  before repeating an investigation. Update both in the same commit as the work.
+- **Hard constraints.** Test them numerically, not only through images: finite
+  values, land/sea masks, units, deterministic hashes, drainage where promised,
+  and shared-coordinate agreement.
+- **Fixtures.** Use small synthetic fixtures with known intent. Private world maps
+  are not test data.
+- **Changes to schemas, seeds, algorithms or tolerances.** Document them, and bump
+  the owning identifier.

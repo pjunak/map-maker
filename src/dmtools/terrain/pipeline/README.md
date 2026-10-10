@@ -4,6 +4,18 @@ This package orchestrates terrain generation using typed inputs and effective
 configuration. Stochastic stages use named deterministic seeds; generation
 returns numeric elevation, retained routing products and diagnostics.
 
+The whole-planet path lives in `planet*.py`:
+- `planet.py` orchestrates it;
+- `planet_mesh.py` builds the mesh;
+- `planet_tectonics.py` and `planet_forcing.py` set uplift and the ocean floor;
+- `planet_evolution.py` erodes, with Numba kernels in `planet_kernels.py`;
+- `planet_climate.py` and `planet_koppen.py` model climate;
+- `planet_volcanism.py` and `planet_wonders.py` add young landforms;
+- `planet_regional.py` and `planet_tiles.py` provide regional detail.
+
+See the [planet guide](../../../../docs/world-planet.md) and ADR-0085/0086. The
+rest of this page describes the local composed generator.
+
 The independent `world.py` source-inspection stage validates typed world ownership,
 periodic geometry and overlaps, then measures sampled land on the declared sphere.
 It generates no terrain or climate. File decoding, saving and source rendering

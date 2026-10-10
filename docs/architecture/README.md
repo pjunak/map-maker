@@ -9,11 +9,11 @@ hosting is not a committed delivery step for the current local tool.
 ```text
 Tk UI / CLI
      |
-     +--> application world / build / water-budget / regional-sampling operations
+     +--> application: world / planet / region / views / local build / sampling
      |           |
      +-----------+--> numeric generation pipeline --> domain values
                  |
-                 +--> project / SVG / render / GeoTIFF / build adapters
+                 +--> project / SVG / render / map themes / GeoTIFF / build adapters
 ```
 
 The workbench also calls generation and adapters directly. There is no generic
@@ -24,6 +24,25 @@ publication remain in adapters outside generation.
 The domain and pipeline must remain usable without a web server. Adapters may
 depend on Rasterio, GDAL, GeoPackage drivers, image renderers, or external
 scientific engines; core contracts must not depend on those concrete libraries.
+
+## Planet path (current product path)
+
+```text
+world.dmworld.json (+ geology recipe)
+   -> pipeline/planet.py: sphere mesh, plates and forcing, uplift + stream-power
+      erosion, climate coupling, lakes, volcanoes and wonders
+   -> PlanetResult (node elevation is authoritative, ADR-0085)
+   -> adapters/planet_build.py: planet.npz, GeoTIFF, rivers, lakes, manifest
+   -> adapters/map_views.py: theme registry; map_*.py and planet_natural.py
+      render each theme on the world frame; map_projection.py shows any theme
+      as a flat world, globe or polar view (ADR-0087)
+   -> application/planet_region.py: fixed blended tiles enriched from the
+      verified build (pipeline/planet_regional.py, planet_tiles.py), composed into
+      regional windows (adapters/planet_region.py, ADR-0086)
+```
+
+Stages take typed values and named stage seeds. Display detail in images is derived
+and never feeds back into relief, rivers or climate.
 
 ## Proposed generation responsibility split
 

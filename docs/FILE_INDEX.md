@@ -1,31 +1,27 @@
 # Complete documentation file inventory
 
-Updated 2026-09-28. Scope: every version-controlled Markdown document in DM Tools,
-plus the vendored license notice, including world-source implementation and
-export-import correction, bounded preparation and geographic context documents. Generated builds, caches, dependency
-documentation and private campaign files are excluded. The public JSON schemas and reference dependency
-lock are listed separately as supporting contracts, not counted as prose docs.
+Updated 2026-10-11. Scope: every version-controlled Markdown document in DM Tools,
+plus the vendored license notice. Generated builds, caches, dependency
+documentation and private campaign files are excluded. Public JSON schemas and the
+reference dependency lock are listed separately as supporting contracts.
 
-**211 Markdown files + 1 legal notice = 212 documentation files.**
+**228 Markdown files + 1 legal notice = 229 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
-For implementation order, start with the main M1-M8 plan; for prior conclusions,
-start with the research decision catalog. Follow links into the WC/LE model plans,
-quality reference and original reports on demand. The selective reading guide
-remains the entry point for normal use. Every document is linked below.
+The [reading guide](README.md) is the entry point; this page is the complete list.
 
 | Group | Files |
 |---|---:|
 | Project entry and guidance | 4 |
 | Active plans and indexes | 13 |
-| User guides and current contracts | 19 |
-| Developer and reference guides | 8 |
-| Architecture decision records | 84 |
-| Dated research reports | 81 |
+| User guides and current contracts | 20 |
+| Developer and reference guides | 9 |
+| Architecture decision records | 87 |
+| Dated research reports | 93 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **212** |
+| **Total** | **229** |
 
 ## Project entry and guidance (4)
 
@@ -58,7 +54,7 @@ Current direction and navigation. Plans mark unimplemented features explicitly; 
 | [docs/strategy/landscape-evolution.md](strategy/landscape-evolution.md) | LE0-LE6 evolution, authoring, conservation and regional-history gates. |
 | [docs/strategy/world-context.md](strategy/world-context.md) | WC0-WC6 full-world import, shared context, climate and regional-history plan. |
 
-## User guides and current contracts (19)
+## User guides and current contracts (20)
 
 Current user workflows and numeric/file semantics, with future limits labelled in each guide.
 
@@ -85,7 +81,7 @@ Current user workflows and numeric/file semantics, with future limits labelled i
 | [docs/world-geology.md](world-geology.md) | Author continent defaults and independent province hypotheses; priority, time, coverage and portable recipe contracts. |
 | [src/dmtools/terrain/README.md](../src/dmtools/terrain/README.md) | Current desktop authoring workflow, tools and shortcuts. |
 
-## Developer and reference guides (8)
+## Developer and reference guides (9)
 
 Subsystem, fixture, schema, test and benchmark guidance.
 
@@ -94,7 +90,6 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [benchmarks/README.md](../benchmarks/README.md) | Public performance/quality probes, commands and measurement boundaries. |
 | [benchmarks/evolution/README.md](../benchmarks/evolution/README.md) | Isolated evolution setup, runnable comparisons and current limits. |
 | [benchmarks/planet/README.md](../benchmarks/planet/README.md) | Whole-planet sphere-mesh erosion harness, synthetic test worlds and metrics. |
-| [benchmarks/planet/scale_metrics.py](../benchmarks/planet/scale_metrics.py) | Landform scale and realism-gate metrics of a planet build: river lengths vs basin area, Horton ratios, sinuosity, mountain-belt widths, valley and mouth spacing. |
 | [examples/README.md](../examples/README.md) | Public example projects and their supported behaviors. |
 | [schemas/README.md](../schemas/README.md) | Current world-source, geographic-context and local-terrain formats. |
 | [src/dmtools/terrain/adapters/README.md](../src/dmtools/terrain/adapters/README.md) | File-format/render/export adapter responsibilities. |
@@ -102,7 +97,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (84)
+## Architecture decision records (87)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -191,12 +186,12 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0081-blend-adjoining-landform-regions.md](adr/0081-blend-adjoining-landform-regions.md) | Shared regional weighting, blank holes, established interiors and matching probe/cut support. |
 | [docs/adr/0082-own-structure-profiles.md](adr/0082-own-structure-profiles.md) | Explicit line profile ownership, sampling support, editor and current-format contracts. |
 | [docs/adr/0083-preserve-shared-ridge-crests.md](adr/0083-preserve-shared-ridge-crests.md) | Preserved ridge contacts, compatible heights, centreline ownership and remaining graph limits. |
-| [docs/adr/0087-map-themes-and-projections.md](adr/0087-map-themes-and-projections.md) | Map themes rendered once on the world frame; globe, polar and flat projections of any theme; `world view` and the globe window. |
-| [docs/adr/0086-regional-planet-detail-from-blended-tiles.md](adr/0086-regional-planet-detail-from-blended-tiles.md) | Window-independent regional detail from fixed blended tiles, tile cache, lapse-corrected biomes and limits. |
-| [docs/adr/0085-generate-planet-relief-on-a-sphere-mesh.md](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) | Whole-planet relief by uplift/stream-power erosion on an irregular sphere mesh; node+TIN authority; Numba runtime. |
 | [docs/adr/0084-bind-geographic-context-to-rough-terrain.md](adr/0084-bind-geographic-context-to-rough-terrain.md) | Bounded immutable geographic context, conservative coastal-distance consumption and explicit unsupported M1 fields. |
+| [docs/adr/0085-generate-planet-relief-on-a-sphere-mesh.md](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) | Whole-planet relief by uplift/stream-power erosion on an irregular sphere mesh; node+TIN authority; Numba runtime. |
+| [docs/adr/0086-regional-planet-detail-from-blended-tiles.md](adr/0086-regional-planet-detail-from-blended-tiles.md) | Window-independent regional detail from fixed blended tiles, tile cache, lapse-corrected biomes and limits. |
+| [docs/adr/0087-map-themes-and-projections.md](adr/0087-map-themes-and-projections.md) | Map themes rendered once on the world frame; globe, polar and flat projections of any theme; `world view` and the globe window. |
 
-## Dated research reports (81)
+## Dated research reports (93)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
@@ -313,7 +308,7 @@ Attribution/license documentation for a vendored asset.
 |---|---|
 | [docs/licenses/SCIENTIFIC_COLOUR_MAPS_LICENSE.txt](licenses/SCIENTIFIC_COLOUR_MAPS_LICENSE.txt) | Scientific Colour Maps attribution and redistribution license text. |
 
-## Supporting machine-readable contracts (13)
+## Supporting machine-readable contracts (15)
 
 These are operational specifications rather than prose documentation. They
 are included for a complete route from plans to the current usable formats.
