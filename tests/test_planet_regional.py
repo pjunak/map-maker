@@ -263,3 +263,23 @@ def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
     # Everything (cells plus inflow) reaches the outlets.
     into_outlet = land & outlet.ravel()[np.maximum(receiver, 0)]
     assert area[into_outlet].sum() == pytest.approx(land.sum() * 100.0**2 + 1e9, rel=1e-9)
+
+
+def test_sand_seas_need_dry_flat_low_ground() -> None:
+    from dmtools.terrain.adapters.planet_natural import PixelClimate, erg_cover
+
+    rng = np.random.default_rng(5)
+    points = rng.normal(size=(400, 3))
+    points /= np.linalg.norm(points, axis=1)[:, None]
+    shape = (20, 20)
+    flat, steep = np.zeros(shape), np.full(shape, 0.2)
+    low = np.full(shape, -0.8)
+
+    def climate(precipitation: float) -> PixelClimate:
+        full = np.full(shape, 1.0)
+        return PixelClimate(25 * full, 32 * full, precipitation * full, 1800 * full)
+
+    dry = erg_cover(points, 6.0e6, climate(30.0), flat, low)
+    assert dry.max() > 0.5
+    assert np.all(erg_cover(points, 6.0e6, climate(30.0), steep, low) < 1e-9)
+    assert np.all(erg_cover(points, 6.0e6, climate(900.0), flat, low) < 1e-9)

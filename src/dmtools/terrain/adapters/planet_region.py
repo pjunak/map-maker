@@ -27,6 +27,7 @@ from dmtools.terrain.adapters.planet_natural import (
     RIVER,
     SALT_FLAT,
     PixelClimate,
+    erg_cover,
     land_colour,
     ramp,
     river_coverage,
@@ -53,6 +54,8 @@ REGION_VERSION = 1
 REGION_EXAGGERATION = 1.3
 REGION_MOSAIC_WAVELENGTH_M = 8e3
 MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
+DUNE_SPACING_M = 2500.0
+DUNE_HEIGHT_M = 45.0
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
 LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
@@ -144,6 +147,7 @@ class RegionWindow:
     lakes: B  # lake water (parent lakes with shores on the regional relief)
     salt: B  # dry salt pans of hot, arid closed lakes
     basalt: F64  # 0..1 flood-basalt cover
+    wind: F64 | None  # (pixels, pixels, 2) annual mean wind (east, north) in m/s
 
     @property
     def pixel_m(self) -> float:
@@ -244,6 +248,14 @@ def compose_window(
             np.zeros((pixels, pixels))
             if parent.flood_basalt is None
             else np.clip(parent.sample(points, parent.flood_basalt), 0, 1).reshape(pixels, pixels)
+        ),
+        (
+            None
+            if parent.wind_east is None or parent.wind_north is None
+            else np.stack(
+                (parent.sample(points, parent.wind_east), parent.sample(points, parent.wind_north)),
+                axis=-1,
+            ).reshape(pixels, pixels, 2)
         ),
     )
 
@@ -383,6 +395,42 @@ def display_relief(window: RegionWindow) -> F64:
     # Blurring the incision widens one-pixel D8 channels into valleys.
     depth = gaussian_filter(np.clip(rough - carved, 0, amplitude) * steep, 1.3)
     relief = gaussian_filter(rough - depth, 0.5)
+    # Linear (seif) dunes run along the resultant wind in sand seas, ~2 km apart
+    # and tens of metres high; they break up and wander along their length.
+    climate = window.climate
+    if climate is not None and window.wind is not None:
+        erg = np.where(
+            land,
+            erg_cover(
+                window.points, window.planet_m, climate, tile_slope,
+                window_position(relief, window.pixel_m), REGION_SLOPE_SCALE,
+            ),
+            0.0,
+        )
+        if erg.max() > 0.05:
+            wind = gaussian_filter(window.wind, (6, 6, 0))
+            speed = np.maximum(np.hypot(wind[..., 0], wind[..., 1]), 1e-6)
+            rows, columns = np.mgrid[0 : z.shape[0], 0 : z.shape[1]] * window.pixel_m
+            # Distance across the wind: east is +column, north is -row.
+            across = (columns * -wind[..., 1] + (-rows) * wind[..., 0]) / speed
+            # Spacing and phase wander, so ridges merge in Y-junctions and fan out.
+            warp = 0.6 * DUNE_SPACING_M * eroded_fbm(
+                window.points, np.zeros(len(window.points)), 71, 4,
+                window.planet_m / 25e3, 0.55, 0.0,
+            ).reshape(z.shape)
+            spacing = DUNE_SPACING_M * (1 + 0.3 * eroded_fbm(
+                window.points, np.zeros(len(window.points)), 72, 3,
+                window.planet_m / 60e3, 0.5, 0.0,
+            ).reshape(z.shape))
+            crest = (0.5 + 0.5 * np.cos(2 * np.pi * (across + warp) / spacing)) ** 1.5
+            breakup = _smooth_step(
+                eroded_fbm(
+                    window.points, np.zeros(len(window.points)), 73, 3,
+                    window.planet_m / 12e3, 0.5, 0.0,
+                ).reshape(z.shape),
+                -0.3, 0.2,
+            )
+            relief = relief + DUNE_HEIGHT_M * erg * breakup * crest
     # Flood basalts weather into stepped escarpments: each resistant lava flow
     # holds a bench (the "trap" stairs of the Deccan and Columbia River plateaus).
     if window.basalt.any():
@@ -391,6 +439,11 @@ def display_relief(window: RegionWindow) -> F64:
         benches = level + TRAP_STEP_M * np.clip((riser - 0.7) / 0.3, 0, 1) ** 2
         relief = relief + (benches - relief) * 0.8 * window.basalt
     return np.where(land, np.maximum(relief, 1.0), z)
+
+
+def _smooth_step(x: F64, a: float, b: float) -> F64:
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
 
 
 def window_position(z: F64, pixel_m: float) -> F64:

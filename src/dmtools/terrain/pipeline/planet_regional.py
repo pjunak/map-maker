@@ -71,6 +71,8 @@ class RegionalParent:
     lake_level_m: F64 | None = None  # surface per lake id
     lake_endorheic: B | None = None  # closed lake per lake id
     flood_basalt: F64 | None = None  # 0..1 trap cover
+    wind_east: F64 | None = None  # annual mean surface wind (m/s)
+    wind_north: F64 | None = None
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:
@@ -98,6 +100,8 @@ class RegionalParent:
             result.lakes.level_m,
             result.lakes.endorheic,
             result.forcing.flood_basalt,
+            None if climate is None else climate.wind_east,
+            None if climate is None else climate.wind_north,
         )
 
     def lakes_at(self, xyz: F64) -> tuple[F64, F64, B]:

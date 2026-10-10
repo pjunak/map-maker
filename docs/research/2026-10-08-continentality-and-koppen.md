@@ -78,6 +78,26 @@ temperature.
 - **Provenance.** The climate identifier is now `planet-climate-v6` and the
   relief identifier `sphere-mesh-stream-power-v13`.
 
+## Sand seas, stony plains and dunes
+
+Hot deserts drew as uniform pale beige. On Earth, wind-blown sand gathers in
+the flattest, driest low ground as sand seas (ergs: Rub' al Khali, the Saharan
+ergs, Taklamakan). Most other desert is stony plain (reg, hamada) or rock.
+
+- **Erg cover.** It needs:
+  - P/PET below about 0.05–0.14;
+  - pixel slopes below about 0.4–2 %, scaled at zoom;
+  - low terrain position;
+  - patchy noise at about 500 km.
+- **Colours.** Ergs are orange sand, paler where cold. Hyper-arid ground outside
+  them darkens towards gravel brown (reg).
+- **Dunes in regional windows.** Linear (seif) dunes follow the parent's annual
+  mean wind.
+  - **Size.** Spacing is about 2.5 km (±30 %) and height about 45 m.
+  - **Shape.** The phase is warped so ridges merge in Y-junctions, and noise at
+    12 km breaks them up along their length.
+  - **Wind.** The planet archive's wind fields now reach regional windows.
+
 ## Köppen–Geiger classes
 
 `pipeline/planet_koppen.py` follows Kottek et al. 2006.

@@ -62,6 +62,9 @@ DESERT_HOT: RGB = (208, 186, 146)
 DESERT_COLD: RGB = (176, 166, 140)
 DESERT_OCHRE: RGB = (186, 146, 106)
 DESERT_GREY: RGB = (150, 136, 118)
+ERG_HOT: RGB = (226, 178, 114)
+ERG_COLD: RGB = (214, 190, 146)
+REG: RGB = (156, 132, 106)
 STEPPE: RGB = (160, 152, 104)
 GRASS_WARM: RGB = (128, 140, 80)
 GRASS_COOL: RGB = (118, 136, 88)
@@ -366,6 +369,13 @@ def land_colour(
     trees = _mix(_fill(shape, FOREST_BOREAL), FOREST_TEMPERATE, _smooth(temperature, 3, 9))
     trees = _mix(trees, FOREST_TROPICAL, _smooth(temperature, 17, 23))
     colour = _mix(low, trees, forest)
+    erg = erg_cover(points, radius_m, climate, slope, position, slope_scale)
+    # Outside the sand seas, hyper-arid ground is stony plain (reg, hamada):
+    # gravel and desert varnish darker than sand.
+    hyperarid = 1 - _smooth(climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0), 0.04, 0.15)
+    colour = _mix(colour, REG, 0.35 * hyperarid * (1 - erg))
+    sand = _mix(_fill(shape, ERG_COLD), ERG_HOT, _smooth(temperature, 6, 18))
+    colour = _mix(colour, sand, 0.9 * erg)
     colour = _mix(colour, TUNDRA, 1 - _smooth(warm, 4, 11))
     steep = _smooth(slope, 0.08 * slope_scale, 0.3 * slope_scale)
     rocky = np.clip(steep * 0.75 + _smooth(z, 3000, 4500) * 0.25, 0, 0.8)
@@ -396,6 +406,29 @@ def land_colour(
     texture = eroded_fbm(points, zeros, 23, 4, radius_m / 25e3, 0.6, 0.0).reshape(shape)
     colour *= (1 + 0.045 * texture + 0.05 * patch)[..., None]
     return colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+
+
+def erg_cover(
+    points: F64,
+    radius_m: float,
+    climate: PixelClimate,
+    slope: F64,
+    position: F64 | None,
+    slope_scale: float = 1.0,
+) -> F64:
+    """0..1 cover of sand seas (ergs).
+
+    Wind-blown sand gathers in the flattest, driest low ground of deserts: the
+    Rub' al Khali, the Saharan ergs, the Taklamakan. Elsewhere deserts are stony
+    plains (regs) and rock. About a fifth to a third of hot desert is erg.
+    """
+    shape = slope.shape
+    arid = 1 - _smooth(climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0), 0.05, 0.14)
+    flat = 1 - _smooth(slope, 0.004 * slope_scale, 0.02 * slope_scale)
+    low = 1.0 if position is None else _smooth(-position, -0.4, 0.3)
+    zeros = np.zeros(len(points))
+    patches = eroded_fbm(points, zeros, 61, 4, radius_m / 500e3, 0.5, 0.0).reshape(shape)
+    return arid * flat * low * _smooth(patches, -0.05, 0.1)
 
 
 def equilibrium_line_c(precipitation_mm: F64) -> F64:
