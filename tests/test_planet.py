@@ -495,6 +495,32 @@ def test_flood_basalts_cover_land_at_the_old_end_of_a_hotspot_track() -> None:
     assert mesh.area_m2[cover > 0.5].sum() < len(plates.plumes) * np.pi * (1.5 * TRAP_RADIUS_M) ** 2
 
 
+def test_mountain_belts_vary_along_strike() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import (
+        MASSIF_FLOOR,
+        orogen_profile,
+        strike_variation,
+    )
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+
+    mesh = build_mesh(40_000, RADIUS, 12)
+    p = mesh.xyz
+    # A straight belt along the equator, 100 km half-width.
+    across_m = p[:, 2] * RADIUS
+    half_width = np.full(mesh.size, 100e3)
+    across, half, massif = strike_variation(p, 5, across_m, half_width)
+    assert np.all(np.abs(across - across_m) <= 1.7 * half_width + 1)
+    assert np.all((half >= 0.6 * half_width - 1) & (half <= 1.4 * half_width + 1))
+    assert np.all((massif >= 0) & (massif <= 1))
+    # Along the crest the height rises into massifs and falls to saddles and gaps
+    # instead of running at one even height for thousands of kilometres.
+    crest = orogen_profile(across, half, p, 5) * massif
+    on_axis = np.abs(across) < 0.2 * half
+    heights = crest[on_axis]
+    assert heights.max() > 0.8
+    assert (heights < MASSIF_FLOOR).mean() > 0.1
+
+
 def test_koppen_classes_follow_the_standard_rules() -> None:
     from dmtools.terrain.pipeline.planet_koppen import KOPPEN, classify_koppen
 

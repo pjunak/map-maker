@@ -199,7 +199,48 @@ Ocean–ocean trenches drew as long, unbroken, uniform grooves.
 - **Depth.** It varies between 55 % and 100 % along strike.
 - **Segments.** Trenches break into segments where noise at about 600 km
   falls low, as at fracture zones and subducting ridges.
-- **Provenance.** The relief identifier is now `sphere-mesh-stream-power-v16`.
+- **Provenance.** This change bumped the relief identifier to `sphere-mesh-stream-power-v16`.
+
+## Along-strike variety of mountain belts
+
+Long collision belts and old orogens read as walls: even crests thousands of
+kilometres long with rail-like parallel valleys. The cause was the generated
+terrain, not the display. Each belt was one cross-section (main range, frontal
+range, foothills, hinterland) swept unchanged along a 3,000–5,000 km plate
+boundary or noise zero line. Height, width and the parallel structure (and the
+lithology bands that guide erosion) were uniform along strike, so erosion cut an
+even crest.
+
+Real belts vary along strike. Their crests bend and step sideways between en
+echelon segments (Zagros, Tien Shan, the Andean oroclines). Width changes two-
+to threefold (the Andes are ~200 km wide, ~700 km at the Altiplano). Height
+rises into massifs and falls to saddles and passes every few hundred kilometres
+(Alps: Mont Blanc, Monte Rosa, the Brenner). Ranges end and restart.
+
+`strike_variation` applies this variety to active belts and old orogens:
+
+- **Crest.** It bends by up to ±0.8 half-widths (noise at ~450 km) and steps up to
+  ±0.9 half-widths between segments.
+- **Width.** It varies between 0.6 and 1.4 times nominal.
+- **Height.** Massifs and saddles span `MASSIF_FLOOR` (0.15) to 1, and noise at
+  ~1,500 km opens gaps of low ground.
+- **Fronts.** Range fronts are ragged (±35 % width at ~200 km), so they have
+  spurs and embayments.
+- **Subsidiary ranges.** These appear in fewer stretches.
+- **Lithology bands.** Strike-parallel bands drop to ±12 %.
+- **Rifts.** These become chains of half-grabens. One shoulder stands high and
+  the other low, alternating along strike, and floor depth varies.
+- **Provenance.** The relief identifier is now `sphere-mesh-stream-power-v17`.
+
+| 800k nodes, Aethelara | mean | >1 km | >2 km | >3 km | max |
+| --- | --- | --- | --- | --- | --- |
+| before | 891 m | 31.0 % | 9.7 % | 3.7 % | 7,474 m |
+| after | 844 m | 29.3 % | 8.7 % | 2.7 % | 6,626 m |
+
+The west continent's 2,000 km rift now breaks into offset segments with
+alternating shoulders. Its west-coast collision belt now runs as discrete massifs
+with low gaps. The east continent's T-junction ranges now break into separate
+massifs and passes.
 
 ## Limits
 

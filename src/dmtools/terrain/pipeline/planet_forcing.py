@@ -90,6 +90,8 @@ MAX_DELTA_SHELF_M = 350e3
 # Rivers delivering less than this (m^3/yr) build no visible delta shelf.
 MIN_DELTA_FLUX_M3_YR = 1e7
 OLD_OROGEN_SHARE = 0.45
+# Along-strike height of a belt between saddles (this share) and massifs (1).
+MASSIF_FLOOR = 0.15
 TRAP_UPLIFT = 1.5e-4
 TRAP_ERODIBILITY = 0.35
 TRAP_RADIUS_M = 450e3
@@ -185,20 +187,47 @@ OROGEN_RANGES = (
 )
 
 
+def strike_variation(
+    p: F64, seed: int, across_m: F64, half_width_m: F64
+) -> tuple[F64, F64, F64]:
+    """Along-strike variety of a mountain belt: (bent across distance, half-width, height).
+
+    A single cross-section swept along a 3,000-5,000 km plate boundary erodes
+    into an evenly high wall with rail-like parallel valleys. Real belts vary
+    along strike:
+    * the crest bends and wanders (~400 km) and steps sideways between en
+      echelon segments (Zagros, Tien Shan, the Andean oroclines);
+    * width changes two- to threefold (Andes ~200 km, ~700 km at the Altiplano);
+    * height rises into massifs and falls to saddles and passes every few
+      hundred kilometres (Alps: Mont Blanc and Monte Rosa massifs, the Brenner).
+    """
+    bend = 0.8 * half_width_m * fbm3(p, seed + 1501, 3, 14.0)
+    step = 0.9 * half_width_m * np.tanh(3.0 * fbm3(p, seed + 1502, 2, 7.0))
+    half = half_width_m * (0.6 + 0.8 * _smoothstep(fbm3(p, seed + 1503, 3, 6.0), -0.4, 0.4))
+    relief = fbm3(p, seed + 1504, 3, 9.0) + 0.5 * fbm3(p, seed + 1505, 2, 22.0)
+    massif = MASSIF_FLOOR + (1 - MASSIF_FLOOR) * _smoothstep(relief, -0.35, 0.35)
+    # Belts end and restart: gaps of low ground between segments.
+    gaps = _smoothstep(fbm3(p, seed + 1506, 3, 4.0), -0.45, -0.1)
+    return across_m - bend - step, half, massif * gaps
+
+
 def orogen_profile(across_m: F64, half_width_m: F64, p: F64, seed: int) -> F64:
     """Parallel, en-echelon ranges of one orogen from the signed across-strike distance."""
     uplift = np.zeros_like(across_m)
+    # Mountain fronts are ragged: spurs reach out and embayments cut in every
+    # ~100-200 km, so no range has a ruler-straight edge.
+    ragged = 1 + 0.35 * fbm3(p, seed + 1601, 3, 30.0)
     for offset, half, weight, gate_seed in OROGEN_RANGES:
         if gate_seed:
-            # Subsidiary ranges wander, change height and come and go along strike
-            # (en echelon segments) instead of running parallel like rails.
+            # Subsidiary ranges wander, change height and appear only in some
+            # stretches (en echelon segments) instead of running alongside like rails.
             wander = 1 + 0.5 * fbm3(p, seed + 1200 + gate_seed, 3, 9.0)
             strength = 0.5 + 0.5 * fbm3(p, seed + 1300 + gate_seed, 3, 6.0)
-            gate = _smoothstep(fbm3(p, seed + 1100 + gate_seed, 3, 10.0), -0.2, 0.2)
+            gate = _smoothstep(fbm3(p, seed + 1100 + gate_seed, 3, 10.0), 0.0, 0.35)
         else:
             wander, strength, gate = np.ones_like(across_m), 1.0, 1.0
         centre = offset * half_width_m * wander
-        profile = ridge_profile(np.abs(across_m - centre), half * half_width_m)
+        profile = ridge_profile(np.abs(across_m - centre), half * half_width_m * ragged)
         uplift = np.maximum(uplift, weight * strength * gate * profile)
     return uplift
 
@@ -235,7 +264,7 @@ def strike_lithology(across_m: F64, half_width_m: F64, orogen: F64, phase: F64) 
     and divides pin on the hard rock (Bernard et al. 2021).
     """
     core = 1 - 0.45 * (1 - _smoothstep(np.abs(across_m), 0.3 * half_width_m, 0.7 * half_width_m))
-    bands = 1 + 0.3 * np.cos(2 * np.pi * across_m / (0.9 * half_width_m) + phase)
+    bands = 1 + 0.12 * np.cos(2 * np.pi * across_m / (0.9 * half_width_m) + phase)
     return 1 + orogen * (core * bands - 1)
 
 
@@ -264,24 +293,31 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     # (20-60 km) stay noise-placed: they stand for older, inactive sutures.
     plates = plate_tectonics(mesh, land, coast_m, seed)
     closing = plates.convergence
-    major_half = 50e3 + 80e3 * _smoothstep(closing, 0.01, 0.06)
-    # Signed distance across strike, positive on the foreland side.
-    across = plates.across_m
+    # Signed distance across strike, positive on the foreland side, bent and
+    # varied along strike.
+    across, major_half, massif = strike_variation(
+        p, seed, plates.across_m, 50e3 + 80e3 * _smoothstep(closing, 0.01, 0.06)
+    )
     segments = _smoothstep(closing, 0.004, 0.02) * (
         0.6 + 0.4 * _smoothstep(fbm3(p, seed + 151, 3, 3.5), -0.3, 0.3)
     )
     inland_fade = _smoothstep(coast_m, 0.0, 150e3)
-    active_belts = orogen_profile(across, major_half, p, seed) * segments * inland_fade
+    active_belts = (
+        orogen_profile(across, major_half, p, seed) * segments * massif * inland_fade
+    )
     # Older orogens (Urals, Appalachians, Caledonides) mark sutures of plates long
     # since welded: the same composite structure, lower and without active basins.
     warp = np.stack([fbm3(p, seed + 300 + k, 3, 1.3) for k in range(3)], axis=1)
     old_field = fbm3(p + 0.35 * warp, seed + 101, 4, 1.4)
-    old_half = 40e3 + 60e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4)
-    old_across = signed_crest_distance(mesh, old_field) * np.sign(
-        fbm3(p, seed + 191, 2, 1.0) + 1e-9
+    old_across, old_half, old_massif = strike_variation(
+        p,
+        seed + 7,
+        signed_crest_distance(mesh, old_field) * np.sign(fbm3(p, seed + 191, 2, 1.0) + 1e-9),
+        40e3 + 60e3 * _smoothstep(fbm3(p, seed + 141, 3, 3.0), -0.4, 0.4),
     )
     old_belts = (
         OLD_OROGEN_SHARE
+        * old_massif
         * orogen_profile(old_across, old_half, p, seed + 7)
         * _smoothstep(fbm3(p, seed + 152, 3, 3.5), -0.1, 0.3)
         * inland_fade
@@ -325,8 +361,21 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     # shoulders (East Africa, Rhine Graben); the graben fills with sediment.
     opening = _smoothstep(-closing, 0.004, 0.02) * inland_fade
     rift_half = 25e3 + 20e3 * _smoothstep(-closing, 0.01, 0.04)
-    rift_floor = ridge_profile(np.abs(across), rift_half) * opening
-    rift_shoulders = ridge_profile(np.abs(np.abs(across) - 1.6 * rift_half), rift_half) * opening
+    # Rifts are chains of half-grabens ~100-200 km long whose master fault
+    # switches side at each accommodation zone: one shoulder stands high and the
+    # other low, alternating along strike, and the floor deepens and shallows.
+    polarity = np.tanh(3.0 * fbm3(p, seed + 1511, 2, 14.0))
+    rift_floor = (
+        ridge_profile(np.abs(across), rift_half)
+        * opening
+        * (0.5 + 0.5 * _smoothstep(fbm3(p, seed + 1512, 3, 12.0), -0.4, 0.3))
+    )
+    rift_shoulders = (
+        ridge_profile(np.abs(np.abs(across) - 1.6 * rift_half), rift_half)
+        * opening
+        * (0.6 + 0.4 * polarity * np.sign(across))
+        * massif
+    )
     margins = (
         gate
         * (0.35 + 0.65 * strike)
