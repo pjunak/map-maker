@@ -73,7 +73,8 @@ class PlanetSettings:
     # Opt-in: young volcanoes at sea may break the surface as new islands, which
     # adds land beyond the authored coastline.
     volcanic_islands: bool = False
-    # Opt-in: a few fantastical landmarks beyond Earth's extremes (a titan shield).
+    # Opt-in: a few fantastical landmarks beyond Earth's extremes (a titan shield
+    # volcano, impact craters).
     wonders: bool = False
 
     def __post_init__(self) -> None:

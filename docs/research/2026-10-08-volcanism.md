@@ -143,6 +143,32 @@ is a titan: one giant shield volcano, an Earth-sized Olympus Mons (on Mars,
 - **Downstream effects.** Like other volcanoes it rises after erosion and
   climate. Lakes and rivers route around it: on Aethelara it dams a lake.
 
+The second wonder is impact craters (`planet_wonders.py`). They are fresh
+complex craters 180–300 km across, beyond Earth's largest preserved structures
+(Vredefort ~250 km and Chicxulub ~180 km, both eroded or buried).
+
+- **Count.** One crater per 4×10⁷ km² of land, from 1 to 3.
+- **Placement.** Each lies wholly inland (coast at least 2 radii away) and
+  prefers high ground, away from the titan and from other craters.
+- **Depth.** Rim crest to trough floor is 0.9 % of the diameter, limited so the
+  floor stays above sea level. Below-sea-level basins are not supported yet.
+- **Shape.** The shape follows an eroded large crater such as Manicouagan:
+  - a central uplift plateau;
+  - an annular trough;
+  - walls slumped into irregular blocks;
+  - a noisy raised rim;
+  - an ejecta apron falling as (r/R)⁻³.
+- **Level floor.** The impact excavates and refills the interior at once, so the
+  floor is levelled to the mean height of the ground it was cut into.
+- **Timing.** Craters are cut into the eroded relief before lakes form, so the
+  climate decides what fills them. On Aethelara a humid crater holds a ring lake
+  around its central plateau. A hot desert crater has a salt pan in its trough,
+  and a semi-arid one stays a dry basin.
+- **Atlas.** The atlas redraws craters, and their lakes, at pixel scale from the
+  crater shape.
+- **Manifest.** `metrics.craters` lists each crater's position, diameter and
+  depth.
+
 Volcanoes rise after the climate is simulated, but the atlas and regional
 windows had lapse-corrected only the sharp detail above the mesh's widened
 cones. Big edifices therefore kept the temperature of the plain they stand on.

@@ -113,7 +113,8 @@ Update them with the affected milestone and evidence in every substantive batch.
     gaps and alternating half-grabens.
   - [x] Mid-ocean ridge transform faults and ocean-wide fracture zones.
   - [x] Opt-in wonders: a titan shield volcano.
-  - [ ] More wonders: impact craters with ring lakes, a great chasm; authored placement.
+  - [x] Opt-in wonders: impact craters with level floors and ring lakes.
+  - [ ] More wonders (a great chasm); authored placement; sharp craters in regional windows.
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.

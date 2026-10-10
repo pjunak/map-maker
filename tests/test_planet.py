@@ -673,6 +673,47 @@ def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
     assert cliff > 3 * flank
 
 
+def test_craters_have_level_troughs_central_plateaus_and_raised_rims() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_wonders import (
+        crater_relief,
+        level_crater_floors,
+        place_craters,
+    )
+
+    mesh = build_mesh(60_000, RADIUS, 14)
+    land = mesh.xyz[:, 2] > -0.3
+    coast = coast_distance(mesh, land)
+    # Land sloping by ~2 km across a hemisphere.
+    ground = np.where(land, 1500.0 + 1000.0 * mesh.xyz[:, 0], 0.0)
+    craters = place_craters(mesh, land, coast, ground, np.random.default_rng(3))
+    assert len(craters) >= 1
+    for xyz, radius in zip(craters.xyz, craters.radius_m, strict=True):
+        site = int(np.argmax(mesh.xyz @ xyz))
+        assert land[site] and coast[site] > 2 * radius
+    xyz, radius, depth = craters.xyz[0], craters.radius_m[0], craters.depth_m[0]
+    s = np.arccos(np.clip(mesh.xyz @ xyz, -1, 1)) * RADIUS / radius
+    levelled = level_crater_floors(mesh, ground, craters)
+    assert np.ptp(levelled[s < 0.8]) < 1e-6 < np.ptp(ground[s < 0.8])
+    east = np.cross([0.0, 0.0, 1.0], xyz)
+    east /= np.linalg.norm(east)
+    north = np.cross(xyz, east)
+    azimuth = np.linspace(0, 2 * np.pi, 360, endpoint=False)
+    tangent = np.cos(azimuth)[:, None] * east + np.sin(azimuth)[:, None] * north
+
+    def ring(share: float) -> float:
+        angle = share * radius / RADIUS
+        points = np.cos(angle) * xyz + np.sin(angle) * tangent
+        return float(np.median(crater_relief(points, RADIUS, craters)))
+
+    trough = ring(0.47)
+    assert trough < -0.5 * depth
+    assert ring(0.0) > trough + 0.6 * depth  # central plateau
+    assert ring(1.0) > 0  # raised rim
+    assert ring(2.6) == 0
+
+
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands

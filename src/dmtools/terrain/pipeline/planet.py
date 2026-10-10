@@ -58,11 +58,18 @@ from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_volcanism import (
+    TITAN,
     Volcanoes,
     edifice_height,
     emerge,
     place_volcanoes,
     sea_floor_with_volcanoes,
+)
+from dmtools.terrain.pipeline.planet_wonders import (
+    Craters,
+    crater_relief,
+    level_crater_floors,
+    place_craters,
 )
 from dmtools.terrain.pipeline.world import WorldMap
 
@@ -109,6 +116,8 @@ class PlanetResult:
     volcanoes: Volcanoes
     volcanic_m: F64  # edifice height each node gained from volcanoes (display/regional)
     islands: B  # water nodes standing above sea level as volcanic islands (opt-in)
+    craters: Craters  # opt-in impact craters (wonders)
+    crater_m: F64  # height change each node took from craters (display)
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
@@ -316,6 +325,18 @@ def generate_planet(
     # carries cones widened to its resolution; images redraw them sharply.
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
     evolved = np.where(land, evolved + cones, evolved)
+    # Opt-in impact craters are young too; lakes may then fill them.
+    craters, crater_m = Craters.empty(), np.zeros(mesh.size)
+    if settings.wonders:
+        titan = volcanoes.subset(volcanoes.setting == TITAN)
+        craters = place_craters(
+            mesh, land, coast, evolved,
+            np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9090]),
+            (titan.xyz, titan.radius_m),
+        )
+        crater_m = np.where(land, crater_relief(mesh.xyz, mesh.radius_m, craters), 0.0)
+        levelled = level_crater_floors(mesh, evolved, craters)
+        evolved = np.where(land, np.maximum(levelled + crater_m, 1.0), evolved)
     depressions = young_depressions(
         mesh, land, coast, regions, None if climate is None else climate.warm_c, evolved,
         seeds[PLANET_FORCING_STAGE_ID],
@@ -349,6 +370,15 @@ def generate_planet(
         )
     elevation = np.where(water, bathymetry, lakes.ground_m)
     metrics = relief_metrics(mesh, lakes.surface_m, water | (lakes.lake >= 0), lakes.flow)
+    metrics["craters"] = [
+        {
+            "lat": round(float(np.degrees(np.arcsin(xyz[2]))), 3),
+            "lon": round(float(np.degrees(np.arctan2(xyz[1], xyz[0]))), 3),
+            "diameter_km": round(2 * float(radius) / 1e3, 1),
+            "depth_m": round(float(depth)),
+        }
+        for xyz, radius, depth in zip(craters.xyz, craters.radius_m, craters.depth_m, strict=True)
+    ]
     metrics["lakes"] = {
         "count": len(lakes.level_m),
         "endorheic": int(lakes.endorheic.sum()),
@@ -358,7 +388,7 @@ def generate_planet(
     say(1.0, "Planet relief ready")
     return PlanetResult(
         world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
-        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, seeds,
-        metrics,
+        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, craters,
+        crater_m, seeds, metrics,
     )
 

@@ -38,6 +38,7 @@ from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, neighbour_mix
 from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, SEAMOUNT, edifice_height
+from dmtools.terrain.pipeline.planet_wonders import crater_relief
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -152,6 +153,11 @@ def display_fields(
     islands = np.zeros(shape, dtype=bool) if islands_px is None else islands_px
     # Island pixels already carry their sharp volcano surface.
     base_land = np.where(land_px & ~islands, base_land - coarse + sharp, base_land)
+    # Craters too are redrawn at pixel scale.
+    cut = crater_relief(points, radius, result.craters).reshape(shape)
+    base_land = np.where(
+        land_px & ~islands, base_land - raster.interpolate(mesh, result.crater_m) + cut, base_land
+    )
     sea_floor = base_sea - coarse
     base_sea = np.where(
         land_px, base_sea, np.minimum(sea_floor + sharp, np.maximum(sea_floor, GUYOT_DEPTH_M))
@@ -205,7 +211,7 @@ def display_fields(
     base = np.where(
         islands,
         raster.interpolate(mesh, np.where(result.islands, result.elevation_m, 0.0)),
-        base_land - sharp,
+        base_land - sharp - cut,
     )
     return DisplayFields(z, base, slope, light, position, volcanic)
 
