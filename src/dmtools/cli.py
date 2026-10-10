@@ -183,8 +183,9 @@ def create_parser() -> argparse.ArgumentParser:
     )
     view.add_argument("planet", type=Path, help="Planet build folder or its manifest.json.")
     view.add_argument("--theme", default="atlas",
-                      help="Map theme: atlas, relief, koppen, volcanoes, precipitation, "
-                           "temperature.")
+                      help="Map theme, a build image's name without .png: atlas, relief, "
+                           "topographic, parchment, koppen, volcanoes, precipitation, "
+                           "temperature, plates, seafloor, basins, geology.")
     view.add_argument("--projection", default="globe",
                       choices=("globe", "north-polar", "south-polar", "equirectangular"))
     view.add_argument("--lon", type=float, default=0.0,

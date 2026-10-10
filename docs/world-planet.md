@@ -123,9 +123,15 @@ dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-
 ```
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
-Use `--spacing-km` for a different detail spacing. A region writes `elevation.tif`
-(the blended tile relief), `relief.png`, `topographic.png` and, with climate, a
-natural-colour `atlas.png`.
+Options:
+- `--spacing-km` sets the detail spacing (5 km by default).
+- `--pixels` sets the image size (1,024 by default).
+- `--cache` puts the tile cache elsewhere.
+- `--workers` sets how many tile processes run (0 = automatic).
+
+A region writes `elevation.tif` (the blended tile relief), `relief.png` and
+`topographic.png`. With climate it also writes the natural-colour `atlas.png` and
+the hand-drawn `parchment.png`.
 
 **What the images add.** Atlas and relief images draw small ridges, valleys and
 texture below the mesh resolution, so slopes do not shade as smooth ramps. This
@@ -141,6 +147,10 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
 | `koppen.png` | Köppen–Geiger climate zones in their standard colours. |
 | `volcanoes.png` | The atlas with land volcanoes marked: red for active, dark for extinct. |
+| `topographic.png` | Hypsometric tints, contour lines (every fifth bold), isobaths, soft hillshade and water. |
+| `parchment.png` | A hand-drawn fantasy map: inked coasts, mountain, hill, tree, marsh and dune symbols, and rivers on aged paper (needs climate). |
+| `plates.png`, `seafloor.png` | Tectonic plates with boundary types and motion; ocean-crust age. |
+| `basins.png`, `geology.png` | Drainage basins with divides; geological provinces. |
 | `elevation.tif` | Float32 elevation in metres (land, and an ocean floor with mid-ocean ridges, sea-floor ageing and trenches), on a geographic CRS for your world's sphere radius. |
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
