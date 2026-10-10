@@ -28,6 +28,10 @@ dmtools world planet | region | view   # planet build, regional detail, projecte
 - **Long experiments:** ask before ones expected to take more than about two
   minutes, unless the user has authorized long experiments. The full test suite is
   the documented gate.
+- **No source edits during a test run:** do not change `.py` files under
+  `src/dmtools/` or `benchmarks/` while pytest runs, including a background run.
+  Builds and benchmark comparisons fingerprint those sources at start and finish
+  and reject completion when they differ, so tests fail with "changed during".
 
 ## Where things are
 
