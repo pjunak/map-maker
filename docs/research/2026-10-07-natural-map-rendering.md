@@ -112,6 +112,27 @@ transfer error of 0.207 (limit 0.2) after the A0 change.
 
 - **Change.** The test now uses 90,000 km² and keeps its 0.2 bound.
 
+## Treeline and wetlands
+
+On flat cold plains the boundary between forest, grassland and tundra followed
+a line of latitude. It blended across 4–11 °C of summer warmth, about 1,000 km
+of a lowland plain, so the plain looked smudged rather than textured.
+
+- **Treeline.** Tundra now replaces forest near the 10 °C warmest-month isotherm
+  (Köppen ET), over 7.5–10.5 °C.
+- **Effective warmth.** The warmth that places treeline and forest varies
+  locally:
+  - it varies by ±`ECOTONE_C` (3 °C) with the vegetation mosaic noise (~300 km
+    and ~35 km);
+  - it is up to 1.2 °C warmer in sheltered valleys and cooler on exposed crests;
+  - it is up to 4 °C warmer along rivers, where gallery forest reaches poleward
+    (Mackenzie, Lena).
+
+  The forest-tundra is then a ragged mosaic 100–300 km wide.
+- **Wetlands.** Flat, low, humid ground with cool summers (5–20 °C) drains
+  badly and is drawn as mottled dark-olive peatland (West Siberian Plain,
+  Hudson Bay Lowlands).
+
 ## Aethelara (private; not committed)
 
 The run used 800k nodes, two climate passes and a 5,760 px atlas, and took about

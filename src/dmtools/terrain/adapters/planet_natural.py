@@ -72,6 +72,9 @@ FOREST_TROPICAL: RGB = (46, 82, 42)
 FOREST_TEMPERATE: RGB = (68, 98, 56)
 FOREST_BOREAL: RGB = (58, 78, 60)
 TUNDRA: RGB = (150, 146, 124)
+# Local spread of the effective summer warmth that places treeline and tundra (C).
+ECOTONE_C = 3.0
+WETLAND: RGB = (92, 98, 70)
 ROCK: RGB = (132, 122, 112)
 BARE_DRYLAND: RGB = (124, 102, 80)
 SNOW: RGB = (242, 244, 247)
@@ -357,7 +360,13 @@ def land_colour(
         # Only drylands show river corridors; humid land is green either way.
         aridity = aridity * (1 + 15 * wet * (1 - _smooth(aridity, 0.25, 0.9)))
     veg = _smooth(aridity, 0.04, 0.8)
-    forest = _smooth(aridity, 0.6, 1.25) * _smooth(warm, 9, 14)
+    # The polar treeline is no line of latitude: forest-tundra is a mosaic
+    # 100-300 km wide, forest reaches poleward in sheltered valleys and along
+    # rivers (Mackenzie, Lena) and gives way early on exposed uplands.
+    sheltered = 0.0 if position is None else -1.2 * position
+    riparian = 0.0 if wet is None else 4.0 * wet
+    summer = warm + ECOTONE_C * (0.7 * patch + 0.5 * fine) + sheltered + riparian
+    forest = _smooth(aridity, 0.6, 1.25) * _smooth(summer, 9, 14)
     desert = _mix(_fill(shape, DESERT_COLD), DESERT_HOT, _smooth(temperature, 5, 18))
     hue = eroded_fbm(points, zeros, 43, 4, radius_m / 450e3, 0.5, 0.0).reshape(shape)
     hue = hue + 0.6 * fine
@@ -376,7 +385,15 @@ def land_colour(
     colour = _mix(colour, REG, 0.35 * hyperarid * (1 - erg))
     sand = _mix(_fill(shape, ERG_COLD), ERG_HOT, _smooth(temperature, 6, 18))
     colour = _mix(colour, sand, 0.9 * erg)
-    colour = _mix(colour, TUNDRA, 1 - _smooth(warm, 4, 11))
+    # Treeline near the 10 C warmest-month isotherm (Koppen ET).
+    colour = _mix(colour, TUNDRA, 1 - _smooth(summer, 7.5, 10.5))
+    # Flat, cool, humid lowlands drain badly into bogs and fens (West Siberian
+    # Plain, Hudson Bay Lowlands): dark mottled olive and brown peatland.
+    flat = 1 - _smooth(slope, 0.003 * slope_scale, 0.015 * slope_scale)
+    low_ground = 1.0 if position is None else _smooth(-position, -0.3, 0.4)
+    boggy = _smooth(aridity, 0.9, 1.6) * (1 - _smooth(summer, 14, 20)) * _smooth(summer, 5, 8)
+    mottle = _smooth(0.6 * patch + fine, -0.1, 0.4)
+    colour = _mix(colour, WETLAND, 0.7 * flat * low_ground * boggy * mottle)
     steep = _smooth(slope, 0.08 * slope_scale, 0.3 * slope_scale)
     rocky = np.clip(steep * 0.75 + _smooth(z, 3000, 4500) * 0.25, 0, 0.8)
     colour = _mix(colour, ROCK, rocky)
