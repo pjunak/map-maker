@@ -52,6 +52,8 @@ class Tectonics:
     plumes: F64  # (k, 3) fixed mantle-plume (hotspot) positions
     plume_heading: F64  # (k, 3) unit tangent of plate motion over each plume (0 if still)
     plume_speed_m_yr: F64  # plate speed over each plume
+    rotation: F64  # (plates, 3) angular velocity vector of each plate (rad/yr)
+    across_plate: I64  # plate on the far side of the nearest boundary
 
 
 def plate_tectonics(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Tectonics:
@@ -106,6 +108,7 @@ def plate_tectonics(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Tecto
     pair_high = np.maximum(plate[label], other[label])
     foreland = np.where((pair_low * 7 + pair_high * 13 + seed) % 2 == 0, pair_low, pair_high)
     across = np.where(plate == foreland, distance, -distance)
+    across_plate = np.where(plate == plate[label], other[label], plate[label])
 
     leading = _leading_edges(mesh, land, coast_m, velocity, east, north)
     plumes = rng.normal(size=(PLUME_COUNT, 3))
@@ -115,7 +118,8 @@ def plate_tectonics(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Tecto
     speed = np.linalg.norm(motion, axis=1)
     heading = motion / np.maximum(speed, 1e-12)[:, None]
     return Tectonics(
-        plate, v_east, v_north, distance, across, convergence, leading, plumes, heading, speed
+        plate, v_east, v_north, distance, across, convergence, leading, plumes, heading, speed,
+        omega, across_plate,
     )
 
 

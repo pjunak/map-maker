@@ -32,7 +32,7 @@ from dmtools.terrain.pipeline.planet_kernels import (
     priority_flood,
 )
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
-from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.planet_noise import fbm3, value_noise3
 from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plate_tectonics, plume_track
 from dmtools.terrain.pipeline.world import WorldMap
 from dmtools.terrain.pipeline.world_geology import resolve_geology
@@ -98,6 +98,11 @@ TRAP_RADIUS_M = 450e3
 TRAP_AGE_MYR = 65.0
 HALF_SPREADING_M_PER_MYR = 40e3
 RIDGE_COAST_CLEARANCE_M = 80e3
+# Mid-ocean ridge segments between transform faults (m) and their largest
+# sideways offset (m); fracture-zone troughs are a few hundred metres deep.
+TRANSFORM_SPACING_M = 300e3
+TRANSFORM_OFFSET_M = 120e3
+FRACTURE_TROUGH_M = 500.0
 MAX_SEA_FLOOR_AGE_MYR = 200.0
 PLATE_CORE_KM2 = 2e6
 REFERENCE_RELIEF_M_PER_MM_YR = 5000.0
@@ -657,9 +662,11 @@ def ocean_floor(
     )
     if plates is None:
         plates = plate_tectonics(mesh, ~water, coast_m, seed)
-    age_myr = plate_sea_floor_age_myr(mesh, water, coast_m, plates)
-    if age_myr is None:
-        age_myr = sea_floor_age_myr(mesh, ~water)
+    spreading = plate_sea_floor_age_myr(mesh, water, coast_m, plates, seed)
+    if spreading is None:
+        age_myr, fracture = sea_floor_age_myr(mesh, ~water), np.zeros(mesh.size)
+    else:
+        age_myr, fracture = spreading
     # The ridge crest is a broad swell, not a cusp: smooth age over ~2 Myr.
     young = 2600 + 365 * np.sqrt(np.sqrt(age_myr**2 + 4.0) - 2.0)
     old = 5651 - 2473 * np.exp(-0.0278 * age_myr)
@@ -669,6 +676,7 @@ def ocean_floor(
     # Rough young crust (abyssal hills, ridge flanks) smooths as sediment drapes it.
     hills = fbm3(p, seed + 909, 5, 6.0)
     depth -= blend * (120 + 280 * np.exp(-age_myr / 30)) * hills
+    depth += blend * FRACTURE_TROUGH_M * fracture
     gate = _smoothstep(plates.leading, 0.15, 0.6)
     strike = _smoothstep(fbm3(p, seed + 232, 3, 6.0), -0.4, 0.4)
     active = _smoothstep(gate * (0.35 + 0.65 * strike), 0.45, 0.85)
@@ -688,28 +696,65 @@ def ocean_floor(
 
 
 def plate_sea_floor_age_myr(
-    mesh: SphereMesh, water: B, coast_m: F64, plates: Tectonics
-) -> F64 | None:
-    """Sea-floor age from distance to the nearest spreading plate boundary.
+    mesh: SphereMesh, water: B, coast_m: F64, plates: Tectonics, seed: int = 0
+) -> tuple[F64, F64] | None:
+    """Sea-floor age and 0..1 fracture-zone troughs from the spreading boundaries.
 
     Mid-ocean ridges are the plate boundaries that open under the sea; crust
     ages with distance from them at half the mean opening rate (a single rate
     keeps the age field continuous where the nearest ridge segment changes). Where an
     opening boundary crosses a continent it is a rift, so rift valleys on land
-    continue offshore as ridges (Red Sea into the Gulf of Aden). Returns None
-    when no boundary opens under the sea.
+    continue offshore as ridges (Red Sea into the Gulf of Aden).
+
+    Real ridges are not smooth arcs: transform faults cut them into segments
+    tens to hundreds of kilometres long and offset each sideways (the
+    Mid-Atlantic Ridge steps every ~50-500 km; the Romanche offset is ~900 km).
+    Each segment's axis shifts by its own offset, and the age step this makes
+    travels with the plates as a fracture zone: a scarp and narrow trough
+    perpendicular to the ridge across the whole ocean. Returns None when no
+    boundary opens under the sea.
     """
     near = plates.boundary_m < 0.75 * mesh.spacing_m
     ridge = np.flatnonzero(
-        water & near & (plates.convergence < -0.005) & (coast_m > RIDGE_COAST_CLEARANCE_M)
+        water
+        & near
+        & (plates.convergence < -0.005)
+        & (coast_m > RIDGE_COAST_CLEARANCE_M)
+        & (plates.across_m >= 0)
     )
     if not len(ridge):
         return None
-    distance = multi_source_distance(
-        ridge, np.zeros(len(ridge)), mesh.ptr, mesh.nbr, mesh.length_m
+    distance, owner = multi_source_nearest(ridge, ridge, mesh.ptr, mesh.nbr, mesh.length_m)
+    owner = np.maximum(owner, 0)
+    # Sources lie on one plate of each pair; the other plate is the far side.
+    near_plate, far_plate = plates.plate[owner], plates.across_plate[owner]
+    side = np.where(plates.plate == near_plate, 1.0, -1.0)
+    # Transform faults step the ridge at intervals set by the pair's relative
+    # rotation: the angle from its pole along the ridge indexes the segments.
+    # Crust keeps its segment as it moves away, so fracture zones leave the
+    # ridge at right angles and cross the ocean.
+    pole = plates.rotation[near_plate] - plates.rotation[np.maximum(far_plate, 0)]
+    pole /= np.maximum(np.linalg.norm(pole, axis=1), 1e-30)[:, None]
+    along = mesh.radius_m * np.arccos(
+        np.clip(np.einsum("ij,ij->i", mesh.xyz[owner], pole), -1, 1)
     )
+    pair = (near_plate * 64 + far_plate).astype(np.float64)
+    zeros = np.zeros(mesh.size)
+    # Segment lengths vary (~100-500 km) rather than repeating evenly.
+    u = along / TRANSFORM_SPACING_M
+    u = u + 0.45 * value_noise3(np.c_[0.37 * u, pair, zeros + 0.5], seed + 1702)
+    segment = np.floor(u)
+    offset = TRANSFORM_OFFSET_M * value_noise3(np.c_[segment, pair, zeros], seed + 1701)
     half_rate = max(0.5 * float(np.mean(-plates.convergence[ridge])), 0.01)  # m/yr
-    return np.minimum(distance / half_rate / 1e6, MAX_SEA_FLOOR_AGE_MYR)
+    age = np.minimum(np.abs(side * distance - offset) / half_rate / 1e6, MAX_SEA_FLOOR_AGE_MYR)
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    cut = (segment[src] != segment[mesh.nbr]) & (pair[src] == pair[mesh.nbr])
+    # Fracture zones are as prominent as the age contrast across them: big
+    # offsets leave ocean-wide scarps and troughs, small ones fade out.
+    jump = np.abs(offset[src[cut]] - offset[mesh.nbr[cut]]) / (2 * TRANSFORM_OFFSET_M)
+    fracture = np.zeros(mesh.size)
+    np.maximum.at(fracture, src[cut], _smoothstep(jump, 0.15, 0.6))
+    return age, np.where(water, fracture, 0.0)
 
 
 def delta_shelf_width(mesh: SphereMesh, mouths: I64, flux_m3_yr: F64) -> F64:

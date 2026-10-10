@@ -230,7 +230,7 @@ rises into massifs and falls to saddles and passes every few hundred kilometres
 - **Lithology bands.** Strike-parallel bands drop to ±12 %.
 - **Rifts.** These become chains of half-grabens. One shoulder stands high and
   the other low, alternating along strike, and floor depth varies.
-- **Provenance.** The relief identifier is now `sphere-mesh-stream-power-v17`.
+- **Provenance.** This change bumped the relief identifier to `sphere-mesh-stream-power-v17`.
 
 | 800k nodes, Aethelara | mean | >1 km | >2 km | >3 km | max |
 | --- | --- | --- | --- | --- | --- |
@@ -241,6 +241,32 @@ The west continent's 2,000 km rift now breaks into offset segments with
 alternating shoulders. Its west-coast collision belt now runs as discrete massifs
 with low gaps. The east continent's T-junction ranges now break into separate
 massifs and passes.
+
+## Transform faults and fracture zones
+
+Mid-ocean ridges drew as smooth arcs thousands of kilometres long. Real ridges
+are cut by transform faults into segments tens to hundreds of kilometres long,
+each offset sideways. The Mid-Atlantic Ridge steps every ~50–500 km, and the
+Romanche offset is ~900 km. The age step across each transform travels away
+with the plates as a fracture zone: a scarp and a narrow trough that crosses the
+whole ocean basin at right angles to the ridge.
+
+- **Segments.** A ridge's segments are indexed by the angle along it from the
+  pair's relative rotation pole. They average `TRANSFORM_SPACING_M` (300 km),
+  with noise-varied lengths.
+- **Offsets.** Each segment's axis is offset by up to `TRANSFORM_OFFSET_M`
+  (±120 km).
+- **Crust identity.** Crust keeps the segment of the nearest ridge point (graph
+  Voronoi strips), so fracture zones leave the ridge at right angles. An earlier
+  trial indexed segments by each node's own angle about the pole: fracture zones
+  then followed small circles, as in nature. On these random plate boundaries,
+  though, they ran along obliquely opening ridges instead of across them.
+- **Troughs.** A fracture zone's trough (up to `FRACTURE_TROUGH_M`, 500 m) scales
+  with the offset contrast. Large offsets leave ocean-wide lineations, and small
+  ones fade out.
+- **Provenance.** `Tectonics` now exposes each plate's angular velocity and the
+  plate across the nearest boundary. The relief identifier is now
+  `sphere-mesh-stream-power-v18`.
 
 ## Limits
 

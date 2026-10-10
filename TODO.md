@@ -111,6 +111,7 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Opt-in volcanic islands: hotspot shields and island arcs.
   - [x] Along-strike variety of mountain belts and rifts: bends, steps, massifs, saddles,
     gaps and alternating half-grabens.
+  - [x] Mid-ocean ridge transform faults and ocean-wide fracture zones.
   - [ ] A few authored or seeded fantastical landmarks (e.g. an isolated giant massif).
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).

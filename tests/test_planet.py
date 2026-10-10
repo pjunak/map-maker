@@ -383,10 +383,13 @@ def test_sea_floor_ages_away_from_spreading_ridges() -> None:
     assert np.median(age[equator]) < np.median(age[flank])
     # With plates, crust is youngest on opening boundaries and ages away from them.
     plates = plate_tectonics(mesh, land, coast, 3)
-    plate_age = plate_sea_floor_age_myr(mesh, ocean, coast, plates)
-    if plate_age is not None:
+    spreading = plate_sea_floor_age_myr(mesh, ocean, coast, plates, 3)
+    if spreading is not None:
+        plate_age, fracture = spreading
         ridge = ocean & (plates.boundary_m < mesh.spacing_m) & (plates.convergence < -0.005)
         assert np.median(plate_age[ridge]) < np.median(plate_age[ocean])
+        # Transform faults cut the ridges; their fracture zones lie only at sea.
+        assert fracture[ocean].any() and not fracture[land].any()
     depth = -ocean_floor(mesh, coast, ocean, 3, None, plates)
     assert np.all(depth[ocean] > 0) and np.all(depth[land] == 0)
 
