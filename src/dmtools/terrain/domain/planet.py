@@ -73,11 +73,15 @@ class PlanetSettings:
     # Opt-in: young volcanoes at sea may break the surface as new islands, which
     # adds land beyond the authored coastline.
     volcanic_islands: bool = False
+    # Opt-in: a few fantastical landmarks beyond Earth's extremes (a titan shield).
+    wonders: bool = False
 
     def __post_init__(self) -> None:
         validate_master_seed(self.seed)
         if type(self.volcanic_islands) is not bool:
             raise ValueError("Volcanic islands must be true or false.")
+        if type(self.wonders) is not bool:
+            raise ValueError("Wonders must be true or false.")
         if (
             type(self.nodes) is not int
             or not MIN_PLANET_NODES <= self.nodes <= MAX_PLANET_NODES

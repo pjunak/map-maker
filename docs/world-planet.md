@@ -70,6 +70,7 @@ leaves no `manifest.json`, so it never looks complete.
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
+| `--wonders` | off | Add fantastical landmarks beyond Earth's extremes: a titan shield volcano (~10 km high, ~560 km across, ice-capped, with a basal cliff). Also a checkbox on the Planet page. |
 | `--volcanic-islands` | off | Let young volcanoes at sea rise as islands: hotspot chains of shield islands and island arcs behind ocean trenches. **Adds land beyond your coastline.** Also a checkbox on the Planet page. |
 | `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
 | `--process-km2` | 600 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys; keep it at least a few mesh cells. |

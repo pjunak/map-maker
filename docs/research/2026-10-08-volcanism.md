@@ -122,6 +122,33 @@ Planet page checkbox) they may break the surface.
 - **Manifest.** It reports island volcanoes and the island area drawn on the
   raster.
 
+## Opt-in wonders: the titan shield
+
+With `wonders` (CLI `--wonders`, a Planet-page checkbox), a few fantastical
+landmarks go beyond Earth's extremes while keeping plausible forms. The first
+is a titan: one giant shield volcano, an Earth-sized Olympus Mons (on Mars,
+22 km high, 600 km across, with 5° flanks and a basal cliff up to 8 km).
+
+- **Placement.** It stands at least `TITAN_MIN_COAST_M` (350 km) inland, chosen
+  by area with the volcanism stage seed.
+- **Size.** The edifice is about 10 km high (±10 %) with a basal radius of about
+  280 km. It is exempt from the 6.6 km summit ceiling of real volcanoes.
+- **Caldera.** A 30 km-radius summit caldera sits 2.5 km below its rim.
+- **Basal cliff.** The flank breaks into a cliff beyond 88 % of the radius.
+- **Valleys.** Glaciers and rivers cut the flanks into about 32 radial valleys
+  (Mount Kenya, Kohala). Their spacing is uneven, they wander downslope, and
+  their depth varies, reaching up to 12 % of the summit height at mid-flank.
+- **Build data.** It is a volcano with the setting `titan`, so it appears in
+  the gazetteer, the archive and regional windows.
+- **Downstream effects.** Like other volcanoes it rises after erosion and
+  climate. Lakes and rivers route around it: on Aethelara it dams a lake.
+
+Volcanoes rise after the climate is simulated, but the atlas and regional
+windows had lapse-corrected only the sharp detail above the mesh's widened
+cones. Big edifices therefore kept the temperature of the plain they stand on.
+Whole edifices are now lapse-corrected, so high volcanoes carry snow and ice:
+the titan wears an ice cap, and 5–6 km stratovolcanoes are snow-capped.
+
 ## In the app
 
 - **Layer.** A "Planet volcanoes" layer shows the atlas with land volcanoes

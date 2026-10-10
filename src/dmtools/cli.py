@@ -155,6 +155,9 @@ def create_parser() -> argparse.ArgumentParser:
     planet.add_argument("--volcanic-islands", action="store_true",
                         help="Let young volcanoes at sea rise as islands (adds land "
                              "beyond your coastline).")
+    planet.add_argument("--wonders", action="store_true",
+                        help="Add fantastical landmarks beyond Earth's extremes "
+                             "(a titan shield volcano).")
     planet.add_argument("--climate-passes", type=int, default=1,
                         help="Climate/erosion couplings; 0 disables climate and biomes.")
     planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")
@@ -235,6 +238,7 @@ def _run_world_planet(arguments: argparse.Namespace) -> int:
             calibration_iterations=arguments.calibrate,
             climate_passes=arguments.climate_passes,
             volcanic_islands=arguments.volcanic_islands,
+            wonders=arguments.wonders,
         )
         path = build_planet(
             arguments.project, arguments.output, arguments.geology, settings,

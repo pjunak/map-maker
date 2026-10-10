@@ -112,7 +112,8 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Along-strike variety of mountain belts and rifts: bends, steps, massifs, saddles,
     gaps and alternating half-grabens.
   - [x] Mid-ocean ridge transform faults and ocean-wide fracture zones.
-  - [ ] A few authored or seeded fantastical landmarks (e.g. an isolated giant massif).
+  - [x] Opt-in wonders: a titan shield volcano.
+  - [ ] More wonders: impact craters with ring lakes, a great chasm; authored placement.
   - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.

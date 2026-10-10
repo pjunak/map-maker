@@ -45,7 +45,7 @@
       "required": [
         "seed", "nodes", "duration_myr", "step_kyr", "erodibility", "area_exponent",
         "process_area_km2", "calibration_iterations", "climate_passes", "climate",
-        "volcanic_islands"
+        "volcanic_islands", "wonders"
       ],
       "properties": {
         "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
@@ -58,7 +58,8 @@
         "calibration_iterations": { "type": "integer", "minimum": 0 },
         "climate_passes": { "type": "integer", "minimum": 0 },
         "climate": { "type": "object" },
-        "volcanic_islands": { "type": "boolean" }
+        "volcanic_islands": { "type": "boolean" },
+        "wonders": { "type": "boolean" }
       }
     },
     "seed_policy": { "const": "named-stage-sha256@1" },

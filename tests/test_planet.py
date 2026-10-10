@@ -629,6 +629,50 @@ def test_planned_islands_emerge_while_other_seamounts_stay_drowned() -> None:
     assert surface[1] <= GUYOT_DEPTH_M
 
 
+def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
+    from dmtools.terrain.pipeline.planet_volcanism import (
+        MAX_SUMMIT_M,
+        TITAN,
+        TITAN_MIN_COAST_M,
+        edifice_height,
+        place_volcanoes,
+    )
+
+    mesh = build_mesh(20_000, RADIUS, 13)
+    land = mesh.xyz[:, 2] > -0.2
+    coast = coast_distance(mesh, land)
+    plates = plate_tectonics(mesh, land, coast, 4)
+    ground = np.where(land, 300.0, -4000.0)
+    plain = place_volcanoes(mesh, land, coast, plates, 4, ground)
+    assert not (plain.setting == TITAN).any()
+    volcanoes = place_volcanoes(mesh, land, coast, plates, 4, ground, titan=True)
+    titan = volcanoes.subset(volcanoes.setting == TITAN)
+    assert len(titan) == 1 and titan.height_m[0] > MAX_SUMMIT_M
+    site = int(np.argmax(mesh.xyz @ titan.xyz[0]))
+    assert land[site] and coast[site] >= TITAN_MIN_COAST_M
+    # Radial profiles: the caldera floor sits below its rim, and the flank
+    # ends in a cliff much steeper than the shield's slopes.
+    east = np.cross([0.0, 0.0, 1.0], titan.xyz[0])
+    east /= np.linalg.norm(east)
+    north = np.cross(titan.xyz[0], east)
+    azimuth = np.linspace(0, 2 * np.pi, 72, endpoint=False)
+    radius = float(titan.radius_m[0])
+    distance = np.arange(0.0, 1.5 * radius, 2e3)
+    tangent = np.cos(azimuth)[:, None] * east + np.sin(azimuth)[:, None] * north
+    angle = (distance / RADIUS)[None, :, None]
+    points = (np.cos(angle) * titan.xyz[0] + np.sin(angle) * tangent[:, None, :]).reshape(-1, 3)
+    height = edifice_height(points, RADIUS, titan).reshape(len(azimuth), len(distance))
+    assert np.median(height[:, 0]) < np.median(height[:, 20])  # caldera floor below rim
+    drop = -np.diff(height, axis=1) / 2e3
+    mid = (distance[1:] > 0.3 * radius) & (distance[1:] < 0.6 * radius)
+    flank = np.median(drop[:, mid])
+    cliff = np.median(drop.max(axis=1))
+    assert cliff > 3 * flank
+
+
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands

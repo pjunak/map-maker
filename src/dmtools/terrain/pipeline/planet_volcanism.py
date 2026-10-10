@@ -36,9 +36,20 @@ type I64 = NDArray[np.int64]
 type B = NDArray[np.bool_]
 
 KINDS = ("stratovolcano", "shield volcano", "caldera", "seamount")
-SETTINGS = ("subduction arc", "hotspot", "continental rift", "intraplate")
+SETTINGS = ("subduction arc", "hotspot", "continental rift", "intraplate", "titan")
 STRATO, SHIELD, CALDERA, SEAMOUNT = range(4)
-ARC, HOTSPOT, RIFT, INTRAPLATE = range(4)
+ARC, HOTSPOT, RIFT, INTRAPLATE, TITAN = range(5)
+
+# Opt-in fantastical landmark: one giant shield, an Earth-sized Olympus Mons
+# (Mars: 22 km high, 600 km across, 5 deg flanks, a basal cliff up to 8 km).
+TITAN_HEIGHT_M = 10_000.0
+TITAN_RADIUS_M = 280e3
+TITAN_CALDERA_RADIUS_M = 30e3
+TITAN_CALDERA_DEPTH_M = 2_500.0
+TITAN_SCARP = 0.88  # share of the basal radius where the flank breaks into the cliff
+TITAN_MIN_COAST_M = 350e3
+TITAN_VALLEYS = 32  # radial valleys around the flanks
+TITAN_VALLEY_DEPTH = 0.12  # share of the summit height at mid-flank
 
 ARC_SPACING_M = 70e3
 ARC_FRONT_M = 130e3  # typical distance of the volcanic front inland of the coast
@@ -98,11 +109,13 @@ def place_volcanoes(
     seed: int,
     ground_m: F64,
     islands: bool = False,
+    titan: bool = False,
 ) -> Volcanoes:
     """Volcanoes for this world; ``ground_m`` is the eroded land surface they stand on.
 
     With ``islands``, young hotspot volcanoes at sea are planned to break the
     surface and island arcs rise behind ocean-ocean trenches (see ``emerge``).
+    With ``titan``, one giant shield (a fantastical landmark) rises deep inland.
     """
     rng = np.random.default_rng([seed, 5150])
     radius = mesh.radius_m
@@ -164,12 +177,36 @@ def place_volcanoes(
     height = np.where(on_land, np.minimum(volcanoes.height_m, room), volcanoes.height_m)
     scale = height / volcanoes.height_m
     radius = volcanoes.radius_m * scale
-    return Volcanoes(
+    volcanoes = Volcanoes(
         volcanoes.xyz, height, radius, volcanoes.kind, volcanoes.setting,
         volcanoes.active, volcanoes.age_myr,
         np.minimum(volcanoes.caldera_radius_m, CALDERA_SHARE * radius),
         volcanoes.caldera_depth_m * scale,
         volcanoes.summit_m, volcanoes.emergent,
+    )
+    if titan:
+        volcanoes = _concat([volcanoes, _titan(mesh, land, coast_m, rng)])
+    return volcanoes
+
+
+def _titan(mesh: SphereMesh, land: B, coast_m: F64, rng: np.random.Generator) -> Volcanoes:
+    """One giant shield deep inside a continent, beyond the ceiling of real volcanoes."""
+    inland = np.flatnonzero(land & (coast_m >= TITAN_MIN_COAST_M))
+    if not len(inland):
+        inland = np.array([int(np.argmax(np.where(land, coast_m, -1.0)))])
+    site = int(rng.choice(inland, p=mesh.area_m2[inland] / mesh.area_m2[inland].sum()))
+    return Volcanoes(
+        mesh.xyz[site][None, :],
+        np.array([TITAN_HEIGHT_M * rng.uniform(0.9, 1.1)]),
+        np.array([TITAN_RADIUS_M * rng.uniform(0.9, 1.1)]),
+        np.array([SHIELD]),
+        np.array([TITAN]),
+        np.array([True]),
+        np.array([0.0]),
+        np.array([TITAN_CALDERA_RADIUS_M]),
+        np.array([TITAN_CALDERA_DEPTH_M]),
+        np.array([np.nan]),
+        np.array([False]),
     )
 
 
@@ -450,6 +487,27 @@ def edifice_height(
         # Concave stratovolcano and seamount flanks; broad convex shields.
         profile = np.where(kind == SHIELD, (1 - s**2) ** 0.7, (1 - s) ** 1.8)
         profile = np.where(kind == CALDERA, (1 - s) ** 1.3, profile)
+        # A titan's flanks end in a cliff around its base (Olympus Mons).
+        titan = volcanoes.setting[v] == TITAN
+        scarp = 1 - np.clip((s - TITAN_SCARP) / (1 - TITAN_SCARP), 0, 1) ** 2
+        profile = np.where(titan, profile * scarp, profile)
+        if titan.any():
+            # Glaciers and rivers cut its flanks into radial valleys and ridges
+            # (Mount Kenya, Kohala), deepest at mid-flank.
+            centre = volcanoes.xyz[v]
+            east = np.cross([0.0, 0.0, 1.0], centre)
+            east /= np.maximum(np.linalg.norm(east, axis=1), 1e-12)[:, None]
+            north = np.cross(centre, east)
+            p = points[hit]
+            theta = np.arctan2(np.einsum("ij,ij->i", p, north), np.einsum("ij,ij->i", p, east))
+            # Uneven spacing, valleys that wander downslope and vary in depth.
+            wander = 4.0 * fbm3(p, 9103, 3, planet_radius_m / 150e3) + (0.5 + 2.0 * s) * fbm3(
+                p, 9104, 3, planet_radius_m / 50e3
+            )
+            ridges = np.abs(np.sin(0.5 * TITAN_VALLEYS * theta + wander))
+            depth = 0.4 + 0.6 * np.clip(0.5 + fbm3(p, 9105, 2, planet_radius_m / 120e3), 0, 1)
+            cut = TITAN_VALLEY_DEPTH * depth * (1 - ridges) ** 3 * 4 * s * (1 - s)
+            profile = np.where(titan & (r > volcanoes.caldera_radius_m[v]), profile - cut, profile)
         h = height[v] * profile
         # Calderas: the summit collapsed into a flat-floored basin below its rim.
         rim = volcanoes.caldera_radius_m[v]

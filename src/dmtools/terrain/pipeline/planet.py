@@ -309,7 +309,7 @@ def generate_planet(
         if plates is None
         else place_volcanoes(
             mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved,
-            settings.volcanic_islands,
+            settings.volcanic_islands, settings.wonders,
         )
     )
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
