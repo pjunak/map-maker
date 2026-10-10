@@ -123,7 +123,7 @@ class DisplayFields:
     """Per-pixel fields shared by the natural and relief maps."""
 
     elevation_m: F64  # display relief: land with detail, sea with texture
-    base_m: F64  # interpolated planet land surface (no detail)
+    base_m: F64  # surface the climate fields refer to (no detail, no volcanoes)
     slope: F64  # display slope (m/m)
     light: F64  # multi-directional hillshade, 1.0 on flat ground
     position: F64  # -1 (valley floor) .. +1 (ridge crest), multi-scale openness
@@ -198,12 +198,14 @@ def display_fields(
     slope, light = shading(gx, gy, EXAGGERATION)
     position = openness(z, dy, dx[:, 0])
     light = light * (1 + OPENNESS_GAIN * position)
-    # The surface the climate fields refer to: mesh land, or a volcanic island's
-    # coarse mesh height (its temperatures are lapse-corrected to that height).
+    # The surface the climate fields refer to: mesh land without its volcanoes
+    # (they rise after the climate is simulated, so whole edifices are
+    # lapse-corrected), or a volcanic island's coarse mesh height (its
+    # temperatures are lapse-corrected to that height).
     base = np.where(
         islands,
         raster.interpolate(mesh, np.where(result.islands, result.elevation_m, 0.0)),
-        base_land - (sharp - coarse),
+        base_land - sharp,
     )
     return DisplayFields(z, base, slope, light, position, volcanic)
 

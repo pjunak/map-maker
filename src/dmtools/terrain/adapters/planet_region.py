@@ -312,7 +312,11 @@ def regional_climate(
         return None
     shape = elevation.shape
     z = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0).ravel()
-    lift = (z - parent.sample(points, parent.surface_m)) / 1000
+    # Volcanoes rise after the climate is simulated: lapse-correct whole edifices.
+    surface = parent.surface_m
+    if parent.volcanic_m is not None:
+        surface = surface - np.where(parent.land, parent.volcanic_m, 0.0)
+    lift = (z - parent.sample(points, surface)) / 1000
     lapse = parent.settings.climate.lapse_c_per_km
     temperature = parent.sample(points, parent.temperature_c) - lapse * lift
     warm_source = parent.warm_season_c if parent.warm_season_c is not None else parent.temperature_c
