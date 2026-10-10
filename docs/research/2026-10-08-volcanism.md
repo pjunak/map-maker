@@ -169,6 +169,13 @@ complex craters 180–300 km across, beyond Earth's largest preserved structures
 - **Manifest.** `metrics.craters` lists each crater's position, diameter and
   depth.
 
+Wonders are placed by rejection sampling of continuous positions on the sphere
+(`draw_site`), from their own random streams, with yes/no eligibility tests.
+Picking mesh nodes, or weighting by relief that differs between resolutions,
+moved them between a 800k preview and a 3.2M build. Now the titan and the
+craters land in the same places at 200k and 800k nodes. Only crater depth,
+which is limited by the local ground, varies.
+
 Volcanoes rise after the climate is simulated, but the atlas and regional
 windows had lapse-corrected only the sharp detail above the mesh's widened
 cones. Big edifices therefore kept the temperature of the plain they stand on.

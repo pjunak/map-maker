@@ -714,6 +714,23 @@ def test_craters_have_level_troughs_central_plateaus_and_raised_rims() -> None:
     assert ring(2.6) == 0
 
 
+def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_wonders import place_craters
+
+    centres = []
+    for nodes in (30_000, 120_000):
+        mesh = build_mesh(nodes, RADIUS, 15)
+        land = mesh.xyz[:, 2] > -0.3
+        coast = coast_distance(mesh, land)
+        ground = np.where(land, 1500.0 + 1000.0 * mesh.xyz[:, 0], 0.0)
+        centres.append(place_craters(mesh, land, coast, ground, np.random.default_rng(5)).xyz)
+    coarse, fine = centres
+    assert len(coarse) == len(fine) >= 1
+    assert np.allclose(coarse, fine)
+
+
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands

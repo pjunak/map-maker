@@ -30,6 +30,7 @@ from scipy.spatial import KDTree
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plume_track
+from dmtools.terrain.pipeline.planet_wonders import draw_site
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]
@@ -185,18 +186,19 @@ def place_volcanoes(
         volcanoes.summit_m, volcanoes.emergent,
     )
     if titan:
-        volcanoes = _concat([volcanoes, _titan(mesh, land, coast_m, rng)])
+        # Its own random stream: earlier placements vary with mesh resolution.
+        wonders = np.random.default_rng([seed, 7070])
+        volcanoes = _concat([volcanoes, _titan(mesh, land, coast_m, wonders)])
     return volcanoes
 
 
 def _titan(mesh: SphereMesh, land: B, coast_m: F64, rng: np.random.Generator) -> Volcanoes:
     """One giant shield deep inside a continent, beyond the ceiling of real volcanoes."""
-    inland = np.flatnonzero(land & (coast_m >= TITAN_MIN_COAST_M))
-    if not len(inland):
-        inland = np.array([int(np.argmax(np.where(land, coast_m, -1.0)))])
-    site = int(rng.choice(inland, p=mesh.area_m2[inland] / mesh.area_m2[inland].sum()))
+    site = draw_site(mesh, (land & (coast_m >= TITAN_MIN_COAST_M)).astype(np.float64), 1.0, rng)
+    if site is None:
+        site = mesh.xyz[int(np.argmax(np.where(land, coast_m, -1.0)))]
     return Volcanoes(
-        mesh.xyz[site][None, :],
+        site[None, :],
         np.array([TITAN_HEIGHT_M * rng.uniform(0.9, 1.1)]),
         np.array([TITAN_RADIUS_M * rng.uniform(0.9, 1.1)]),
         np.array([SHIELD]),

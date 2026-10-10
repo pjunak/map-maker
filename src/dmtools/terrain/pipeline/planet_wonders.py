@@ -29,6 +29,9 @@ CRATER_RADIUS_M = (90e3, 150e3)
 CRATER_DEPTH_RATIO = 0.009
 CRATER_LAND_PER_CRATER_M2 = 4e13  # one crater per this much land (at least one)
 MAX_CRATERS = 3
+CRATER_MIN_GROUND_M = 700.0  # preferred ground, so the floor stays above sea level
+DRAW_BATCH = 256
+MAX_DRAW_BATCHES = 400
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,7 +56,7 @@ def place_craters(
     rng: np.random.Generator,
     avoid: tuple[F64, F64] | None = None,
 ) -> Craters:
-    """Fresh impact craters on land, wholly inland, preferring high ground.
+    """Fresh impact craters on land, wholly inland, on high ground where there is some.
 
     ``avoid`` (centres, radii) keeps craters off other landmarks. Land must
     stay above sea level (no below-sea-level basins yet), so each crater's depth
@@ -73,21 +76,45 @@ def place_craters(
         ok = land & (coast_m > 2.0 * radius) & ~blocked
         if not ok.any():
             break
-        candidates = np.flatnonzero(ok)
-        weight = mesh.area_m2[candidates] * (
-            0.1 + np.clip((ground_m[candidates] - 500.0) / 1000.0, 0, 1)
-        )
-        site = int(rng.choice(candidates, p=weight / weight.sum()))
+        # Eligibility, not a graded preference: graded weights would follow
+        # relief details that differ between mesh resolutions.
+        high = ok & (ground_m >= CRATER_MIN_GROUND_M)
+        centre = draw_site(mesh, (high if high.any() else ok).astype(np.float64), 1.0, rng)
+        if centre is None:
+            break
+        site = int(np.argmax(mesh.xyz @ centre))
         depth = min(CRATER_DEPTH_RATIO * 2 * radius, max(ground_m[site] - 50.0, 0.0) / 0.7)
         if depth < 300.0:
             continue
-        centres.append(mesh.xyz[site])
+        centres.append(centre)
         radii.append(radius)
         depths.append(depth)
-        blocked |= mesh.xyz @ mesh.xyz[site] > np.cos(4 * radius / mesh.radius_m)
+        blocked |= mesh.xyz @ centre > np.cos(4 * radius / mesh.radius_m)
     if not radii:
         return Craters.empty()
     return Craters(np.array(centres), np.array(radii), np.array(depths))
+
+
+def draw_site(
+    mesh: SphereMesh, weight: F64, ceiling: float, rng: np.random.Generator
+) -> F64 | None:
+    """A point on the sphere drawn in proportion to ``weight`` at its nearest node.
+
+    Rejection sampling of continuous positions with a fixed ``ceiling`` (the
+    largest possible weight) uses the same random draws at any mesh resolution,
+    so a quick preview and the final build place landmarks in the same spots.
+    """
+    if not (weight > 0).any():
+        return None
+    tree = KDTree(mesh.xyz)
+    for _ in range(MAX_DRAW_BATCHES):
+        trial = rng.normal(size=(DRAW_BATCH, 3))
+        trial /= np.linalg.norm(trial, axis=1)[:, None]
+        node = np.asarray(tree.query(trial, workers=-1)[1], dtype=np.int64)
+        accept = rng.random(DRAW_BATCH) * ceiling < weight[node]
+        if accept.any():
+            return trial[int(np.argmax(accept))]
+    return None
 
 
 def level_crater_floors(mesh: SphereMesh, ground_m: F64, craters: Craters) -> F64:
