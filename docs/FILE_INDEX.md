@@ -191,6 +191,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0081-blend-adjoining-landform-regions.md](adr/0081-blend-adjoining-landform-regions.md) | Shared regional weighting, blank holes, established interiors and matching probe/cut support. |
 | [docs/adr/0082-own-structure-profiles.md](adr/0082-own-structure-profiles.md) | Explicit line profile ownership, sampling support, editor and current-format contracts. |
 | [docs/adr/0083-preserve-shared-ridge-crests.md](adr/0083-preserve-shared-ridge-crests.md) | Preserved ridge contacts, compatible heights, centreline ownership and remaining graph limits. |
+| [docs/adr/0087-map-themes-and-projections.md](adr/0087-map-themes-and-projections.md) | Map themes rendered once on the world frame; globe, polar and flat projections of any theme; `world view` and the globe window. |
 | [docs/adr/0086-regional-planet-detail-from-blended-tiles.md](adr/0086-regional-planet-detail-from-blended-tiles.md) | Window-independent regional detail from fixed blended tiles, tile cache, lapse-corrected biomes and limits. |
 | [docs/adr/0085-generate-planet-relief-on-a-sphere-mesh.md](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) | Whole-planet relief by uplift/stream-power erosion on an irregular sphere mesh; node+TIN authority; Numba runtime. |
 | [docs/adr/0084-bind-geographic-context-to-rough-terrain.md](adr/0084-bind-geographic-context-to-rough-terrain.md) | Bounded immutable geographic context, conservative coastal-distance consumption and explicit unsupported M1 fields. |

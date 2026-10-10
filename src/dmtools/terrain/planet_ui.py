@@ -12,6 +12,7 @@ from scipy.spatial import KDTree  # pyright: ignore[reportMissingTypeStubs]
 
 from dmtools.terrain.application.planet import PlanetRun
 from dmtools.terrain.domain.planet import PlanetSettings
+from dmtools.terrain.globe_ui import GlobeViewer
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_koppen import KOPPEN, KOPPEN_NAMES
 from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
@@ -172,6 +173,11 @@ class PlanetPanel(ttk.Frame):
             command=zoom if zoom is not None else (lambda: None), state="disabled",
         )
         self.zoom_button.pack(fill="x", pady=(6, 0))
+        self.globe_button = ttk.Button(
+            self, text="Globe and polar views…", style="Quiet.TButton",
+            command=self.open_globe, state="disabled",
+        )
+        self.globe_button.pack(fill="x", pady=(6, 0))
         ttk.Separator(self).pack(fill="x", pady=12)
         ttk.Label(self, textvariable=self.detail, style="Muted.TLabel", wraplength=340).pack(
             anchor="w"
@@ -216,6 +222,16 @@ class PlanetPanel(ttk.Frame):
         self.zoom_button.configure(
             state="normal" if self.run is not None and not busy else "disabled"
         )
+        self.globe_button.configure(
+            state="normal" if self.run is not None and self.run.previews and not busy
+            else "disabled"
+        )
+
+    def open_globe(self) -> GlobeViewer | None:
+        if self.run is None or not self.run.previews:
+            return None
+        frame = self.run.result.world.project.frame
+        return GlobeViewer(self, self.run.previews, frame.central_meridian_deg)
 
     def set_geology(self, path: Path | None) -> None:
         self.geology_path = path

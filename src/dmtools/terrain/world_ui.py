@@ -17,7 +17,7 @@ from uuid import uuid4
 from PIL import Image, ImageTk
 from shapely.geometry import Point, Polygon
 
-from dmtools.terrain.adapters.planet_render import PREVIEW_LAYERS
+from dmtools.terrain.adapters.map_views import PREVIEW_LAYERS, THEMES
 from dmtools.terrain.adapters.world_context_render import (
     CONTEXT_LAYERS,
     ContextLayer,
@@ -863,13 +863,7 @@ class WorldWorkspace(ttk.Frame):
             "Exposure support": "Dark = 0%; gold = 100% of exposure weight falls in mixed "
             "coastal cells. This flags unresolved geography; it is not an error bound.",
         }
-        legends |= {
-            "Planet atlas": "Provisional biomes on shaded relief. Blue lines are rivers sized by "
-            "discharge; blue lakes overflow, grey lakes are closed basins.",
-            "Planet relief": "Elevation from uplift and river erosion; coast kept exactly.",
-            "Planet rainfall": "Brown = dry; green = moderate; blue = 2,500+ mm/yr (provisional).",
-            "Planet temperature": "Annual mean: violet = -25 °C; cream ≈ 5 °C; red = 30 °C.",
-        }
+        legends |= {theme.label: theme.legend for theme in THEMES}
         self.context_legend.set(legends.get(layer, legends["Source"]))
         planet = self.planet_run.result if self.planet_run else None
         self.viewer_note.set(

@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 import rasterio
 from jsonschema import Draft202012Validator
+from PIL import Image
 
 from benchmarks.planet.sample_geology import sample_recipe
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
@@ -204,6 +205,23 @@ def test_planet_build_publishes_verified_world_aligned_products(
     assert len(rivers["features"]) == manifest["rivers"]["features"] > 0
     with pytest.raises(FileExistsError):
         build_planet(world_path, target, geology, FAST, width=256)
+    # Saved themes can be shown in other projections; changed files are refused.
+    from dmtools.terrain.adapters.map_projection import MapProjection
+    from dmtools.terrain.application.planet_views import export_view
+
+    view = export_view(
+        target, tmp_path / "globe.png", "relief", MapProjection("globe", 10.0, 20.0), 128,
+        graticule=True,
+    )
+    with Image.open(view) as image:
+        assert image.size == (128, 128)
+    with pytest.raises(FileExistsError):
+        export_view(target, view, "relief", MapProjection("globe"), 128)
+    with pytest.raises(ValueError, match="Unknown view"):
+        export_view(target, tmp_path / "x.png", "political", MapProjection("globe"), 128)
+    (target / "relief.png").write_bytes(b"changed")
+    with pytest.raises(ValueError, match="changed"):
+        export_view(target, tmp_path / "y.png", "relief", MapProjection("globe"), 128)
 
 
 def test_cancelled_planet_build_never_looks_complete(world_path: Path, tmp_path: Path) -> None:

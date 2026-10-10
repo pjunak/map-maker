@@ -4,7 +4,9 @@
 
 import json
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -27,8 +29,8 @@ class LoadedPlanet:
     parent: RegionalParent
 
 
-def read_planet_parent(path: Path) -> LoadedPlanet:
-    """Verify the manifest and output hashes, then rebuild the parent fields."""
+def verified_build(path: Path, files: tuple[str, ...]) -> tuple[Path, dict[str, Any]]:
+    """The build folder and its manifest, after checking the build hash and ``files``."""
     manifest_path = path / "manifest.json" if path.is_dir() else path
     folder = manifest_path.parent
     raw = manifest_path.read_bytes()
@@ -41,14 +43,22 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
     ):
         raise ValueError("Not a current planet build; generate the planet again.")
     claimed = manifest.pop("build_sha256", None)
-    from hashlib import sha256
-
     if sha256(canonical_json(manifest)).hexdigest() != claimed:
         raise ValueError("Planet manifest does not match its build hash.")
-    for name in ("world.dmworld.json", "planet.npz"):
+    manifest["build_sha256"] = claimed
+    for name in files:
         record = manifest["outputs"].get(name)
-        if record is None or file_sha256(folder / name) != record["sha256"]:
+        if record is None:
+            raise ValueError(f"This planet build has no {name}.")
+        if file_sha256(folder / name) != record["sha256"]:
             raise ValueError(f"Planet build file {name} is missing or changed.")
+    return folder, manifest
+
+
+def read_planet_parent(path: Path) -> LoadedPlanet:
+    """Verify the manifest and output hashes, then rebuild the parent fields."""
+    folder, manifest = verified_build(path, ("world.dmworld.json", "planet.npz"))
+    claimed = manifest["build_sha256"]
     settings_doc = dict(manifest["settings"])
     climate = PlanetClimateSettings(**settings_doc.pop("climate"))
     settings = PlanetSettings(**settings_doc, climate=climate)

@@ -159,14 +159,6 @@ def river_threshold_m3_s(result: PlanetResult, area_km2: float) -> float:
     return area_km2 * 1e6 * runoff_mm / 1000 / SECONDS_PER_YEAR
 
 
-PREVIEW_LAYERS = (
-    "Planet atlas",
-    "Planet relief",
-    "Planet climate zones",
-    "Planet volcanoes",
-    "Planet rainfall",
-    "Planet temperature",
-)
 RAIN_COLOURS = ((150, 90, 40), (230, 210, 140), (120, 190, 90), (30, 120, 160), (20, 40, 140))
 TEMPERATURE_COLOURS = (
     (60, 40, 160), (90, 160, 220), (240, 240, 200), (240, 160, 60), (180, 40, 30)

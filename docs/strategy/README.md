@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-07. **Active milestone: M2 — whole-planet relief.** The plan is now
+Updated 2026-10-10. **Active milestone: M2 — whole-planet relief.** The plan is now
 **world-first**: one whole-planet relief made by uplift and erosion on an irregular
 sphere mesh, then climate on the same mesh, then coupling, acceptance, a native
 core and regional zoom. The 2026-10-06 [planet relief evidence](../research/2026-10-06-whole-planet-erosion-relief.md)
@@ -43,6 +43,11 @@ not competing queues. [TODO](../../TODO.md) retains the complete feature backlog
   match Earth's sizes at 3.2M nodes ([report](../research/2026-10-07-earth-scale-landforms.md)).
   Composite orogens, a glacial buzzsaw and 4.9-min fine builds follow
   ([report](../research/2026-10-08-orogens-glaciers-and-speed.md)).
+- **Map views (experimental, 2026-10-10):** a theme registry rendered on the world
+  frame, with globe and polar projections of any theme (`dmtools world view` and the
+  app's globe window, [ADR-0087](../adr/0087-map-themes-and-projections.md)).
+  Next: thematic, topographic and fantasy themes, then nested deterministic local
+  maps (M6).
 - **Local terrain path (unchanged):** World → Terrain, the composed generator/editor,
   builds, profiles and saved-parent experiments. M1 context binding is experimental.
   The local path remains available until M5 decides what replaces it.

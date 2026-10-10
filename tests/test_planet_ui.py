@@ -6,12 +6,13 @@ import time
 import tkinter as tk
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from dmtools.terrain import ui
-from dmtools.terrain.adapters.planet_render import PREVIEW_LAYERS
+from dmtools.terrain.adapters.map_views import PREVIEW_LAYERS
 from dmtools.terrain.domain.planet import PlanetSettings
 
 EXAMPLES = Path(__file__).parents[1] / "examples/world"
@@ -63,6 +64,18 @@ def test_planet_stage_generates_shows_layers_exports_and_invalidates(
         view._draw()
         assert view._photo is not None
     assert str(panel.export_button["state"]) == "normal"
+    # Globe and polar views turn by dragging and save the current view.
+    globe = panel.open_globe()
+    assert globe is not None
+    globe.update()
+    globe._press(SimpleNamespace(x=100, y=100))  # type: ignore[arg-type]
+    globe._drag(SimpleNamespace(x=140, y=80))  # type: ignore[arg-type]
+    assert globe.lon != run.result.world.project.frame.central_meridian_deg
+    globe.projection.set("North polar")
+    globe.render()
+    globe.export(tmp_path / "north.png", pixels=96)
+    assert (tmp_path / "north.png").stat().st_size > 0
+    globe.destroy()
     destination = tmp_path / "planet"
     view.export_planet(destination)
     wait(app)

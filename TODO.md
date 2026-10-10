@@ -139,6 +139,13 @@ Update them with the affected milestone and evidence in every substantive batch.
   - [x] Product: verified planet build reader, tile cache, `dmtools world region`,
     World-tab zoom viewer and export, lapse-corrected regional biomes (ADR-0086).
   - [ ] Tile boundary exchange (domain decomposition), regional lakes and climate.
+  - [ ] Nested local maps (region -> province -> local), each level consistent with
+    its parent; window-independent display detail, rivers and lakes.
+- [ ] **Map views** (ADR-0087): a theme registry, and projections for any theme.
+  - [x] Globe and polar projections, `dmtools world view`, the app's globe window.
+  - [ ] Thematic maps: tectonic plates, drainage basins, geology, sea-floor age.
+  - [ ] Topographic map with contours; fantasy / parchment style.
+  - [ ] Political and civilization views from authored overlays (later).
   See M7/M8 for selected materials, specialized landforms and ecological extensions.
 
 ### Generation-quality evidence retained

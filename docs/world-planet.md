@@ -54,6 +54,26 @@ With a planet shown, pan and zoom the map to the area you care about and click
 The region is built from fixed, cached tiles. Zooming the same place again is
 quick and gives identical values, whichever window you choose.
 
+### Globe and polar views
+
+With a planet shown, click **Globe and polar views…** on the Planet page.
+- Choose any map theme (atlas, relief, climate zones and so on) and show it as a
+  globe, or as a north or south polar view.
+- Drag to turn the globe; **Grid** draws latitude and longitude every 30°.
+- **Save view…** writes the current view as a 2,048 px PNG.
+
+A saved build can be viewed the same way from the command line:
+
+```powershell
+dmtools world view my-planet --theme atlas --projection globe --lon 40 --lat 20 --graticule --output globe.png
+dmtools world view my-planet --theme koppen --projection north-polar --limit 30 --output arctic.png
+```
+
+`--theme` is a build image's name without `.png`. A polar view's `--lon` is the
+meridian below (north) or above (south) the pole, and `--limit` is the latitude
+at its edge (0 = the equator). Views are deterministic and never overwrite a
+file ([ADR-0087](adr/0087-map-themes-and-projections.md)).
+
 ## Run it from the command line
 
 ```powershell

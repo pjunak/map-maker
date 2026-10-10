@@ -24,6 +24,7 @@ from numpy.typing import NDArray
 from rasterio.crs import CRS
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
+from dmtools.terrain.adapters.map_views import THEMES, theme_file
 from dmtools.terrain.adapters.planet_natural import preview_images
 from dmtools.terrain.adapters.planet_render import (
     FrameRaster,
@@ -44,14 +45,7 @@ from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
 from dmtools.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETTINGS
 
 PLANET_BUILD_SCHEMA = "dmtools.planet-build"
-PREVIEW_FILES = {
-    "Planet atlas": "atlas.png",
-    "Planet relief": "relief.png",
-    "Planet rainfall": "precipitation.png",
-    "Planet temperature": "temperature.png",
-    "Planet climate zones": "koppen.png",
-    "Planet volcanoes": "volcanoes.png",
-}
+PREVIEW_FILES = {theme.label: theme_file(theme) for theme in THEMES}
 PLANET_BUILD_VERSION = 1
 MAX_RIVER_FEATURES = 200_000
 

@@ -178,6 +178,24 @@ def create_parser() -> argparse.ArgumentParser:
     region.add_argument("--pixels", type=int, default=1024)
     region.add_argument("--workers", type=int, default=0, help="Tile processes (0 = auto).")
     region.set_defaults(_handler=_run_world_region)
+    view = world_commands.add_parser(
+        "view", help="Show a saved planet build's map as a globe, polar or flat view."
+    )
+    view.add_argument("planet", type=Path, help="Planet build folder or its manifest.json.")
+    view.add_argument("--theme", default="atlas",
+                      help="Map theme: atlas, relief, koppen, volcanoes, precipitation, "
+                           "temperature.")
+    view.add_argument("--projection", default="globe",
+                      choices=("globe", "north-polar", "south-polar", "equirectangular"))
+    view.add_argument("--lon", type=float, default=0.0,
+                      help="Globe centre, or the meridian at the bottom/top of a polar view.")
+    view.add_argument("--lat", type=float, default=0.0, help="Globe centre latitude.")
+    view.add_argument("--limit", type=float, default=0.0,
+                      help="Latitude at the edge of a polar view (0 = the equator).")
+    view.add_argument("--pixels", type=int, default=1600, help="View height in pixels.")
+    view.add_argument("--graticule", action="store_true", help="Draw a 30-degree grid.")
+    view.add_argument("--output", type=Path, required=True, help="New .png file.")
+    view.set_defaults(_handler=_run_world_view)
     return parser
 
 
@@ -272,6 +290,25 @@ def _run_world_region(arguments: argparse.Namespace) -> int:
         return 1
     print(f"Region complete: {path}")
     print("Experimental detail; tiles are cached and reused by later regions.")
+    return 0
+
+
+def _run_world_view(arguments: argparse.Namespace) -> int:
+    from dmtools.terrain.adapters.map_projection import MapProjection
+    from dmtools.terrain.application.planet_views import export_view
+
+    try:
+        projection = MapProjection(
+            arguments.projection, arguments.lon, arguments.lat, arguments.limit
+        )
+        path = export_view(
+            arguments.planet, arguments.output, arguments.theme, projection,
+            arguments.pixels, graticule=arguments.graticule,
+        )
+    except (OSError, ValueError) as error:
+        print(f"View failed: {error}", file=sys.stderr)
+        return 1
+    print(f"View written: {path}")
     return 0
 
 
