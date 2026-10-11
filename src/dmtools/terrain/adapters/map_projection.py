@@ -30,6 +30,7 @@ SPACE: tuple[int, int, int] = (10, 14, 24)
 HALO: tuple[int, int, int] = (110, 160, 230)
 GRATICULE: tuple[int, int, int] = (235, 235, 225)
 GRATICULE_STEP_DEG = 30.0
+GLOBE_DISC = 0.96  # globe diameter as a fraction of the view, leaving room for the halo
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +92,18 @@ def projected_lonlat(projection: MapProjection, size: int) -> tuple[F64, F64, B,
     return glon, glat, np.ones(glon.shape, dtype=bool), np.ones(glon.shape)
 
 
+def displayed_lonlat(projection: MapProjection, size: int) -> tuple[F64, F64, B]:
+    """Longitude, latitude and on-map mask of each pixel as ``reproject`` draws it."""
+    lon, lat, inside, _ = projected_lonlat(projection, size)
+    if projection.kind != "globe":
+        return lon, lat, inside
+    centre = (np.arange(size) + 0.5) / size * 2 - 1
+    x, y = np.meshgrid(centre, centre)
+    rows = np.clip(np.rint((y / GLOBE_DISC + 1) / 2 * size - 0.5), 0, size - 1).astype(np.intp)
+    columns = np.clip(np.rint((x / GLOBE_DISC + 1) / 2 * size - 0.5), 0, size - 1).astype(np.intp)
+    return lon[rows, columns], lat[rows, columns], np.hypot(x, y) <= GLOBE_DISC
+
+
 def reproject(
     image: Image.Image,
     projection: MapProjection,
@@ -147,13 +160,13 @@ def _graticule(rgb: F64, lon: F64, lat: F64) -> F64:
 def _with_halo(rgb: F64, size: int) -> F64:
     centre = (np.arange(size) + 0.5) / size * 2 - 1
     x, y = np.meshgrid(centre, centre)
-    rho = np.hypot(x, y) / 0.96  # leave room for the halo
+    rho = np.hypot(x, y) / GLOBE_DISC
     glow = np.clip(1 - (rho - 1) / 0.04, 0, 1) * (rho > 1)
     space = np.asarray(SPACE, dtype=np.float64) + glow[..., None] * (
         np.asarray(HALO, dtype=np.float64) - np.asarray(SPACE, dtype=np.float64)
     ) * 0.6
-    # Shrink the globe to 96 % of the frame by resampling the disc.
-    scale = 1 / 0.96
+    # Shrink the globe to GLOBE_DISC of the frame by resampling the disc.
+    scale = 1 / GLOBE_DISC
     rows = np.clip(((y * scale) + 1) / 2 * size - 0.5, 0, size - 1)
     columns = np.clip(((x * scale) + 1) / 2 * size - 0.5, 0, size - 1)
     disc = np.stack(

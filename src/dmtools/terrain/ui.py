@@ -66,6 +66,7 @@ from dmtools.terrain.domain.terrain_context import TerrainWorldContext
 from dmtools.terrain.pipeline import GeneratedTerrain, generate_terrain
 from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
 from dmtools.terrain.structure_profile_ui import edit_structure_profile
+from dmtools.terrain.ui_style import INK, MAP_BACKGROUND, PANEL, PAPER, configure_styles
 from dmtools.terrain.viewport import MapViewport
 from dmtools.terrain.workbench import (
     GenerationInputs,
@@ -75,15 +76,6 @@ from dmtools.terrain.workbench import (
 )
 from dmtools.terrain.world_ui import WorldWorkspace
 
-_INK = "#172225"
-_MUTED = "#65716f"
-_PAPER = "#f1ede3"
-_PANEL = "#fbf8ef"
-_BORDER = "#d2ccbd"
-_ACCENT = "#1d7772"
-_ACCENT_ACTIVE = "#155e5a"
-_PREVIEW = "#172225"
-_MAP_BACKGROUND = "#10191b"
 _HEIGHT_COLOUR = "#f2c14e"
 _RIDGE_COLOUR = "#e47b58"
 _VALLEY_COLOUR = "#54a6c2"
@@ -187,7 +179,7 @@ class TerrainApp:
         self.root.title("DM Tools — Map Workbench")
         self.root.geometry("1440x900")
         self.root.minsize(1160, 760)
-        self.root.configure(background=_PAPER)
+        self.root.configure(background=PAPER)
 
         self._coastline: Coastline | None = None
         self._coastline_source: CoastlineSource | None = None
@@ -274,7 +266,7 @@ class TerrainApp:
         self._authoring_widgets: list[tk.Widget] = []
         self._authoring_enabled = False
 
-        self._configure_styles()
+        configure_styles(self.root)
         self._build_layout()
         for key, variable in self._variables.items():
             variable.trace_add("write", partial(self._on_settings_changed, key))
@@ -293,44 +285,8 @@ class TerrainApp:
         elif world is not None:
             self.root.after_idle(partial(self.world_workspace.load_world, world))
 
-    def _configure_styles(self) -> None:
-        style = ttk.Style(self.root)
-        style.theme_use("clam")
-        style.configure("Paper.TFrame", background=_PAPER)
-        style.configure("Panel.TFrame", background=_PANEL)
-        style.configure(
-            "Header.TLabel", background=_PAPER, foreground=_INK, font=("Segoe UI", 22, "bold")
-        )
-        style.configure(
-            "Eyebrow.TLabel", background=_PAPER, foreground=_ACCENT, font=("Segoe UI", 9, "bold")
-        )
-        style.configure("Body.TLabel", background=_PANEL, foreground=_INK, font=("Segoe UI", 9))
-        style.configure("Muted.TLabel", background=_PANEL, foreground=_MUTED, font=("Segoe UI", 9))
-        style.configure(
-            "Value.TLabel", background=_PANEL, foreground=_ACCENT, font=("Consolas", 9, "bold")
-        )
-        style.configure(
-            "Accent.TButton",
-            background=_ACCENT,
-            foreground="#ffffff",
-            padding=(18, 11),
-            font=("Segoe UI", 10, "bold"),
-        )
-        style.map(
-            "Accent.TButton", background=[("active", _ACCENT_ACTIVE), ("disabled", "#9ba9a6")]
-        )
-        style.configure("Quiet.TButton", background=_PANEL, foreground=_INK, padding=(12, 8))
-        style.configure(
-            "Terrain.Horizontal.TProgressbar",
-            troughcolor="#d9d4c7",
-            background=_ACCENT,
-            bordercolor="#d9d4c7",
-            lightcolor=_ACCENT,
-            darkcolor=_ACCENT,
-        )
-
     def _build_layout(self) -> None:
-        self.workspaces = ttk.Notebook(self.root)
+        self.workspaces = ttk.Notebook(self.root, style="Workspaces.TNotebook")
         self.workspaces.grid(row=0, column=0, sticky="nsew")
         self.root.rowconfigure(0, weight=1)
         self.root.columnconfigure(0, weight=1)
@@ -370,7 +326,7 @@ class TerrainApp:
         settings_shell.columnconfigure(0, weight=1)
         settings_shell.rowconfigure(0, weight=1)
         settings_canvas = tk.Canvas(
-            settings_shell, width=340, height=1, background=_PANEL, highlightthickness=0)
+            settings_shell, width=340, height=1, background=PANEL, highlightthickness=0)
         settings_canvas.grid(row=0, column=0, sticky="nsew")
         def scroll_settings(*args: str) -> None:
             settings_canvas.yview(*args)
@@ -392,7 +348,7 @@ class TerrainApp:
         self._build_actions(controls, 1)
 
         preview_shell = tk.Frame(
-            page, background=_PREVIEW, highlightthickness=1, highlightbackground="#28383a"
+            page, background=INK, highlightthickness=1, highlightbackground="#28383a"
         )
         preview_shell.grid(row=1, column=1, sticky="nsew")
         preview_shell.rowconfigure(2, weight=1)
@@ -501,7 +457,7 @@ class TerrainApp:
         self.export_button.grid(row=0, column=1, padx=(8, 0))
 
         self.progress = ttk.Progressbar(
-            parent, style="Terrain.Horizontal.TProgressbar", mode="determinate", maximum=100
+            parent, style="Accent.Horizontal.TProgressbar", mode="determinate", maximum=100
         )
         self.progress.grid(row=row + 2, column=0, sticky="ew", pady=(12, 0))
         self.status_label = ttk.Label(
@@ -511,66 +467,66 @@ class TerrainApp:
         self.status_label.grid(row=row + 3, column=0, sticky="w", pady=(6, 0))
 
     def _build_preview(self, parent: tk.Frame) -> None:
-        toolbar_container = tk.Frame(parent, background=_PREVIEW)
+        toolbar_container = tk.Frame(parent, background=INK)
         toolbar_container.grid(row=0, column=0, sticky="ew", padx=18, pady=(14, 8))
-        toolbar = tk.Frame(toolbar_container, background=_PREVIEW)
+        toolbar = tk.Frame(toolbar_container, background=INK)
         toolbar.pack(fill="x")
         tk.Label(
             toolbar,
             text="GENERATION REFERENCE",
-            background=_PREVIEW,
+            background=INK,
             foreground="#dce8e3",
             font=("Segoe UI", 9, "bold"),
         ).pack(side="left")
-        review_toolbar = tk.Frame(toolbar_container, background=_PREVIEW)
+        review_toolbar = tk.Frame(toolbar_container, background=INK)
         review_toolbar.pack(fill="x", pady=(6, 0))
         tk.Checkbutton(
             review_toolbar, text="Drainage review", variable=self._show_drainage,
-            command=self._draw_preview, background=_PREVIEW, foreground="#dce8e3",
-            selectcolor=_PREVIEW, activebackground=_PREVIEW, activeforeground="white",
+            command=self._draw_preview, background=INK, foreground="#dce8e3",
+            selectcolor=INK, activebackground=INK, activeforeground="white",
         ).pack(side="left", padx=10)
         tk.Checkbutton(
             review_toolbar, text="All channels", variable=self._all_channels,
-            command=self._draw_preview, background=_PREVIEW, foreground="#dce8e3",
-            selectcolor=_PREVIEW, activebackground=_PREVIEW, activeforeground="white",
+            command=self._draw_preview, background=INK, foreground="#dce8e3",
+            selectcolor=INK, activebackground=INK, activeforeground="white",
         ).pack(side="left", padx=(0, 10))
         tk.Checkbutton(
             review_toolbar, text="Depressions", variable=self._show_depressions,
-            command=self._draw_preview, background=_PREVIEW, foreground="#dce8e3",
-            selectcolor=_PREVIEW, activebackground=_PREVIEW, activeforeground="white",
+            command=self._draw_preview, background=INK, foreground="#dce8e3",
+            selectcolor=INK, activebackground=INK, activeforeground="white",
         ).pack(side="left", padx=(0, 10))
         tk.Checkbutton(
             review_toolbar, text="Basin catchments", variable=self._show_catchments,
-            command=self._draw_preview, background=_PREVIEW, foreground="#dce8e3",
-            selectcolor=_PREVIEW, activebackground=_PREVIEW, activeforeground="white",
+            command=self._draw_preview, background=INK, foreground="#dce8e3",
+            selectcolor=INK, activebackground=INK, activeforeground="white",
         ).pack(side="left", padx=(0, 10))
         tk.Button(review_toolbar, text="Basin details", command=self._show_basin_details,
                   background="#2c3e40", foreground="#dce8e3", relief="flat").pack(side="left")
-        navigation = tk.Frame(toolbar_container, background=_PREVIEW)
+        navigation = tk.Frame(toolbar_container, background=INK)
         navigation.pack(fill="x", pady=(5, 0))
         for text, command in (("Fit", self._fit_view),
                               ("-", partial(self._zoom_view, 1 / 1.5)),
                               ("+", partial(self._zoom_view, 1.5))):
             tk.Button(navigation, text=text, command=command, width=3, relief="flat",
                       background="#2c3e40", foreground="#dce8e3").pack(side="left", padx=2)
-        self.zoom_label = tk.Label(navigation, text="1x fit", background=_PREVIEW,
+        self.zoom_label = tk.Label(navigation, text="1x fit", background=INK,
                                    foreground="#dce8e3", font=("Consolas", 9), justify="left")
         self.zoom_label.pack(side="left", padx=8)
         tk.Checkbutton(navigation, text="Instructions", variable=self._show_instructions,
-                       command=self._draw_preview, background=_PREVIEW, foreground="#dce8e3",
-                       selectcolor=_PREVIEW, activebackground=_PREVIEW,
+                       command=self._draw_preview, background=INK, foreground="#dce8e3",
+                       selectcolor=INK, activebackground=INK,
                        activeforeground="white").pack(side="left")
         self.preview_meta = tk.Label(
             toolbar_container,
             text="Awaiting land geometry", anchor="w", justify="left",
-            background=_PREVIEW,
+            background=INK,
             foreground="#80918e",
             font=("Consolas", 9),
         )
         self.preview_meta.pack(fill="x", pady=(4, 0))
         self.reference_label = tk.Label(
             toolbar_container, text="No generated reference. Draw instructions, then generate.",
-            background=_PREVIEW, foreground="#dce8e3", font=("Segoe UI", 9, "bold"),
+            background=INK, foreground="#dce8e3", font=("Segoe UI", 9, "bold"),
             anchor="w", justify="left",
         )
         self.reference_label.pack(fill="x", pady=(5, 0))
@@ -591,7 +547,7 @@ class TerrainApp:
         tk.Label(
             toolbar,
             text="STYLE",
-            background=_PREVIEW,
+            background=INK,
             foreground="#80918e",
             font=("Consolas", 8, "bold"),
         ).pack(side="right", padx=(12, 0))
@@ -801,11 +757,11 @@ class TerrainApp:
         authoring.bind("<Configure>", lambda event: self.authoring_hint.configure(
             wraplength=max(180, event.width - 24)))
 
-        content = tk.Frame(parent, background=_PREVIEW)
+        content = tk.Frame(parent, background=INK)
         content.grid(row=2, column=0, sticky="nsew", padx=(16, 12), pady=(0, 14))
         content.rowconfigure(0, weight=1)
         content.columnconfigure(0, weight=1)
-        self.preview = tk.Canvas(content, background=_MAP_BACKGROUND, highlightthickness=0)
+        self.preview = tk.Canvas(content, background=MAP_BACKGROUND, highlightthickness=0)
         self.preview.grid(row=0, column=0, sticky="nsew")
         self.preview.create_text(
             20,
@@ -831,16 +787,16 @@ class TerrainApp:
 
         self.cursor_label = tk.Label(
             content, text="Wheel: zoom · Middle drag or Space+drag: pan · F: fit",
-            background=_PREVIEW, foreground="#9eaaa8", anchor="w", font=("Consolas", 8))
+            background=INK, foreground="#9eaaa8", anchor="w", font=("Consolas", 8))
         self.cursor_label.grid(row=1, column=0, sticky="ew", pady=(5, 0))
         content.bind("<Configure>", lambda event: self.cursor_label.configure(
             wraplength=max(180, event.width - 50)))
-        legend = tk.Frame(content, background=_PREVIEW, width=64)
+        legend = tk.Frame(content, background=INK, width=64)
         legend.grid(row=0, column=1, sticky="ns", padx=(12, 0))
         self._legend_high_label = tk.Label(
             legend,
             text="10 km",
-            background=_PREVIEW,
+            background=INK,
             foreground="#9eaaa8",
             font=("Segoe UI", 7, "bold"),
         )
@@ -852,7 +808,7 @@ class TerrainApp:
         tk.Label(
             legend,
             text="0 m",
-            background=_PREVIEW,
+            background=INK,
             foreground="#9eaaa8",
             font=("Segoe UI", 7, "bold"),
         ).pack(pady=(3, 0))
@@ -2901,7 +2857,7 @@ class TerrainApp:
             for exterior, holes in self._coastline_canvas_coordinates():
                 self.preview.create_polygon(exterior, fill="#243638", outline="")
                 for hole in holes:
-                    self.preview.create_polygon(hole, fill=_MAP_BACKGROUND, outline="")
+                    self.preview.create_polygon(hole, fill=MAP_BACKGROUND, outline="")
         for exterior, holes in self._coastline_canvas_coordinates():
             for coordinates in (exterior, *holes):
                 self.preview.create_line(coordinates, fill="#b9cbc6", width=1.5, joinstyle="round")
@@ -3098,7 +3054,7 @@ class TerrainApp:
                 x + 4,
                 y + 4,
                 fill=_HEIGHT_COLOUR,
-                outline=_MAP_BACKGROUND,
+                outline=MAP_BACKGROUND,
                 width=1,
             )
             self.preview.create_text(
@@ -3218,7 +3174,7 @@ class TerrainApp:
                 y - 4,
                 x + 4,
                 y + 4,
-                fill=_MAP_BACKGROUND,
+                fill=MAP_BACKGROUND,
                 outline=colour,
                 width=2,
             )
