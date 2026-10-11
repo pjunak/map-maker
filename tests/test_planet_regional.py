@@ -154,13 +154,22 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
     result = run.result
     regional = RegionalParent.from_result(result)
     young = regional.young_m()
-    # Regional erosion starts from the surface without volcanoes and craters, which
-    # windows draw back sharply (erosion would fill a crater).
-    assert np.allclose(young, np.where(result.land, result.volcanic_m + result.crater_m, 0.0))
-    assert len(result.craters) >= 1 and np.any(result.crater_m < 0)
+    # Regional erosion starts from the surface without volcanoes and wonders, which
+    # windows draw back sharply (erosion would fill a crater or a chasm).
+    assert np.allclose(young, np.where(result.land, result.volcanic_m + result.wonder_m, 0.0))
+    wonders = result.wonders
+    assert len(wonders.craters) >= 1 and len(wonders.chasms) >= 1
+    assert np.any(result.wonder_m < 0)
     loaded = read_planet_parent(export_planet(run, tmp_path / "planet", width=128).parent)
-    assert loaded.parent.craters is not None
-    assert np.allclose(loaded.parent.craters.xyz, result.craters.xyz)
+    reloaded = loaded.parent.wonders
+    assert reloaded is not None
+    assert np.allclose(reloaded.craters.xyz, wonders.craters.xyz)
+    assert len(reloaded.chasms) == len(wonders.chasms)
+    for a, b, c, d in zip(
+        reloaded.chasms.paths, wonders.chasms.paths,
+        reloaded.chasms.depth_m, wonders.chasms.depth_m, strict=True,
+    ):
+        assert np.allclose(a, b) and np.allclose(c, d)
     assert np.allclose(loaded.parent.young_m(), young, atol=0.1)
 
 

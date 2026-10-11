@@ -169,16 +169,58 @@ complex craters 180–300 km across, beyond Earth's largest preserved structures
 - **Manifest.** `metrics.craters` lists each crater's position, diameter and
   depth.
 
+The third wonder is a great chasm (`planet_wonders.py`), a rift canyon like a
+smaller Valles Marineris (on Mars 4,000 km long, up to 200 km wide and 7 km
+deep). Earth's largest canyons are far smaller: the Grand Canyon is 446 km long
+and 1.8 km deep, and the Yarlung Tsangpo gorge about 5 km deep.
+
+- **Size.** One chasm, 900–2,200 km long and 60 km wide from rim to rim.
+- **Axis.** Rifts grow from segments offset en echelon, so the axis runs between
+  its ends in straight stretches of about six widths (360 km), each shifted
+  sideways by up to 1.2 widths and joined by diagonal jogs. A first version bent the axis in smooth
+  waves, which looked like a meandering worm.
+- **Placement.** It starts on high ground (at least 1 km where there is some) and
+  lies wholly inland, at least two widths from the coast and away from the titan
+  and the craters. The first trial whose mean depth reaches 1.2 km is taken, or
+  else the deepest of 120 (at least 300 m). On Aethelara about a quarter of the
+  trials that stay on land reach 1.2 km.
+- **Depth.** Up to 3 km from rim to floor. Land stays above sea level, so the
+  floor keeps 100 m above it: a chasm runs shallower through lowland. The
+  deepest cut follows the lowest ground within two widths either way and eases
+  along the axis, so the floor neither steps nor dips to the sea. Below-sea-level
+  floors, like the Dead Sea's rift, are not supported yet.
+- **Shape.**
+  - narrows and basins: the width varies from 0.6 to 1.5 times along the length,
+    as Valles Marineris widens from its narrow chasmata into broad basins;
+  - a flat floor across the middle 60 % of the width;
+  - steep walls with two benches where resistant layers crop out, wobbling in
+    width as spurs slump;
+  - rift shoulders: the flanks are uplifted by 30 % of the depth at the rim and
+    fall away over two widths, as flexure lifts the shoulders of Earth's large
+    rifts by 1–2 km. They make the walls taller without lowering the floor;
+  - ends that narrow and pinch out over the last tenth of the length.
+- **Side canyons.** Three to six branch from the middle seven tenths: a third to
+  half as wide, hanging at half to two thirds of the main floor's depth, each 6–18 %
+  of the chasm's length. Their own segments give them doglegs, and they grow
+  shallower towards their heads. Inside, the deeper floor wins; outside, the higher shoulder.
+- **Timing.** Like the craters, a chasm is cut into the eroded relief before lakes
+  form. Where it is wet its closed floor holds a long rift lake, as Lake Baikal and
+  Lake Tanganyika fill rift valleys; where it is dry, playas lie in the lowest parts.
+- **Build data.** Craters and chasms form one overlay (`Wonders`). The archive keeps
+  each path's axis and depth profile; `metrics.chasms` lists every path (the chasm
+  and its side canyons) with its ends, length, width and depth.
+
 Wonders are placed by rejection sampling of continuous positions on the sphere
 (`draw_site`), from their own random streams, with yes/no eligibility tests.
 Picking mesh nodes, or weighting by relief that differs between resolutions,
 moved them between a 800k preview and a 3.2M build. Now the titan and the
-craters land in the same places at 200k and 800k nodes. Only crater depth,
-which is limited by the local ground, varies.
+craters land in the same places at 200k and 800k nodes, and so does the chasm.
+Only depth, which is limited by the local ground, varies.
 
-Regional windows draw craters too. Their target surface leaves out volcanoes and
-craters, as regional erosion would otherwise fill a crater, and each window adds the
-sharp crater back. Crater lakes fill the sharp trough to the parent level. The
+Regional windows draw craters and chasms too. Their target surface leaves out
+volcanoes and wonders, as regional erosion would otherwise fill a crater or a
+chasm, and each window adds the sharp shapes back. Crater and chasm lakes fill the
+sharp floor to the parent level. The
 regional tile algorithm became `planet-blended-tiles-v4`. Closed hollows deeper than
 10 m (crater troughs among them) fill with lakes where it is wet. Where it is dry, a
 playa lies in the lowest quarter of the basin's depth (20–400 m).

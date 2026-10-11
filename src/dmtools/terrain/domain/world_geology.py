@@ -21,13 +21,15 @@ GEOLOGICAL_SETTINGS: tuple[GeologicalSetting, ...] = (
 )
 MAX_PROVINCES = 128
 MAX_PROVINCE_VERTICES = 256
-type LandmarkKind = Literal["titan", "crater"]
-LANDMARK_KINDS: tuple[LandmarkKind, ...] = ("titan", "crater")
+type LandmarkKind = Literal["titan", "crater", "chasm"]
+LANDMARK_KINDS: tuple[LandmarkKind, ...] = ("titan", "crater", "chasm")
 # Allowed diameters (km) of hand-placed wonders, and the size used when none is given.
 LANDMARK_DIAMETER_KM: dict[str, tuple[float, float, float]] = {
     "titan": (200.0, 1200.0, 560.0),
     "crater": (20.0, 600.0, 240.0),
+    "chasm": (10.0, 200.0, 60.0),  # a chasm's width
 }
+CHASM_LENGTH_KM = (100.0, 4000.0)
 MAX_LANDMARKS = 32
 MAX_AGE_MA = 1_000_000.0
 
@@ -98,10 +100,11 @@ class GeologyProvince:
 
 @dataclass(frozen=True, slots=True)
 class GeologyLandmark:
-    """A hand-placed wonder at a source position: a titan shield volcano or a crater.
+    """A hand-placed wonder at a source position: a titan, a crater or a chasm.
 
-    ``diameter_km`` is the titan's basal diameter or the crater's rim diameter;
-    None uses the kind's usual size.
+    ``diameter_km`` is the titan's basal diameter, the crater's rim diameter or
+    the chasm's width; None uses the kind's usual size. A chasm runs from
+    ``position`` to ``end``.
     """
 
     id: str
@@ -109,6 +112,7 @@ class GeologyLandmark:
     kind: LandmarkKind
     position: Point2D
     diameter_km: float | None = None
+    end: Point2D | None = None
 
     def __post_init__(self) -> None:
         _name(self.id, "Landmark ID")
@@ -124,9 +128,19 @@ class GeologyLandmark:
         if self.diameter_km is not None:
             low, high, _ = LANDMARK_DIAMETER_KM[self.kind]
             if not _finite_number(self.diameter_km) or not low <= self.diameter_km <= high:
+                size = "width" if self.kind == "chasm" else "diameter"
                 raise ValueError(
-                    f"A {self.kind} needs a diameter from {low:,.0f} to {high:,.0f} km."
+                    f"A {self.kind} needs a {size} from {low:,.0f} to {high:,.0f} km."
                 )
+        if self.kind == "chasm":
+            if self.end is None or len(self.end) != 2 or any(
+                not _finite_number(v) for v in self.end
+            ):
+                raise ValueError("A chasm needs a finite end point.")
+            if tuple(self.end) == tuple(self.position):
+                raise ValueError("A chasm's ends must differ.")
+        elif self.end is not None:
+            raise ValueError(f"Only a chasm has an end point, not a {self.kind}.")
 
     @property
     def size_km(self) -> float:
@@ -162,9 +176,19 @@ class WorldGeologyRecipe:
         if len({m.name.casefold() for m in self.landmarks}) != len(self.landmarks):
             raise ValueError("Landmark names must be unique.")
         for landmark in self.landmarks:
-            x, y = landmark.position
-            if not (x0 <= x <= x1 and y0 <= y <= y1):
-                raise ValueError(f"{landmark.name}: position is outside the world frame.")
+            for x, y in (landmark.position, *(() if landmark.end is None else (landmark.end,))):
+                if not (x0 <= x <= x1 and y0 <= y <= y1):
+                    raise ValueError(f"{landmark.name}: position is outside the world frame.")
+            if landmark.end is not None:
+                length = frame.distance_km(
+                    frame.source_to_lonlat(landmark.position), frame.source_to_lonlat(landmark.end)
+                )
+                low, high = CHASM_LENGTH_KM
+                if not low <= length <= high:
+                    raise ValueError(
+                        f"{landmark.name}: a chasm must be {low:,.0f}-{high:,.0f} km long "
+                        f"(it is {length:,.0f} km)."
+                    )
         for province in self.provinces:
             xs, ys = zip(*province.vertices, strict=True)
             # Anchor one copy in the world and allow the remaining points to unwrap.

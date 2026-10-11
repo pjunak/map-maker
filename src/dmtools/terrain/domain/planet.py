@@ -5,7 +5,7 @@ from math import isfinite
 
 from dmtools.terrain.domain.seeds import validate_master_seed
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v18"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v19"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v6"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"
@@ -74,7 +74,7 @@ class PlanetSettings:
     # adds land beyond the authored coastline.
     volcanic_islands: bool = False
     # Opt-in: a few fantastical landmarks beyond Earth's extremes (a titan shield
-    # volcano, impact craters).
+    # volcano, impact craters, a great chasm).
     wonders: bool = False
 
     def __post_init__(self) -> None:

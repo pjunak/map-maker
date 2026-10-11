@@ -36,7 +36,7 @@
       "additionalProperties": false,
       "required": ["relief", "climate"],
       "properties": {
-        "relief": { "const": "sphere-mesh-stream-power-v18" },
+        "relief": { "const": "sphere-mesh-stream-power-v19" },
         "climate": { "enum": ["planet-climate-v6", null] }
       }
     },

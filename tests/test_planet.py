@@ -32,6 +32,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
 from dmtools.terrain.pipeline.planet_kernels import accumulate, laplacian, priority_flood
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
 from dmtools.terrain.pipeline.planet_metrics import compass_share, non_descending_receivers
+from dmtools.terrain.pipeline.planet_wonders import Chasms
 
 ROOT = Path(__file__).resolve().parents[1]
 RADIUS = 6.371e6
@@ -756,18 +757,96 @@ def test_craters_have_level_troughs_central_plateaus_and_raised_rims() -> None:
 def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
     from dmtools.terrain.pipeline.planet_forcing import coast_distance
     from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_wonders import place_craters
+    from dmtools.terrain.pipeline.planet_wonders import place_chasm, place_craters
 
-    centres = []
+    centres, axes = [], []
     for nodes in (30_000, 120_000):
         mesh = build_mesh(nodes, RADIUS, 15)
         land = mesh.xyz[:, 2] > -0.3
         coast = coast_distance(mesh, land)
         ground = np.where(land, 1500.0 + 1000.0 * mesh.xyz[:, 0], 0.0)
         centres.append(place_craters(mesh, land, coast, ground, np.random.default_rng(5)).xyz)
+        axes.append(place_chasm(mesh, land, coast, ground, np.random.default_rng(5)).paths[0])
     coarse, fine = centres
     assert len(coarse) == len(fine) >= 1
     assert np.allclose(coarse, fine)
+    assert np.allclose(*axes)
+
+
+def straight_chasm(depth: float) -> tuple[np.ndarray, Chasms]:
+    from dmtools.terrain.pipeline.planet_wonders import Chasms, chasm_axis, destination
+
+    start = np.array([1.0, 0.0, 0.0])
+    end = destination(start, np.pi / 2, 1500e3 / RADIUS)
+    axis = chasm_axis(start, end, 60e3, RADIUS, np.random.default_rng(4))
+    return axis, Chasms((axis,), np.array([60e3]), (np.full(len(axis), depth),))
+
+
+def test_chasms_have_flat_floors_steep_walls_shoulders_and_pinched_ends() -> None:
+    from dmtools.terrain.pipeline.planet_wonders import chasm_relief
+
+    axis, chasms = straight_chasm(2000.0)
+    assert len(axis) > 100
+    middle = len(axis) // 2
+    point = axis[middle]
+    tangent = axis[middle + 1] - axis[middle - 1]
+    tangent -= (tangent @ point) * point
+    normal = np.cross(point, tangent / np.linalg.norm(tangent))
+
+    def across(half_widths: float) -> float:
+        angle = half_widths * 30e3 / RADIUS
+        side = np.cos(angle) * point + np.sin(angle) * normal
+        return float(chasm_relief(side[None], RADIUS, chasms)[0])
+
+    floor = across(0.0)
+    assert floor == pytest.approx(-2000.0, rel=0.01)
+    assert across(0.25) == pytest.approx(floor, rel=0.02)  # a flat floor
+    assert across(-0.85) > floor + 500  # steep walls on both sides
+    assert across(0.85) > floor + 500
+    assert across(1.25) > 0.25 * 2000  # uplifted shoulders that fall away
+    assert 0 < across(3.0) < across(1.25)
+    assert across(6.0) == 0
+    ends = chasm_relief(axis[[0, len(axis) // 25]], RADIUS, chasms)
+    assert ends[0] > -50 and 0.5 * floor < ends[1] < -100  # pinched out at the ends
+
+
+def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
+    from scipy.spatial import KDTree
+
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_wonders import (
+        CHASM_DEPTH_M,
+        CHASM_FLOOR_M,
+        CHASM_LENGTH_M,
+        CHASM_MIN_DEPTH_M,
+        CHASM_WIDTH_M,
+        place_chasm,
+    )
+
+    mesh = build_mesh(60_000, RADIUS, 14)
+    land = mesh.xyz[:, 2] > -0.3
+    coast = coast_distance(mesh, land)
+    ground = np.where(land, 1500.0 + 1000.0 * mesh.xyz[:, 0], 0.0)
+    chasms = place_chasm(mesh, land, coast, ground, np.random.default_rng(3))
+    assert len(chasms) >= 4  # the chasm and its side canyons
+    axis, depth = chasms.paths[0], chasms.depth_m[0]
+    nodes = KDTree(mesh.xyz).query(axis)[1]
+    assert np.all(land[nodes] & (coast[nodes] > 2 * CHASM_WIDTH_M))
+    length = np.arccos(np.clip(axis[0] @ axis[-1], -1, 1)) * RADIUS
+    assert CHASM_LENGTH_M[0] <= length <= CHASM_LENGTH_M[1]
+    assert depth.mean() >= CHASM_MIN_DEPTH_M and depth.max() <= CHASM_DEPTH_M
+    # The floor stays above the sea where the ground is low.
+    assert np.all(ground[nodes] - depth > 0.9 * CHASM_FLOOR_M)
+    assert np.all(chasms.width_m[1:] < chasms.width_m[0])
+    assert all(d.max() < depth.max() for d in chasms.depth_m[1:])
+    # Kept off other landmarks.
+    away = place_chasm(
+        mesh, land, coast, ground, np.random.default_rng(3),
+        (axis[len(axis) // 2][None], np.array([400e3])),
+    )
+    gap = np.arccos(np.clip(away.paths[0] @ axis[len(axis) // 2], -1, 1)) * RADIUS
+    assert gap.min() > 1.5 * 400e3
 
 
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
@@ -793,11 +872,22 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
         lonlat = (float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arcsin(z))))
         return frame.lonlat_to_source(lonlat)
 
+    # A chasm between two inland sites 300-600 km apart, away from both.
+    reach = np.arccos(np.clip(plain.mesh.xyz @ plain.mesh.xyz[far], -1, 1)) * RADIUS
+    rift = next(
+        int(k) for k in inland
+        if reach[k] > 900e3 and plain.mesh.xyz[k] @ plain.mesh.xyz[first] < np.cos(900e3 / RADIUS)
+    )
+    span = np.arccos(np.clip(plain.mesh.xyz @ plain.mesh.xyz[rift], -1, 1)) * RADIUS
+    rift_end = next(int(k) for k in inland if 300e3 < span[k] < 600e3)
     placed = replace_recipe(
         recipe,
         landmarks=(
             GeologyLandmark("landmark-sky", "Skyfather", "titan", source(first), 400.0),
             GeologyLandmark("landmark-eye", "The Eye", "crater", source(far), 200.0),
+            GeologyLandmark(
+                "landmark-rift", "The Rift", "chasm", source(rift), 40.0, source(rift_end)
+            ),
         ),
     )
     result = generate_planet(world, replace(FAST, climate_passes=0), placed)
@@ -805,18 +895,27 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     assert len(titans) == 1
     assert titans.xyz[0] @ plain.mesh.xyz[first] > np.cos(0.5 * plain.mesh.spacing_m / RADIUS)
     assert titans.radius_m[0] == pytest.approx(200e3)
-    assert len(result.craters) == 1
-    assert result.craters.xyz[0] @ plain.mesh.xyz[far] > np.cos(
-        0.5 * plain.mesh.spacing_m / RADIUS
-    )
-    assert result.craters.radius_m[0] == pytest.approx(100e3)
-    # A crater in the sea is reported, not moved.
+    craters = result.wonders.craters
+    assert len(craters) == 1
+    assert craters.xyz[0] @ plain.mesh.xyz[far] > np.cos(0.5 * plain.mesh.spacing_m / RADIUS)
+    assert craters.radius_m[0] == pytest.approx(100e3)
+    chasms = result.wonders.chasms
+    assert len(chasms) >= 4 and chasms.width_m[0] == pytest.approx(40e3)
+    near = np.cos(0.5 * plain.mesh.spacing_m / RADIUS)
+    assert chasms.paths[0][0] @ plain.mesh.xyz[rift] > near
+    assert chasms.paths[0][-1] @ plain.mesh.xyz[rift_end] > near
+    assert np.any(result.wonder_m != 0)
+    # A landmark in the sea is reported, not moved.
     sea = int(np.argmax(np.where(plain.land, -1.0, -plain.elevation_m)))
-    wet = replace_recipe(
-        recipe, landmarks=(GeologyLandmark("landmark-wet", "Wet", "crater", source(sea)),)
-    )
-    with pytest.raises(ValueError, match=r"Wet.*sea"):
-        generate_planet(world, replace(FAST, climate_passes=0), wet)
+    shore = int(np.argmin(np.where(plain.land, np.inf, span)))
+    for wet in (
+        GeologyLandmark("landmark-wet", "Wet", "crater", source(sea)),
+        GeologyLandmark("landmark-wet", "Wet", "chasm", source(rift), None, source(shore)),
+    ):
+        with pytest.raises(ValueError, match=r"Wet.*sea"):
+            generate_planet(
+                world, replace(FAST, climate_passes=0), replace_recipe(recipe, landmarks=(wet,))
+            )
 
 
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:

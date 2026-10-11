@@ -376,9 +376,33 @@ def test_landmarks_are_placed_updated_and_deleted(app: ui.TerrainApp) -> None:
     assert renamed.position == titan.position
     editor.landmark["diameter"].set("nonsense")
     editor.update_landmark()
-    assert "diameter" in editor.status.get() and editor.recipe.landmarks == (renamed,)
+    assert "size" in editor.status.get() and editor.recipe.landmarks == (renamed,)
     editor.delete_landmark()
     wait(editor)
     assert editor.recipe.landmarks == ()
     editor.undo()
     assert editor.recipe.landmarks == (renamed,)
+
+
+def test_a_chasm_is_placed_with_two_clicks(app: ui.TerrainApp) -> None:
+    editor = edit(app)
+    editor.landmark["kind"].set("chasm")
+    editor.place_landmark()
+    editor._click((0.40, 0.45), tk.Event())  # type: ignore[arg-type]
+    assert editor.recipe.landmarks == () and "other end" in editor.status.get()
+    editor._click((0.46, 0.45), tk.Event())  # type: ignore[arg-type]
+    wait(editor)
+    (chasm,) = editor.recipe.landmarks
+    assert chasm.kind == "chasm" and chasm.end is not None and chasm.end != chasm.position
+    assert not editor._placing and editor._chasm_start is None
+    # Renaming keeps both ends.
+    editor.landmark["name"].set("The Rift")
+    editor.update_landmark()
+    wait(editor)
+    (renamed,) = editor.recipe.landmarks
+    assert renamed.name == "The Rift" and renamed.end == chasm.end
+    # Escape abandons a half-placed chasm.
+    editor.place_landmark()
+    editor._click((0.40, 0.50), tk.Event())  # type: ignore[arg-type]
+    editor.revert()
+    assert not editor._placing and editor._chasm_start is None

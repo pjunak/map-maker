@@ -261,10 +261,26 @@ def write_planet_build(
         arrays["flood_basalt"] = result.forcing.flood_basalt.astype("<f4")
     v = result.volcanoes
     arrays |= {
-        "crater_m": result.crater_m.astype("<f4"),
-        "crater_xyz": result.craters.xyz.astype("<f8"),
-        "crater_radius_m": result.craters.radius_m.astype("<f8"),
-        "crater_depth_m": result.craters.depth_m.astype("<f8"),
+        "wonder_m": result.wonder_m.astype("<f4"),
+        "crater_xyz": result.wonders.craters.xyz.astype("<f8"),
+        "crater_radius_m": result.wonders.craters.radius_m.astype("<f8"),
+        "crater_depth_m": result.wonders.craters.depth_m.astype("<f8"),
+        # Chasm paths and depth profiles of any length, concatenated; offsets mark
+        # where each path starts.
+        "chasm_xyz": (
+            np.vstack(result.wonders.chasms.paths)
+            if len(result.wonders.chasms)
+            else np.zeros((0, 3))
+        ).astype("<f8"),
+        "chasm_offsets": np.cumsum(
+            [0, *(len(path) for path in result.wonders.chasms.paths)]
+        ).astype("<i8"),
+        "chasm_width_m": result.wonders.chasms.width_m.astype("<f8"),
+        "chasm_depth_m": (
+            np.concatenate(result.wonders.chasms.depth_m)
+            if len(result.wonders.chasms)
+            else np.zeros(0)
+        ).astype("<f8"),
         "volcanic_m": result.volcanic_m.astype("<f4"),
         "volcano_xyz": v.xyz.astype("<f8"),
         "volcano_height_m": v.height_m.astype("<f4"),

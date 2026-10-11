@@ -132,7 +132,8 @@
           "kind": {
             "enum": [
               "titan",
-              "crater"
+              "crater",
+              "chasm"
             ]
           },
           "position": {
@@ -144,12 +145,25 @@
             }
           },
           "diameter_km": {
+            "description": "Titan or crater diameter, or chasm width; null uses the usual size.",
             "type": [
               "number",
               "null"
             ],
-            "minimum": 20,
+            "minimum": 10,
             "maximum": 1200
+          },
+          "end": {
+            "description": "A chasm's far end in source coordinates; null for other kinds.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
           }
         }
       }

@@ -157,7 +157,7 @@ def create_parser() -> argparse.ArgumentParser:
                              "beyond your coastline).")
     planet.add_argument("--wonders", action="store_true",
                         help="Add fantastical landmarks beyond Earth's extremes "
-                             "(a titan shield volcano and impact craters).")
+                             "(a titan shield volcano, impact craters and a great chasm).")
     planet.add_argument("--climate-passes", type=int, default=1,
                         help="Climate/erosion couplings; 0 disables climate and biomes.")
     planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")

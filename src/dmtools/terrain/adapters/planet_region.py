@@ -50,7 +50,7 @@ from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_tria
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
-from dmtools.terrain.pipeline.planet_wonders import crater_relief
+from dmtools.terrain.pipeline.planet_wonders import wonder_relief, wonder_zones
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -300,10 +300,10 @@ def _compose(
         volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
     else:
         islands = np.zeros((pixels, pixels), dtype=bool)
-    craters = parent.craters
-    if craters is not None and len(craters):
+    wonders = parent.wonders
+    if wonders is not None and len(wonders):
         elevation = np.where(
-            land, elevation + crater_relief(points, planet_m, craters).reshape(pixels, pixels),
+            land, elevation + wonder_relief(points, planet_m, wonders).reshape(pixels, pixels),
             elevation,
         )
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
@@ -312,12 +312,12 @@ def _compose(
     # follow the fine terrain instead of the coarse parent mesh.
     cover, level, closed = parent.lakes_at(points)
     cover = cover.reshape(pixels, pixels)
-    if craters is not None:
-        # A crater lake fills the sharp crater to its level (a ring around the
-        # central plateau), which the parent mesh cannot resolve.
-        for xyz, radius in zip(craters.xyz, craters.radius_m, strict=True):
-            zone = (points @ xyz > np.cos(1.05 * radius / planet_m)).reshape(pixels, pixels)
-            cover = np.where(zone & (cover > 0.01), 1.0, cover)
+    if wonders is not None and len(wonders):
+        # A crater or chasm lake fills the sharp relief to its level (a ring around
+        # a central plateau, a ribbon along a chasm floor) that the parent mesh
+        # cannot resolve.
+        zone = wonder_zones(points, planet_m, wonders).reshape(pixels, pixels)
+        cover = np.where(zone & (cover > 0.01), 1.0, cover)
     lakes = (
         land
         & inside
@@ -403,8 +403,9 @@ def window_rivers(
     One drainage network over the whole window follows the drawn valleys and
     has no seams between tiles. Rivers entering from outside the window carry
     the parent's upstream area, spread over the rim pixels the parent river
-    crosses. Depressions deeper than POND_DEPTH_M (crater troughs, calderas)
-    hold water or a playa: rivers end there instead of crossing a filled flat.
+    crosses. Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
+    calderas) hold water or a playa: rivers end there instead of crossing a
+    filled flat.
     """
     pixels = elevation.shape[0]
     z = np.where(inside, np.nan_to_num(elevation, nan=0.0), 0.0)
@@ -443,7 +444,7 @@ def regional_climate(
         return None
     shape = elevation.shape
     z = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0).ravel()
-    # Volcanoes and craters form after the climate is simulated: lapse-correct
+    # Volcanoes and wonders form after the climate is simulated: lapse-correct
     # them whole.
     surface = parent.surface_m - parent.young_m()
     lift = (z - parent.sample(points, surface)) / 1000

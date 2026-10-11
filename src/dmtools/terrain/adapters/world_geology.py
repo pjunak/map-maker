@@ -77,6 +77,7 @@ def geology_document(recipe: WorldGeologyRecipe) -> dict[str, object]:
                 "kind": m.kind,
                 "position": [float(m.position[0]), float(m.position[1])],
                 "diameter_km": None if m.diameter_km is None else float(m.diameter_km),
+                "end": None if m.end is None else [float(m.end[0]), float(m.end[1])],
             }
             for m in sorted(recipe.landmarks, key=lambda m: m.id)
         ],
@@ -184,7 +185,8 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
             )
         landmarks: list[GeologyLandmark] = []
         for item in _array(record.get("landmarks", [])):
-            landmark = _record(item, {"id", "name", "kind", "position", "diameter_km"})
+            keys = {"id", "name", "kind", "position", "diameter_km"}
+            landmark = _record(item, keys | ({"end"} if "end" in _keys(item) else set()))
             position = tuple(_number(n) for n in _array(landmark["position"]))
             if len(position) != 2:
                 raise ValueError("Landmark positions need two coordinates.")
@@ -192,6 +194,12 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
             if kind not in LANDMARK_KINDS:
                 raise ValueError(f"Unknown landmark kind: {kind}.")
             diameter = landmark["diameter_km"]
+            end: tuple[float, float] | None = None
+            if landmark.get("end") is not None:
+                values = tuple(_number(n) for n in _array(landmark["end"]))
+                if len(values) != 2:
+                    raise ValueError("Landmark end points need two coordinates.")
+                end = (values[0], values[1])
             landmarks.append(
                 GeologyLandmark(
                     _text(landmark["id"]),
@@ -199,6 +207,7 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
                     kind,
                     (position[0], position[1]),
                     None if diameter is None else _number(diameter),
+                    end,
                 )
             )
         return WorldGeologyRecipe(world, tuple(defaults), tuple(provinces), tuple(landmarks))

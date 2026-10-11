@@ -112,6 +112,7 @@ class GeologyEditor(tk.Toplevel):
         }
         self._landmark_selected: str | None = None
         self._placing = False
+        self._chasm_start: Point2D | None = None  # a chasm's first click
         self.layer = tk.StringVar(self, value=COVERAGE)
         self.bearing = tk.StringVar(self, value="N")
         self.status = tk.StringVar(self, value="Select a continent default or draw a province.")
@@ -298,7 +299,7 @@ class GeologyEditor(tk.Toplevel):
             )
 
     def _build_landmarks(self) -> None:
-        """Hand-placed wonders (a titan shield volcano or an impact crater), in a tab."""
+        """Hand-placed wonders (a titan, an impact crater or a chasm), in a tab."""
         box = ttk.Frame(self.form_tabs, style="Panel.TFrame", padding=6)
         self.form_tabs.add(box, text="Landmarks")
         self.landmark_tab = box
@@ -311,7 +312,7 @@ class GeologyEditor(tk.Toplevel):
             width=7,
         )
         kind.grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Label(box, text="Diameter km", style="Body.TLabel").grid(
+        ttk.Label(box, text="Size km", style="Body.TLabel").grid(
             row=2, column=1, sticky="e", padx=(GAP, 4)
         )
         diameter = ttk.Entry(box, textvariable=self.landmark["diameter"], width=7)
@@ -327,8 +328,9 @@ class GeologyEditor(tk.Toplevel):
             self._button(buttons, text, action).pack(side="left", padx=(0, 4))
         WrappingLabel(
             box,
-            text="Blank diameter = usual size (titan 560 km, crater 240 km). The planet "
-            "uses these instead of random wonders of the same kind.",
+            text="Size is a titan's or crater's diameter, or a chasm's width; blank uses "
+            "the usual size (560, 240 or 60 km). A chasm takes two clicks, one per end. "
+            "The planet uses these instead of random wonders of the same kind.",
             style="Muted.TLabel",
         ).grid(row=4, column=0, columnspan=4, sticky="ew", pady=(2, 0))
 
@@ -578,6 +580,8 @@ class GeologyEditor(tk.Toplevel):
     def _end_draft(self) -> None:
         self._draft = None
         self._draft_id = None
+        self._placing = False
+        self._chasm_start = None
         self.canvas.configure(cursor="")
 
     def delete(self) -> None:
@@ -612,7 +616,7 @@ class GeologyEditor(tk.Toplevel):
         try:
             diameter = float(text) if text else None
         except ValueError as error:
-            raise ValueError("Landmark diameter must be a number of km, or blank.") from error
+            raise ValueError("Landmark size must be a number of km, or blank.") from error
         return name, kind, diameter
 
     def _apply_landmarks(
@@ -636,18 +640,32 @@ class GeologyEditor(tk.Toplevel):
             self.status.set("Apply or revert the current edit before placing a landmark.")
             return
         self._placing = True
+        self._chasm_start = None
         self.canvas.configure(cursor="crosshair")
         self.canvas.focus_set()
         self.form_tabs.select(self.landmark_tab)
-        self.status.set(f"Click the map to place the {self.landmark['kind'].get()}.")
+        kind = self.landmark["kind"].get()
+        self.status.set(
+            "Click one end of the chasm on the map." if kind == "chasm"
+            else f"Click the map to place the {kind}."
+        )
 
     def _place_at(self, position: Point2D) -> None:
+        kind = self.landmark["kind"].get()
+        if kind == "chasm" and self._chasm_start is None:
+            self._chasm_start = position
+            self.status.set("Click the other end of the chasm.")
+            self.canvas.redraw()
+            return
+        start, self._chasm_start = self._chasm_start, None
         self._placing = False
         self.canvas.configure(cursor="")
         try:
             name, kind, diameter = self._landmark_values(len(self.recipe.landmarks) + 1)
             landmark = GeologyLandmark(
-                "landmark-" + uuid4().hex, name, cast(LandmarkKind, kind), position, diameter
+                "landmark-" + uuid4().hex, name, cast(LandmarkKind, kind),
+                position if start is None else start, diameter,
+                None if start is None else position,
             )
         except ValueError as error:
             self.status.set(str(error))
@@ -665,7 +683,8 @@ class GeologyEditor(tk.Toplevel):
         try:
             name, kind, diameter = self._landmark_values(1)
             updated = GeologyLandmark(
-                current.id, name, cast(LandmarkKind, kind), current.position, diameter
+                current.id, name, cast(LandmarkKind, kind), current.position, diameter,
+                current.end if kind == "chasm" else None,
             )
         except ValueError as error:
             self.status.set(str(error))
@@ -967,13 +986,26 @@ class GeologyEditor(tk.Toplevel):
                             fill=MAP_HIGHLIGHT,
                             width=2,
                         )
-        # Landmarks: a titan as a triangle, a crater as a ring, both to scale.
+        # Landmarks to scale: a titan as a triangle, a crater as a ring and a
+        # chasm as a broad line between its ends, across the seam if shorter.
         px_per_km = (right - left) / (2 * math.pi * frame.radius_km)
         for m in self.recipe.landmarks:
             x, y = at(*m.position)
             r = max(5.0, m.size_km / 2 * px_per_km)
             colour = MAP_HIGHLIGHT if m.id == self._landmark_selected else MAP_TEXT
-            if m.kind == "titan":
+            if m.end is not None:
+                ex, ey = at(
+                    m.end[0] + round((m.position[0] - m.end[0]) / frame.width) * frame.width,
+                    m.end[1],
+                )
+                canvas.create_line(
+                    x, y, ex, ey, fill=colour, width=max(3.0, 2 * r), capstyle="round",
+                    stipple="gray50",
+                )
+                canvas.create_line(x, y, ex, ey, fill=colour, width=2)
+                # Label the chasm beyond its right-hand end, clear of the line.
+                x, y = max((x, y), (ex, ey))
+            elif m.kind == "titan":
                 canvas.create_polygon(
                     x, y - r, x - r, y + r * 0.7, x + r, y + r * 0.7,
                     outline=colour, fill="", width=2,
@@ -981,6 +1013,9 @@ class GeologyEditor(tk.Toplevel):
             else:
                 canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
             canvas.create_text(x + r + 4, y, text=m.name, fill=colour, anchor="w")
+        if self._chasm_start is not None:
+            x, y = at(*self._chasm_start)
+            canvas.create_oval(x - 4, y - 4, x + 4, y + 4, outline=MAP_HIGHLIGHT, width=2)
         # Cover off-frame copies without touching the source image.
         width, height = canvas.size()
         for bounds in (

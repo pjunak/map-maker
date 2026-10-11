@@ -25,7 +25,7 @@ from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
 from dmtools.terrain.pipeline.planet_koppen import KOPPEN_COLOURS
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, vertex_triangles
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height
-from dmtools.terrain.pipeline.planet_wonders import crater_relief
+from dmtools.terrain.pipeline.planet_wonders import wonder_relief, wonder_zones
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -109,25 +109,35 @@ def lake_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> NDArra
     on_lake = raster.interpolate(result.mesh, (lakes.lake >= 0).astype(np.float64)) > 0.5
     nearest = lakes.lake[raster.nearest.reshape(raster.shape)]
     ids = np.where(on_lake & land_px & (nearest >= 0), nearest, -1)
-    craters = result.craters
+    wonders = result.wonders
+    if not len(wonders):
+        return ids
+    # A lake in a crater or chasm fills its sharp relief to the lake level, so it
+    # can ring a central plateau or run along a chasm floor narrower than the mesh.
     mesh = result.mesh
-    for xyz, radius in zip(craters.xyz, craters.radius_m, strict=True):
-        # A crater lake fills the sharp crater relief to its level, so it can
-        # ring a central plateau that the mesh cannot resolve.
-        inside_nodes = result.land & (mesh.xyz @ xyz > np.cos(radius / mesh.radius_m))
-        lake_ids = lakes.lake[inside_nodes]
-        lake_ids = lake_ids[lake_ids >= 0]
-        zone = (raster.queries @ xyz > np.cos(1.05 * radius / mesh.radius_m)).reshape(
-            raster.shape
-        )
-        ids = np.where(zone, -1, ids)
-        if not len(lake_ids):
-            continue
-        lake = int(np.bincount(lake_ids).argmax())
-        ground = raster.interpolate(
-            mesh, np.where(result.land, result.elevation_m - result.crater_m, 0.0)
-        ) + crater_relief(raster.queries, mesh.radius_m, craters).reshape(raster.shape)
-        ids = np.where(zone & land_px & (ground < lakes.level_m[lake]), lake, ids)
+    zone = wonder_zones(raster.queries, mesh.radius_m, wonders).reshape(raster.shape)
+    ids = np.where(zone, -1, ids)
+    owners = np.flatnonzero(
+        wonder_zones(mesh.xyz, mesh.radius_m, wonders) & result.land & (lakes.lake >= 0)
+    )
+    if not len(owners) or not zone.any():
+        return ids
+    pixels = raster.queries[zone.ravel()]
+    # Each pixel takes the lake of a nearby node, so a lake in one part of a
+    # long chasm does not spread to lower ground elsewhere along it.
+    found = np.asarray(
+        KDTree(mesh.xyz[owners]).query(
+            pixels, distance_upper_bound=3 * mesh.spacing_m / mesh.radius_m, workers=-1
+        )[1]
+    )
+    near = found < len(owners)
+    lake = np.full(len(pixels), -1)
+    lake[near] = lakes.lake[owners[found[near]]]
+    ground = raster.interpolate(
+        mesh, np.where(result.land, result.elevation_m - result.wonder_m, 0.0)
+    )[zone] + wonder_relief(pixels, mesh.radius_m, wonders)
+    wet = near & land_px[zone] & (ground < lakes.level_m[np.maximum(lake, 0)])
+    ids[zone] = np.where(wet, lake, -1)
     return ids
 
 

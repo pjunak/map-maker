@@ -67,7 +67,7 @@ def level_parent(
     if planet.lake is not None:
         cover, _, _ = planet.lakes_at(xyz)
         lake = np.where(land & (cover > 0.5), planet.lake[nearest], -1)
-    # Coarser tiles already leave out volcanoes and craters; windows redraw them
+    # Coarser tiles already leave out volcanoes and wonders; windows redraw them
     # sharply from the planet's lists. Sea-floor volcanoes stay on the sea floor.
     volcanic = sample(planet.volcanic_m)
     return RegionalParent(
@@ -98,6 +98,6 @@ def level_parent(
         flood_basalt=sample(planet.flood_basalt),
         wind_east=sample(planet.wind_east),
         wind_north=sample(planet.wind_north),
-        crater_m=np.zeros(mesh.size),
-        craters=planet.craters,
+        wonder_m=np.zeros(mesh.size),
+        wonders=planet.wonders,
     )

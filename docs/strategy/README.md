@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-11. **Active milestone: M6, nested deterministic regional and local
+Updated 2026-10-12. **Active milestone: M6, nested deterministic regional and local
 maps.** Map views run alongside it. The plan is world-first: one whole-planet
 relief, made by uplift and erosion on a sphere mesh, feeds climate, map views and
 regional zoom ([decision D00a](../research/decision-catalog.md)).
@@ -34,9 +34,7 @@ backlog, and [status](../research/status.md) records what works now.
    - Regional coasts are refined below the drawing's precision, so local maps
      show bays and headlands instead of smooth traced curves (ADR-0090, tile
      algorithm `planet-blended-tiles-v6`).
-2. **More wonders.** Wonders can now be placed by hand in the geology recipe
-   (titans and craters). A great chasm is next.
-3. **Political and civilization overlays** as registered themes.
+2. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks
 

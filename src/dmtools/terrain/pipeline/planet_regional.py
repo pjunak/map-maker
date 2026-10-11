@@ -31,7 +31,7 @@ from dmtools.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles, sample_field
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
-from dmtools.terrain.pipeline.planet_wonders import Craters
+from dmtools.terrain.pipeline.planet_wonders import Wonders
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -78,16 +78,16 @@ class RegionalParent:
     flood_basalt: F64 | None = None  # 0..1 trap cover
     wind_east: F64 | None = None  # annual mean surface wind (m/s)
     wind_north: F64 | None = None
-    crater_m: F64 | None = None  # height change the mesh carries from impact craters
-    craters: Craters | None = None
+    wonder_m: F64 | None = None  # height change the mesh carries from craters and chasms
+    wonders: Wonders | None = None
 
     def young_m(self) -> F64:
-        """Height that volcanoes and craters added on land after erosion and climate."""
+        """Height that volcanoes and wonders added on land after erosion and climate."""
         young = np.zeros(self.mesh.size)
         if self.volcanic_m is not None:
             young = young + self.volcanic_m
-        if self.crater_m is not None:
-            young = young + self.crater_m
+        if self.wonder_m is not None:
+            young = young + self.wonder_m
         return np.where(self.land, young, 0.0)
 
     @classmethod
@@ -118,8 +118,8 @@ class RegionalParent:
             result.forcing.flood_basalt,
             None if climate is None else climate.wind_east,
             None if climate is None else climate.wind_north,
-            result.crater_m,
-            result.craters,
+            result.wonder_m,
+            result.wonders,
         )
 
     def lakes_at(self, xyz: F64) -> tuple[F64, F64, B]:

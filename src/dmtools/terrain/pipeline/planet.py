@@ -67,11 +67,15 @@ from dmtools.terrain.pipeline.planet_volcanism import (
     with_titans,
 )
 from dmtools.terrain.pipeline.planet_wonders import (
+    Chasms,
     Craters,
+    Wonders,
+    authored_chasms,
     authored_craters,
-    crater_relief,
     level_crater_floors,
+    place_chasm,
     place_craters,
+    wonder_relief,
 )
 from dmtools.terrain.pipeline.world import WorldMap
 
@@ -118,8 +122,8 @@ class PlanetResult:
     volcanoes: Volcanoes
     volcanic_m: F64  # edifice height each node gained from volcanoes (display/regional)
     islands: B  # water nodes standing above sea level as volcanic islands (opt-in)
-    craters: Craters  # opt-in impact craters (wonders)
-    crater_m: F64  # height change each node took from craters (display)
+    wonders: Wonders  # opt-in or hand-placed craters and chasms
+    wonder_m: F64  # height change each node took from craters and chasms (display)
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
@@ -319,6 +323,7 @@ def generate_planet(
     landmarks = () if geology is None else geology.landmarks
     titans = tuple(m for m in landmarks if m.kind == "titan")
     placed_craters = tuple(m for m in landmarks if m.kind == "crater")
+    placed_chasms = tuple(m for m in landmarks if m.kind == "chasm")
     frame = world.project.frame
 
     def unit(position: tuple[float, float]) -> F64:
@@ -346,8 +351,8 @@ def generate_planet(
     # carries cones widened to its resolution; images redraw them sharply.
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
     evolved = np.where(land, evolved + cones, evolved)
-    # Opt-in impact craters are young too; lakes may then fill them.
-    craters, crater_m = Craters.empty(), np.zeros(mesh.size)
+    # Opt-in impact craters and chasms are young too; lakes may then fill them.
+    craters, chasms, wonder_m = Craters.empty(), Chasms.empty(), np.zeros(mesh.size)
     if placed_craters:
         craters = authored_craters(
             mesh, land, evolved, np.array([unit(m.position) for m in placed_craters]),
@@ -361,10 +366,31 @@ def generate_planet(
             np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9090]),
             (titan.xyz, titan.radius_m),
         )
-    if len(craters):
-        crater_m = np.where(land, crater_relief(mesh.xyz, mesh.radius_m, craters), 0.0)
+    chasm_rng = np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9191])
+    if placed_chasms:
+        chasms = authored_chasms(
+            mesh, land, evolved,
+            tuple(
+                (unit(m.position), unit(m.end if m.end is not None else m.position))
+                for m in placed_chasms
+            ),
+            np.array([m.size_km * 1000.0 for m in placed_chasms]),
+            tuple(m.name for m in placed_chasms), chasm_rng,
+        )
+    elif settings.wonders:
+        titan = volcanoes.subset(volcanoes.setting == TITAN)
+        chasms = place_chasm(
+            mesh, land, coast, evolved, chasm_rng,
+            (
+                np.vstack((titan.xyz, craters.xyz)),
+                np.concatenate((titan.radius_m, 1.5 * craters.radius_m)),
+            ),
+        )
+    wonders = Wonders(craters, chasms)
+    if len(wonders):
+        wonder_m = np.where(land, wonder_relief(mesh.xyz, mesh.radius_m, wonders), 0.0)
         levelled = level_crater_floors(mesh, evolved, craters)
-        evolved = np.where(land, np.maximum(levelled + crater_m, 1.0), evolved)
+        evolved = np.where(land, np.maximum(levelled + wonder_m, 1.0), evolved)
     depressions = young_depressions(
         mesh, land, coast, regions, None if climate is None else climate.warm_c, evolved,
         seeds[PLANET_FORCING_STAGE_ID],
@@ -407,6 +433,25 @@ def generate_planet(
         }
         for xyz, radius, depth in zip(craters.xyz, craters.radius_m, craters.depth_m, strict=True)
     ]
+    metrics["chasms"] = [
+        {
+            "from_lonlat": [
+                round(float(np.degrees(np.arctan2(path[0][1], path[0][0]))), 3),
+                round(float(np.degrees(np.arcsin(path[0][2]))), 3),
+            ],
+            "to_lonlat": [
+                round(float(np.degrees(np.arctan2(path[-1][1], path[-1][0]))), 3),
+                round(float(np.degrees(np.arcsin(path[-1][2]))), 3),
+            ],
+            "length_km": round(
+                float(np.arccos(np.clip(path[0] @ path[-1], -1, 1))) * mesh.radius_m / 1e3, 1
+            ),
+            "width_km": round(float(width) / 1e3, 1),
+            "depth_m": round(float(depth.max())),
+            "mean_depth_m": round(float(depth.mean())),
+        }
+        for path, width, depth in zip(chasms.paths, chasms.width_m, chasms.depth_m, strict=True)
+    ]
     metrics["lakes"] = {
         "count": len(lakes.level_m),
         "endorheic": int(lakes.endorheic.sum()),
@@ -416,7 +461,7 @@ def generate_planet(
     say(1.0, "Planet relief ready")
     return PlanetResult(
         world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
-        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, craters,
-        crater_m, seeds, metrics,
+        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, wonders,
+        wonder_m, seeds, metrics,
     )
 

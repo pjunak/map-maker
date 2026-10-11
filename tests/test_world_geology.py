@@ -300,7 +300,7 @@ def test_duplicate_json_fields_and_size_limit_are_rejected(monkeypatch: pytest.M
         files.geology_from_bytes(b" " * 9)
 
 
-def test_schema_example_and_cli(capsys: pytest.CaptureFixture[str]) -> None:
+def geology_validator() -> Draft202012Validator:
     schemas = [
         json.loads(path.read_text(encoding="utf-8"))
         for path in (
@@ -312,9 +312,11 @@ def test_schema_example_and_cli(capsys: pytest.CaptureFixture[str]) -> None:
         [(schema["$id"], Resource.from_contents(schema)) for schema in schemas]
     )
     Draft202012Validator.check_schema(schemas[1])
-    Draft202012Validator(schemas[1], registry=registry).validate(
-        json.loads(EXAMPLE.read_text(encoding="utf-8"))
-    )
+    return Draft202012Validator(schemas[1], registry=registry)
+
+
+def test_schema_example_and_cli(capsys: pytest.CaptureFixture[str]) -> None:
+    geology_validator().validate(json.loads(EXAMPLE.read_text(encoding="utf-8")))
     assert main(["world", "inspect-geology", str(EXAMPLE)]) == 0
     text = capsys.readouterr().out
     assert "Cross-border belt" in text and "Hypotheses and explicit guidance" in text
@@ -342,12 +344,18 @@ def test_landmarks_round_trip_and_stay_optional() -> None:
         landmarks=(
             GeologyLandmark("landmark-sky", "Skyfather", "titan", centre),
             GeologyLandmark("landmark-eye", "The Eye", "crater", (x0 + 1, y0 + 1), 180.0),
+            GeologyLandmark(
+                "landmark-rift", "The Rift", "chasm", centre, None,
+                (centre[0] + 0.1 * (x1 - x0), centre[1]),
+            ),
         ),
     )
     document = files.geology_document(placed)
+    geology_validator().validate(document)
     reopened = files.geology_from_bytes(canonical_json(document))
     assert reopened.landmarks == tuple(sorted(placed.landmarks, key=lambda m: m.id))
-    assert reopened.landmarks[1].size_km == 560.0  # titan default diameter
+    assert reopened.landmarks[1].size_km == 60.0  # chasm default width
+    assert reopened.landmarks[2].size_km == 560.0  # titan default diameter
     # Recipes saved before landmarks existed still open, with none.
     del document["landmarks"]
     assert files.geology_from_bytes(canonical_json(document)).landmarks == ()
@@ -355,12 +363,29 @@ def test_landmarks_round_trip_and_stay_optional() -> None:
         {"kind": "volcano"},
         {"diameter_km": 5.0},
         {"id": "eye"},
+        {"end": (x0 + 1, y0 + 1)},  # only a chasm has an end
+        {"kind": "chasm"},  # without one
+        {"kind": "chasm", "end": centre},
     ):
         with pytest.raises(ValueError):
             GeologyLandmark(**({"id": "landmark-a", "name": "A", "kind": "crater",
                                "position": centre} | bad))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="outside the world frame"):
         replace(recipe, landmarks=(GeologyLandmark("landmark-a", "A", "crater", (x1 + 5, y0)),))
+    with pytest.raises(ValueError, match="outside the world frame"):
+        replace(
+            recipe,
+            landmarks=(GeologyLandmark("landmark-a", "A", "chasm", centre, None, (x1 + 5, y0)),),
+        )
+    with pytest.raises(ValueError, match="km long"):
+        replace(
+            recipe,
+            landmarks=(
+                GeologyLandmark(
+                    "landmark-a", "A", "chasm", centre, None, (centre[0] + 1e-6, centre[1])
+                ),
+            ),
+        )
     with pytest.raises(ValueError, match="names must be unique"):
         replace(
             recipe,
