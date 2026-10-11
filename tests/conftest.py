@@ -1,9 +1,22 @@
-"""Release closed Tk test objects before another test starts a worker."""
+"""Test this checkout's sources and release closed Tk objects between tests."""
 
 import gc
+import os
+import sys
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
+
+# Worktrees share the main checkout's virtualenv, whose editable install points
+# at the main checkout's src. Put this checkout's src first, in-process and for
+# test subprocesses (PYTHONPATH precedes site-packages), so every run tests the
+# code beside these tests.
+SRC = str(Path(__file__).resolve().parents[1] / "src")
+sys.path.insert(0, SRC)
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    path for path in (SRC, os.environ.get("PYTHONPATH")) if path
+)
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
