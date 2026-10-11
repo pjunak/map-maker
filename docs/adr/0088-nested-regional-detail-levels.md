@@ -24,7 +24,9 @@ depend on where that window happened to be drawn.
    | 2 (province) | 1 km | 120 km | 30 km | 30–300 km |
    | 3 (local) | 200 m | 24 km | 6 km | 6–60 km |
 
-   The process area is 24 × spacing². Level 1 is ADR-0086 unchanged.
+   The process area is 24 × spacing², and the rock-hardness texture has a
+   wavelength of 8 × spacing. A fixed 40 km texture left fine tiles uniform, so
+   water cut straight parallel gullies. Level 1 is otherwise ADR-0086 unchanged.
 2. **Tiles per level.** Every level uses its own fixed, unjittered Fibonacci tile
    lattice. Tile seeds come from `planet.tile.<id>` at level 1 and
    `planet.tile.l<level>.<id>` below it. A tile's values depend only on the build,

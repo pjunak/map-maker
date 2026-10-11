@@ -39,7 +39,10 @@ type B = NDArray[np.bool_]
 
 FINE_TEXTURE = 0.5
 BASIN_FULL_M = 200.0  # basin depth at which a node counts as fully depositional
-FINE_TEXTURE_WAVELENGTH_M = 40e3
+# Rock texture at every level: its wavelength follows the mesh spacing (40 km at
+# 5 km). A fixed wavelength left fine tiles uniform, so water cut straight,
+# parallel gullies down every slope instead of branching networks.
+FINE_TEXTURE_SPACINGS = 8.0
 MIN_RUNOFF_WEIGHT = 0.05
 
 
@@ -242,7 +245,8 @@ def enrich(
     steady = parent.sample(mesh.xyz, parent.steady_uplift)
     pulse = parent.sample(mesh.xyz, parent.pulse_uplift)
     erodibility = parent.sample(mesh.xyz, parent.erodibility) * np.exp(
-        FINE_TEXTURE * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / FINE_TEXTURE_WAVELENGTH_M)
+        FINE_TEXTURE
+        * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / (FINE_TEXTURE_SPACINGS * mesh.spacing_m))
     )
     if parent.basin_depth_m is not None:
         # Sediment-filled basins are deposition zones: the parent plain is kept

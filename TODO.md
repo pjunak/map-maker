@@ -28,8 +28,8 @@ See the [plan](docs/strategy/README.md) for states and evidence.
 - [ ] **M6 regional and local zoom:**
   - [ ] Rivers traced on the level's tiles instead of per window (display detail is
     already world-anchored).
-  - [ ] Dendritic drainage at fine levels: level-3 tiles show long, straight,
-    parallel gullies.
+  - [ ] Check drainage realism at fine levels: rock texture now follows each level's
+    spacing and level-3 tiles branch; compare against reference terrain.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
 - [ ] **Map views (ADR-0087):** political and civilization views from authored
   overlays.
