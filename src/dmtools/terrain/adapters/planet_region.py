@@ -5,6 +5,7 @@
 import json
 import os
 from dataclasses import asdict, dataclass
+from functools import cache
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
@@ -42,7 +43,7 @@ from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
 from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
 from dmtools.terrain.pipeline.planet_forcing import source_xy
-from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
+from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
@@ -68,7 +69,10 @@ LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
 REGION_SLOPE_SCALE = 3.5
 REGION_DETAIL_SEED = 17
-REGION_DETAIL_WAVELENGTH_M = 30e3
+REGION_DETAIL_WAVELENGTH_M = 30e3  # at level 1 (5 km mesh); scales with spacing
+REGION_DETAIL_SPACING_M = 5000.0
+REGION_DETAIL_EXPONENT = 1.2  # how fast unresolved relief shrinks with finer meshes
+DETAIL_MEAN_SAMPLES = 20_000
 REGION_DETAIL_FLOOR_M = 70.0
 REGION_DETAIL_SHARE = 0.6  # detail amplitude per metre of tile height
 REGION_CARVE_ERODIBILITY = 0.4  # K * dt for valley carving (m^0)
@@ -159,6 +163,8 @@ class RegionWindow:
     basalt: F64  # 0..1 flood-basalt cover
     wind: F64 | None  # (pixels, pixels, 2) annual mean wind (east, north) in m/s
     playa: B  # dry closed basins of the regional relief (ephemeral lakes)
+    detail_spacing_m: float = 5000.0  # node spacing of the detail level shown
+    seed: int = 0  # planet master seed: display detail belongs to the world
 
     @property
     def pixel_m(self) -> float:
@@ -190,6 +196,8 @@ def compose_window(
     radius_km: float,
     pixels: int,
     river_km2: float,
+    *,
+    spacing_m: float = 5000.0,
 ) -> RegionWindow:
     planet_m = parent.mesh.radius_m
     radius_m = radius_km * 1e3
@@ -291,6 +299,8 @@ def compose_window(
             ).reshape(pixels, pixels, 2)
         ),
         playa,
+        spacing_m,
+        parent.settings.seed,
     )
 
 
@@ -379,6 +389,21 @@ def regional_climate(
     )
 
 
+@cache
+def _detail_means(seed: int, frequency: float) -> tuple[float, float]:
+    """Mean display detail over the whole sphere, without and with ridging."""
+    points = fibonacci_nodes(DETAIL_MEAN_SAMPLES, seed=0, jitter=0.0)
+    plain = eroded_fbm(points, np.zeros(len(points)), seed, 5, frequency, 0.5, 0.1)
+    ridged = eroded_fbm(points, np.ones(len(points)), seed, 5, frequency, 0.5, 0.1)
+    return float(plain.mean()), float(ridged.mean())
+
+
+def detail_offset(seed: int, frequency: float, ridged: F64) -> F64:
+    """The world-wide mean of display detail, so it is zero-mean everywhere."""
+    plain, full = _detail_means(seed, frequency)
+    return plain + (full - plain) * ridged
+
+
 def display_relief(window: RegionWindow) -> F64:
     """Elevation plus sub-tile ridges and valleys for shading only (never exported).
 
@@ -401,17 +426,22 @@ def display_relief(window: RegionWindow) -> F64:
     # Ridged noise creases into sharp lines, so it too needs relief, not height.
     ruggedness = 0.15 + 0.85 * np.clip((tile_slope - 0.002) / 0.018, 0, 1)
     ridged = (np.clip((base - 300) / 1500, 0, 1) * ruggedness).ravel()
+    # Detail stands in for the relief the level's mesh cannot resolve: its
+    # wavelength follows the mesh spacing and its height shrinks with it. It is
+    # anchored to the world (planet seed, world positions, a fixed zero), so
+    # overlapping windows draw the same hills.
+    level = window.detail_spacing_m / REGION_DETAIL_SPACING_M
+    wavelength = REGION_DETAIL_WAVELENGTH_M * level
+    seed = window.seed + REGION_DETAIL_SEED
     detail = eroded_fbm(
-        window.points,
-        ridged,
-        REGION_DETAIL_SEED,
-        5,
-        window.planet_m / REGION_DETAIL_WAVELENGTH_M,
-        0.5,
-        0.1,
+        window.points, ridged, seed, 5, window.planet_m / wavelength, 0.5, 0.1
     ).reshape(z.shape)
-    detail -= detail[land].mean()
-    amplitude = (REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base) * ruggedness
+    detail -= detail_offset(seed, window.planet_m / wavelength, ridged).reshape(z.shape)
+    amplitude = (
+        (REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base)
+        * ruggedness
+        * level**REGION_DETAIL_EXPONENT
+    )
     rough = np.where(land, z + amplitude * detail, z)
     # Outside the window circle, hold each cell at the nearest inside height so
     # the rim is not a base level that every border valley would cut down to.

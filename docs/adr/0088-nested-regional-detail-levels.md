@@ -51,8 +51,16 @@ depend on where that window happened to be drawn.
 - **Cost.** Deep levels need coarser tiles around them, but the cost is bounded
   by the window radius limits. Level-n tiles cost about the same as level-1 tiles
   (about 50–60k mesh nodes each).
-- **Remaining window dependence.** Display detail, river tracing and lake
-  thresholds are still computed per window. Anchoring them to the world is the
-  next step for fully seamless local maps.
+- **Display detail per level.** Shading detail stands in for relief the level's
+  mesh cannot resolve:
+  - its wavelength is 6× the level spacing;
+  - its height shrinks as spacing^1.2;
+  - it is seeded by the planet and centred on its world-wide mean.
+
+  Overlapping windows therefore draw the same hills. At 200 m, detail sized for
+  5 km tiles had cut straight D8 grooves and sunbursts.
+- **Remaining window dependence.** Valley carving (capped at the small detail
+  height) and river tracing still run on each window's pixel grid, with inflow
+  from the parent at the rim.
 - **Not yet regenerated.** Climate, lakes and volcanoes are not regenerated per
   level. They come from the planet, lapse-corrected and redrawn sharply.

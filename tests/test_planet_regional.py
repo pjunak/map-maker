@@ -391,3 +391,33 @@ def test_level_two_windows_repeat_exactly_and_agree_with_level_one(
 
     error = (smooth(fine) - smooth(coarse))[inside]
     assert np.sqrt(np.mean(error**2)) < 0.35 * np.std(coarse[inside]) + 50.0
+
+
+def test_display_detail_is_world_anchored_and_shrinks_with_finer_levels(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    from dmtools.terrain.adapters.planet_region import detail_offset, display_relief
+    from dmtools.terrain.application.planet_region import region_window
+    from dmtools.terrain.pipeline.planet_detail import eroded_fbm
+    from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes
+
+    # The detail is zero-mean over the whole sphere, not re-centred per window.
+    points = fibonacci_nodes(5_000, seed=3, jitter=0.5)
+    for ridged in (0.0, 1.0):
+        values = eroded_fbm(points, np.full(len(points), ridged), 99, 5, 200.0, 0.5, 0.1)
+        offset = detail_offset(99, 200.0, np.full(len(points), ridged))
+        assert abs(float(np.mean(values - offset))) < 0.03
+    run = region_window(
+        RegionalParent.from_result(parent), "p" * 64, tmp_path, _land_centre(parent), 200.0,
+        levels=TINY_LEVELS, pixels=96, workers=1,
+    )
+    window = run.window
+    land = window.land & np.isfinite(window.elevation_m)
+
+    def added(spacing_m: float) -> float:
+        relief = display_relief(replace(window, detail_spacing_m=spacing_m))
+        return float(np.std((relief - window.elevation_m)[land]))
+
+    assert added(1_000.0) < 0.5 * added(5_000.0)

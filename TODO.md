@@ -26,8 +26,10 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Port the stable kernels to a native core.
   - [ ] Decide what replaces the local composed generator.
 - [ ] **M6 regional and local zoom:**
-  - [ ] Display detail, rivers and lakes that do not depend on the window
-    (nested levels exist: ADR-0088).
+  - [ ] Rivers traced on the level's tiles instead of per window (display detail is
+    already world-anchored).
+  - [ ] Dendritic drainage at fine levels: level-3 tiles show long, straight,
+    parallel gullies.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
 - [ ] **Map views (ADR-0087):** political and civilization views from authored
   overlays.

@@ -279,7 +279,10 @@ def region_window(
         )
     if progress is not None:
         progress(0.92, "Blending tiles")
-    window = compose_window(window_parent, grid, tiles, centre, radius_km, pixels, river_km2)
+    window = compose_window(
+        window_parent, grid, tiles, centre, radius_km, pixels, river_km2,
+        spacing_m=levels[level - 1].spacing_km * 1e3,
+    )
     check_cancelled(cancellation)
     store = TileStore(cache, parent_sha256, levels[level - 1], level)
     return RegionRun(window, parent_sha256, levels[level - 1], store.key, planet_m, level)
