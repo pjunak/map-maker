@@ -15,7 +15,7 @@ small synthetic terrain before choosing one.
 See the [plan](docs/strategy/README.md) for states and evidence.
 
 - [ ] **M2 planet relief:**
-  - [ ] More wonders (a great chasm); authored placement of wonders and geology.
+  - [ ] More wonders (a great chasm); titans and craters can already be placed by hand.
   - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [ ] Use the bathymetry product as the ocean floor, or record why not.

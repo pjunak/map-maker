@@ -64,9 +64,11 @@ from dmtools.terrain.pipeline.planet_volcanism import (
     emerge,
     place_volcanoes,
     sea_floor_with_volcanoes,
+    with_titans,
 )
 from dmtools.terrain.pipeline.planet_wonders import (
     Craters,
+    authored_craters,
     crater_relief,
     level_crater_floors,
     place_craters,
@@ -313,27 +315,53 @@ def generate_planet(
     if result.forcing.basin_depth_m is not None:
         evolved = fill_basins(mesh, water, evolved, result.forcing.basin_depth_m)
     plates = result.forcing.tectonics
+    # Hand-placed wonders from the geology recipe replace random ones of their kind.
+    landmarks = () if geology is None else geology.landmarks
+    titans = tuple(m for m in landmarks if m.kind == "titan")
+    placed_craters = tuple(m for m in landmarks if m.kind == "crater")
+    frame = world.project.frame
+
+    def unit(position: tuple[float, float]) -> F64:
+        lon, lat = np.radians(frame.source_to_lonlat(position))
+        return np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+
     volcanoes = (
         Volcanoes.empty()
         if plates is None
         else place_volcanoes(
             mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved,
-            settings.volcanic_islands, settings.wonders,
+            settings.volcanic_islands, settings.wonders and not titans,
         )
     )
+    if titans:
+        sites = np.array([unit(m.position) for m in titans])
+        for site, landmark in zip(sites, titans, strict=True):
+            if not land[int(np.argmax(mesh.xyz @ site))]:
+                raise ValueError(f"{landmark.name} lies at sea; place a titan on land.")
+        volcanoes = with_titans(
+            volcanoes, sites, np.array([m.size_km * 500.0 for m in titans]),
+            seeds[PLANET_VOLCANISM_STAGE_ID],
+        )
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
     # carries cones widened to its resolution; images redraw them sharply.
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
     evolved = np.where(land, evolved + cones, evolved)
     # Opt-in impact craters are young too; lakes may then fill them.
     craters, crater_m = Craters.empty(), np.zeros(mesh.size)
-    if settings.wonders:
+    if placed_craters:
+        craters = authored_craters(
+            mesh, land, evolved, np.array([unit(m.position) for m in placed_craters]),
+            np.array([m.size_km * 500.0 for m in placed_craters]),
+            tuple(m.name for m in placed_craters),
+        )
+    elif settings.wonders:
         titan = volcanoes.subset(volcanoes.setting == TITAN)
         craters = place_craters(
             mesh, land, coast, evolved,
             np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9090]),
             (titan.xyz, titan.radius_m),
         )
+    if len(craters):
         crater_m = np.where(land, crater_relief(mesh.xyz, mesh.radius_m, craters), 0.0)
         levelled = level_crater_floors(mesh, evolved, craters)
         evolved = np.where(land, np.maximum(levelled + crater_m, 1.0), evolved)

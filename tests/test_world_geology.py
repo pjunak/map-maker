@@ -329,3 +329,43 @@ def test_duplicate_defaults_and_provinces_cannot_silently_replace_each_other() -
         replace(recipe, provinces=(province(), province()))
     with pytest.raises(ValueError, match="names must be unique"):
         replace(recipe, provinces=(province(), replace(province(), id="province-other")))
+
+
+def test_landmarks_round_trip_and_stay_optional() -> None:
+    from dmtools.terrain.domain.world_geology import GeologyLandmark
+
+    recipe = blank_geology(world().project)
+    x0, y0, x1, y1 = recipe.world.frame.bounds
+    centre = ((x0 + x1) / 2, (y0 + y1) / 2)
+    placed = replace(
+        recipe,
+        landmarks=(
+            GeologyLandmark("landmark-sky", "Skyfather", "titan", centre),
+            GeologyLandmark("landmark-eye", "The Eye", "crater", (x0 + 1, y0 + 1), 180.0),
+        ),
+    )
+    document = files.geology_document(placed)
+    reopened = files.geology_from_bytes(canonical_json(document))
+    assert reopened.landmarks == tuple(sorted(placed.landmarks, key=lambda m: m.id))
+    assert reopened.landmarks[1].size_km == 560.0  # titan default diameter
+    # Recipes saved before landmarks existed still open, with none.
+    del document["landmarks"]
+    assert files.geology_from_bytes(canonical_json(document)).landmarks == ()
+    for bad in (
+        {"kind": "volcano"},
+        {"diameter_km": 5.0},
+        {"id": "eye"},
+    ):
+        with pytest.raises(ValueError):
+            GeologyLandmark(**({"id": "landmark-a", "name": "A", "kind": "crater",
+                               "position": centre} | bad))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="outside the world frame"):
+        replace(recipe, landmarks=(GeologyLandmark("landmark-a", "A", "crater", (x1 + 5, y0)),))
+    with pytest.raises(ValueError, match="names must be unique"):
+        replace(
+            recipe,
+            landmarks=(
+                GeologyLandmark("landmark-a", "Same", "crater", centre),
+                GeologyLandmark("landmark-b", "same", "titan", centre),
+            ),
+        )

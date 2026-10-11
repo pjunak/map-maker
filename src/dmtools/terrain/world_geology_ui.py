@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -27,11 +28,14 @@ from dmtools.terrain.domain.models import Point2D
 from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
 from dmtools.terrain.domain.world_geology import (
     GEOLOGICAL_SETTINGS,
+    LANDMARK_KINDS,
     MAX_PROVINCE_VERTICES,
     ContinentGeology,
     GeologicalSetting,
+    GeologyLandmark,
     GeologyProfile,
     GeologyProvince,
+    LandmarkKind,
     WorldGeologyRecipe,
     blank_geology,
 )
@@ -101,6 +105,13 @@ class GeologyEditor(tk.Toplevel):
             key: tk.StringVar(self)
             for key in ("name", "priority", "setting", "crust", "rejuvenation", "duration")
         }
+        self.landmark = {
+            "name": tk.StringVar(self),
+            "kind": tk.StringVar(self, value="crater"),
+            "diameter": tk.StringVar(self),
+        }
+        self._landmark_selected: str | None = None
+        self._placing = False
         self.layer = tk.StringVar(self, value=COVERAGE)
         self.bearing = tk.StringVar(self, value="N")
         self.status = tk.StringVar(self, value="Select a continent default or draw a province.")
@@ -231,6 +242,7 @@ class GeologyEditor(tk.Toplevel):
         self.form_tabs.add(form, text="Geological history")
         self.landform_form = WorldLandformForm(self.form_tabs)
         self.form_tabs.add(self.landform_form, text="Landform guidance")
+        self._build_landmarks()
         form.columnconfigure(1, weight=1)
         for row, (key, label) in enumerate(
             (
@@ -285,6 +297,41 @@ class GeologyEditor(tk.Toplevel):
                 row=row // 2, column=row % 2 * 2 + 1, sticky="w", padx=(0, 7)
             )
 
+    def _build_landmarks(self) -> None:
+        """Hand-placed wonders (a titan shield volcano or an impact crater), in a tab."""
+        box = ttk.Frame(self.form_tabs, style="Panel.TFrame", padding=6)
+        self.form_tabs.add(box, text="Landmarks")
+        self.landmark_tab = box
+        box.columnconfigure(1, weight=1)
+        ttk.Label(box, text="Name", style="Body.TLabel").grid(row=1, column=0, sticky="w")
+        name = ttk.Entry(box, textvariable=self.landmark["name"], width=16)
+        name.grid(row=1, column=1, columnspan=3, sticky="ew", pady=2)
+        kind = ttk.Combobox(
+            box, textvariable=self.landmark["kind"], values=LANDMARK_KINDS, state="readonly",
+            width=7,
+        )
+        kind.grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Label(box, text="Diameter km", style="Body.TLabel").grid(
+            row=2, column=1, sticky="e", padx=(GAP, 4)
+        )
+        diameter = ttk.Entry(box, textvariable=self.landmark["diameter"], width=7)
+        diameter.grid(row=2, column=2, sticky="w", pady=2)
+        self._controls.extend(((name, "normal"), (kind, "readonly"), (diameter, "normal")))
+        buttons = ttk.Frame(box, style="Panel.TFrame")
+        buttons.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(2, 0))
+        for text, action in (
+            ("Place on map", self.place_landmark),
+            ("Update", self.update_landmark),
+            ("Delete", self.delete_landmark),
+        ):
+            self._button(buttons, text, action).pack(side="left", padx=(0, 4))
+        WrappingLabel(
+            box,
+            text="Blank diameter = usual size (titan 560 km, crater 240 km). The planet "
+            "uses these instead of random wonders of the same kind.",
+            style="Muted.TLabel",
+        ).grid(row=4, column=0, columnspan=4, sticky="ew", pady=(2, 0))
+
     def _build_map(self, main: ttk.Frame) -> None:
         right = ttk.Frame(main, style="Panel.TFrame")
         right.grid(row=0, column=1, sticky="nsew")
@@ -338,7 +385,15 @@ class GeologyEditor(tk.Toplevel):
             self.tree.insert("defaults", "end", iid="continent:" + c.id, text=c.name)
         for p in sorted(self.recipe.provinces, key=lambda p: (-p.priority, p.name)):
             self.tree.insert("provinces", "end", iid=p.id, text=f"{p.name} · priority {p.priority}")
-        if self.tree.exists(self._selected):
+        self.tree.insert("", "end", iid="landmarks", text="Landmarks · wonders", open=True)
+        for m in sorted(self.recipe.landmarks, key=lambda m: m.name):
+            self.tree.insert(
+                "landmarks", "end", iid=m.id, text=f"{m.name} · {m.kind} {m.size_km:,.0f} km"
+            )
+        if self._landmark_selected and self.tree.exists(self._landmark_selected):
+            self.tree.selection_set(self._landmark_selected)
+            self.tree.see(self._landmark_selected)
+        elif self.tree.exists(self._selected):
             self.tree.selection_set(self._selected)
             self.tree.see(self._selected)
 
@@ -397,8 +452,20 @@ class GeologyEditor(tk.Toplevel):
             if self.tree.exists(self._selected):
                 self.tree.selection_set(self._selected)
             return
-        if selection[0] in ("defaults", "provinces"):
+        if selection[0] in ("defaults", "provinces", "landmarks"):
             return
+        landmark = next((m for m in self.recipe.landmarks if m.id == selection[0]), None)
+        if landmark is not None:
+            self._landmark_selected = landmark.id
+            self.landmark["name"].set(landmark.name)
+            self.landmark["kind"].set(landmark.kind)
+            self.landmark["diameter"].set(
+                "" if landmark.diameter_km is None else f"{landmark.diameter_km:g}"
+            )
+            self.form_tabs.select(self.landmark_tab)
+            self.canvas.redraw()
+            return
+        self._landmark_selected = None
         self._selected = selection[0]
         self._load_form()
         self.canvas.redraw()
@@ -528,6 +595,91 @@ class GeologyEditor(tk.Toplevel):
         self._work(
             "Checking coverage after deletion",
             lambda token: _Result(resolve_geology(world, candidate, token), "edit"),
+        )
+
+    # Landmarks
+
+    def _landmark_values(self, kind_default: int) -> tuple[str, str, float | None]:
+        kind = self.landmark["kind"].get()
+        name = self.landmark["name"].get().strip()
+        if not name:
+            names = {m.name for m in self.recipe.landmarks}
+            name = next(
+                f"{kind.title()} {n}" for n in range(kind_default, 1000)
+                if f"{kind.title()} {n}" not in names
+            )
+        text = self.landmark["diameter"].get().strip()
+        try:
+            diameter = float(text) if text else None
+        except ValueError as error:
+            raise ValueError("Landmark diameter must be a number of km, or blank.") from error
+        return name, kind, diameter
+
+    def _apply_landmarks(
+        self, landmarks: tuple[GeologyLandmark, ...], selected: str | None
+    ) -> None:
+        try:
+            candidate = replace(self.recipe, landmarks=landmarks)
+        except ValueError as error:
+            self.status.set(str(error))
+            return
+        self._landmark_selected = selected
+        self._next_selected = self._selected
+        world = self.world
+        self._work(
+            "Checking landmarks",
+            lambda token: _Result(resolve_geology(world, candidate, token), "edit"),
+        )
+
+    def place_landmark(self) -> None:
+        if self.busy or self.form_dirty or self._draft is not None:
+            self.status.set("Apply or revert the current edit before placing a landmark.")
+            return
+        self._placing = True
+        self.canvas.configure(cursor="crosshair")
+        self.canvas.focus_set()
+        self.form_tabs.select(self.landmark_tab)
+        self.status.set(f"Click the map to place the {self.landmark['kind'].get()}.")
+
+    def _place_at(self, position: Point2D) -> None:
+        self._placing = False
+        self.canvas.configure(cursor="")
+        try:
+            name, kind, diameter = self._landmark_values(len(self.recipe.landmarks) + 1)
+            landmark = GeologyLandmark(
+                "landmark-" + uuid4().hex, name, cast(LandmarkKind, kind), position, diameter
+            )
+        except ValueError as error:
+            self.status.set(str(error))
+            return
+        self.landmark["name"].set("")
+        self._apply_landmarks((*self.recipe.landmarks, landmark), landmark.id)
+
+    def update_landmark(self) -> None:
+        current = next(
+            (m for m in self.recipe.landmarks if m.id == self._landmark_selected), None
+        )
+        if self.busy or current is None:
+            self.status.set("Select a landmark to update.")
+            return
+        try:
+            name, kind, diameter = self._landmark_values(1)
+            updated = GeologyLandmark(
+                current.id, name, cast(LandmarkKind, kind), current.position, diameter
+            )
+        except ValueError as error:
+            self.status.set(str(error))
+            return
+        self._apply_landmarks(
+            tuple(updated if m.id == current.id else m for m in self.recipe.landmarks), current.id
+        )
+
+    def delete_landmark(self) -> None:
+        if self.busy or self._landmark_selected is None:
+            self.status.set("Select a landmark to delete.")
+            return
+        self._apply_landmarks(
+            tuple(m for m in self.recipe.landmarks if m.id != self._landmark_selected), None
         )
 
     def _history(self, undo: bool) -> None:
@@ -716,6 +868,9 @@ class GeologyEditor(tk.Toplevel):
         if self.busy:
             return
         position = self._source_point(point)
+        if self._placing:
+            self._place_at(position)
+            return
         if self._draft is not None:
             if len(self._draft) >= MAX_PROVINCE_VERTICES:
                 self.status.set(f"Province vertex limit: {MAX_PROVINCE_VERTICES}.")
@@ -812,6 +967,20 @@ class GeologyEditor(tk.Toplevel):
                             fill=MAP_HIGHLIGHT,
                             width=2,
                         )
+        # Landmarks: a titan as a triangle, a crater as a ring, both to scale.
+        px_per_km = (right - left) / (2 * math.pi * frame.radius_km)
+        for m in self.recipe.landmarks:
+            x, y = at(*m.position)
+            r = max(5.0, m.size_km / 2 * px_per_km)
+            colour = MAP_HIGHLIGHT if m.id == self._landmark_selected else MAP_TEXT
+            if m.kind == "titan":
+                canvas.create_polygon(
+                    x, y - r, x - r, y + r * 0.7, x + r, y + r * 0.7,
+                    outline=colour, fill="", width=2,
+                )
+            else:
+                canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
+            canvas.create_text(x + r + 4, y, text=m.name, fill=colour, anchor="w")
         # Cover off-frame copies without touching the source image.
         width, height = canvas.size()
         for bounds in (

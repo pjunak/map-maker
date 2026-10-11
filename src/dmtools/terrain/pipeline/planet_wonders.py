@@ -95,6 +95,29 @@ def place_craters(
     return Craters(np.array(centres), np.array(radii), np.array(depths))
 
 
+def authored_craters(
+    mesh: SphereMesh,
+    land: B,
+    ground_m: F64,
+    centres: F64,
+    radii_m: F64,
+    names: tuple[str, ...],
+) -> Craters:
+    """Hand-placed craters at unit vectors ``centres``; each must lie on land.
+
+    Depth follows the same rule as placed craters: a share of the diameter,
+    limited by the ground so the floor stays above sea level.
+    """
+    depths = []
+    for xyz, radius, name in zip(centres, radii_m, names, strict=True):
+        site = int(np.argmax(mesh.xyz @ xyz))
+        if not land[site]:
+            raise ValueError(f"{name} lies at sea; place a crater on land.")
+        depths.append(min(CRATER_DEPTH_RATIO * 2 * radius, max(ground_m[site] - 50.0, 0.0) / 0.7))
+    unit = centres / np.linalg.norm(centres, axis=1)[:, None]
+    return Craters(unit, np.asarray(radii_m, dtype=np.float64), np.array(depths))
+
+
 def draw_site(
     mesh: SphereMesh, weight: F64, ceiling: float, rng: np.random.Generator
 ) -> F64 | None:

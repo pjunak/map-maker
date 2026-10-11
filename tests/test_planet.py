@@ -770,6 +770,55 @@ def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
     assert np.allclose(coarse, fine)
 
 
+def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
+    from dataclasses import replace as replace_recipe
+
+    from dmtools.terrain.domain.world_geology import GeologyLandmark
+    from dmtools.terrain.pipeline.planet_volcanism import TITAN
+
+    world = open_world(world_path)
+    recipe = sample_recipe(world_path)
+    plain = generate_planet(world, replace(FAST, climate_passes=0), recipe)
+    frame = world.project.frame
+    inland = np.argsort(np.where(plain.land, plain.coast_m, -1.0))[::-1]
+    first = int(inland[0])
+    # A second inland site well away from the first.
+    far = next(
+        int(k) for k in inland[1:]
+        if plain.mesh.xyz[k] @ plain.mesh.xyz[first] < np.cos(1500e3 / plain.mesh.radius_m)
+    )
+
+    def source(node: int) -> tuple[float, float]:
+        x, y, z = plain.mesh.xyz[node]
+        lonlat = (float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arcsin(z))))
+        return frame.lonlat_to_source(lonlat)
+
+    placed = replace_recipe(
+        recipe,
+        landmarks=(
+            GeologyLandmark("landmark-sky", "Skyfather", "titan", source(first), 400.0),
+            GeologyLandmark("landmark-eye", "The Eye", "crater", source(far), 200.0),
+        ),
+    )
+    result = generate_planet(world, replace(FAST, climate_passes=0), placed)
+    titans = result.volcanoes.subset(result.volcanoes.setting == TITAN)
+    assert len(titans) == 1
+    assert titans.xyz[0] @ plain.mesh.xyz[first] > np.cos(0.5 * plain.mesh.spacing_m / RADIUS)
+    assert titans.radius_m[0] == pytest.approx(200e3)
+    assert len(result.craters) == 1
+    assert result.craters.xyz[0] @ plain.mesh.xyz[far] > np.cos(
+        0.5 * plain.mesh.spacing_m / RADIUS
+    )
+    assert result.craters.radius_m[0] == pytest.approx(100e3)
+    # A crater in the sea is reported, not moved.
+    sea = int(np.argmax(np.where(plain.land, -1.0, -plain.elevation_m)))
+    wet = replace_recipe(
+        recipe, landmarks=(GeologyLandmark("landmark-wet", "Wet", "crater", source(sea)),)
+    )
+    with pytest.raises(ValueError, match=r"Wet.*sea"):
+        generate_planet(world, replace(FAST, climate_passes=0), wet)
+
+
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands

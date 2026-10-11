@@ -14,7 +14,9 @@ from dmtools.terrain.adapters.world_project import world_project_document, world
 from dmtools.terrain.domain.world import WorldProject
 from dmtools.terrain.domain.world_geology import (
     GEOLOGICAL_SETTINGS,
+    LANDMARK_KINDS,
     ContinentGeology,
+    GeologyLandmark,
     GeologyProfile,
     GeologyProvince,
     WorldGeologyRecipe,
@@ -68,6 +70,16 @@ def geology_document(recipe: WorldGeologyRecipe) -> dict[str, object]:
             }
             for p in sorted(recipe.provinces, key=lambda p: p.id)
         ],
+        "landmarks": [
+            {
+                "id": m.id,
+                "name": m.name,
+                "kind": m.kind,
+                "position": [float(m.position[0]), float(m.position[1])],
+                "diameter_km": None if m.diameter_km is None else float(m.diameter_km),
+            }
+            for m in sorted(recipe.landmarks, key=lambda m: m.id)
+        ],
     }
 
 
@@ -75,6 +87,10 @@ def _record(value: object, fields: set[str]) -> dict[str, object]:
     if not isinstance(value, dict) or set(cast(dict[str, object], value)) != fields:
         raise ValueError(f"Expected exactly these geology fields: {', '.join(sorted(fields))}.")
     return cast(dict[str, object], value)
+
+
+def _keys(value: object) -> set[str]:
+    return set(cast(dict[str, object], value)) if isinstance(value, dict) else set()
 
 
 def _array(value: object) -> list[object]:
@@ -121,18 +137,14 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
         raise ValueError("Geology recipe exceeds 40 MiB.")
     try:
         value: object = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique)
-        record = _record(
-            value,
-            {
-                "schema",
-                "version",
-                "time_reference",
-                "world_sha256",
-                "world",
-                "defaults",
-                "provinces",
-            },
-        )
+        fields = {
+            "schema", "version", "time_reference", "world_sha256", "world", "defaults",
+            "provinces",
+        }
+        # Landmarks are optional, so recipes saved before they existed still open.
+        if "landmarks" in _keys(value):
+            fields.add("landmarks")
+        record = _record(value, fields)
         if (
             record["schema"] != GEOLOGY_SCHEMA
             or type(record["version"]) is not int
@@ -170,7 +182,26 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
                     _profile(province["profile"]),
                 )
             )
-        return WorldGeologyRecipe(world, tuple(defaults), tuple(provinces))
+        landmarks: list[GeologyLandmark] = []
+        for item in _array(record.get("landmarks", [])):
+            landmark = _record(item, {"id", "name", "kind", "position", "diameter_km"})
+            position = tuple(_number(n) for n in _array(landmark["position"]))
+            if len(position) != 2:
+                raise ValueError("Landmark positions need two coordinates.")
+            kind = landmark["kind"]
+            if kind not in LANDMARK_KINDS:
+                raise ValueError(f"Unknown landmark kind: {kind}.")
+            diameter = landmark["diameter_km"]
+            landmarks.append(
+                GeologyLandmark(
+                    _text(landmark["id"]),
+                    _text(landmark["name"]),
+                    kind,
+                    (position[0], position[1]),
+                    None if diameter is None else _number(diameter),
+                )
+            )
+        return WorldGeologyRecipe(world, tuple(defaults), tuple(provinces), tuple(landmarks))
     except (UnicodeError, json.JSONDecodeError, OverflowError, RecursionError) as error:
         raise ValueError(f"Invalid geology recipe: {error}") from error
 

@@ -21,6 +21,14 @@ GEOLOGICAL_SETTINGS: tuple[GeologicalSetting, ...] = (
 )
 MAX_PROVINCES = 128
 MAX_PROVINCE_VERTICES = 256
+type LandmarkKind = Literal["titan", "crater"]
+LANDMARK_KINDS: tuple[LandmarkKind, ...] = ("titan", "crater")
+# Allowed diameters (km) of hand-placed wonders, and the size used when none is given.
+LANDMARK_DIAMETER_KM: dict[str, tuple[float, float, float]] = {
+    "titan": (200.0, 1200.0, 560.0),
+    "crater": (20.0, 600.0, 240.0),
+}
+MAX_LANDMARKS = 32
 MAX_AGE_MA = 1_000_000.0
 
 
@@ -89,10 +97,51 @@ class GeologyProvince:
 
 
 @dataclass(frozen=True, slots=True)
+class GeologyLandmark:
+    """A hand-placed wonder at a source position: a titan shield volcano or a crater.
+
+    ``diameter_km`` is the titan's basal diameter or the crater's rim diameter;
+    None uses the kind's usual size.
+    """
+
+    id: str
+    name: str
+    kind: LandmarkKind
+    position: Point2D
+    diameter_km: float | None = None
+
+    def __post_init__(self) -> None:
+        _name(self.id, "Landmark ID")
+        if not fullmatch(r"landmark-[A-Za-z0-9][A-Za-z0-9_-]*", self.id):
+            raise ValueError(
+                "Landmark ID must start with landmark- and use letters, digits, _ or -."
+            )
+        _name(self.name, "Landmark name")
+        if self.kind not in LANDMARK_KINDS:
+            raise ValueError(f"Landmark kind must be one of: {', '.join(LANDMARK_KINDS)}.")
+        if len(self.position) != 2 or any(not _finite_number(v) for v in self.position):
+            raise ValueError("A landmark position must be a finite coordinate pair.")
+        if self.diameter_km is not None:
+            low, high, _ = LANDMARK_DIAMETER_KM[self.kind]
+            if not _finite_number(self.diameter_km) or not low <= self.diameter_km <= high:
+                raise ValueError(
+                    f"A {self.kind} needs a diameter from {low:,.0f} to {high:,.0f} km."
+                )
+
+    @property
+    def size_km(self) -> float:
+        """The diameter in kilometres, defaulting to the kind's usual size."""
+        return (
+            LANDMARK_DIAMETER_KM[self.kind][2] if self.diameter_km is None else self.diameter_km
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class WorldGeologyRecipe:
     world: WorldProject
     defaults: tuple[ContinentGeology, ...]
     provinces: tuple[GeologyProvince, ...] = ()
+    landmarks: tuple[GeologyLandmark, ...] = ()
 
     def __post_init__(self) -> None:
         owners = {c.id for c in self.world.continents}
@@ -106,6 +155,16 @@ class WorldGeologyRecipe:
             raise ValueError("Province names must be unique.")
         frame = self.world.frame
         x0, y0, x1, y1 = frame.bounds
+        if len(self.landmarks) > MAX_LANDMARKS:
+            raise ValueError(f"A recipe supports at most {MAX_LANDMARKS} landmarks.")
+        if len({m.id for m in self.landmarks}) != len(self.landmarks):
+            raise ValueError("Landmark IDs must be unique.")
+        if len({m.name.casefold() for m in self.landmarks}) != len(self.landmarks):
+            raise ValueError("Landmark names must be unique.")
+        for landmark in self.landmarks:
+            x, y = landmark.position
+            if not (x0 <= x <= x1 and y0 <= y <= y1):
+                raise ValueError(f"{landmark.name}: position is outside the world frame.")
         for province in self.provinces:
             xs, ys = zip(*province.vertices, strict=True)
             # Anchor one copy in the world and allow the remaining points to unwrap.

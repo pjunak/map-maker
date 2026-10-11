@@ -30,8 +30,8 @@ backlog, and [status](../research/status.md) records what works now.
    - Next: trace rivers on the level's tiles rather than per window.
    - Rock texture now follows each level's spacing, so fine tiles branch rather
      than cutting parallel gullies (tile algorithm `planet-blended-tiles-v5`).
-2. **Authored placement.** Let users place wonders and geology by hand in the world
-   file.
+2. **More wonders.** Wonders can now be placed by hand in the geology recipe
+   (titans and craters). A great chasm is next.
 3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks

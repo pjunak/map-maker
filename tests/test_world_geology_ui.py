@@ -354,3 +354,31 @@ def test_invalid_landform_keeps_pending_form_and_busy_controls_lock(app: ui.Terr
     assert all(str(e["state"]) == "disabled" for e in panel.entries)
     editor.revert()
     assert panel.read() is None
+
+
+def test_landmarks_are_placed_updated_and_deleted(app: ui.TerrainApp) -> None:
+    editor = edit(app)
+    editor.landmark["kind"].set("titan")
+    editor.landmark["diameter"].set("400")
+    editor.place_landmark()
+    assert editor._placing
+    editor._click((0.4, 0.4), tk.Event())  # type: ignore[arg-type]
+    wait(editor)
+    (titan,) = editor.recipe.landmarks
+    assert titan.kind == "titan" and titan.diameter_km == 400.0 and titan.name == "Titan 1"
+    assert editor.tree.exists(titan.id)
+    editor.landmark["name"].set("Skyfather")
+    editor.landmark["diameter"].set("")
+    editor.update_landmark()
+    wait(editor)
+    (renamed,) = editor.recipe.landmarks
+    assert renamed.name == "Skyfather" and renamed.size_km == 560.0
+    assert renamed.position == titan.position
+    editor.landmark["diameter"].set("nonsense")
+    editor.update_landmark()
+    assert "diameter" in editor.status.get() and editor.recipe.landmarks == (renamed,)
+    editor.delete_landmark()
+    wait(editor)
+    assert editor.recipe.landmarks == ()
+    editor.undo()
+    assert editor.recipe.landmarks == (renamed,)

@@ -197,15 +197,28 @@ def _titan(mesh: SphereMesh, land: B, coast_m: F64, rng: np.random.Generator) ->
     site = draw_site(mesh, (land & (coast_m >= TITAN_MIN_COAST_M)).astype(np.float64), 1.0, rng)
     if site is None:
         site = mesh.xyz[int(np.argmax(np.where(land, coast_m, -1.0)))]
+    return titan_volcano(site, TITAN_RADIUS_M * rng.uniform(0.9, 1.1), rng)
+
+
+def with_titans(volcanoes: Volcanoes, sites: F64, radii_m: F64, seed: int) -> Volcanoes:
+    """``volcanoes`` plus hand-placed titans at unit vectors ``sites``."""
+    rng = np.random.default_rng([seed, 7071])
+    titans = [titan_volcano(site, float(r), rng) for site, r in zip(sites, radii_m, strict=True)]
+    return _concat([volcanoes, *titans])
+
+
+def titan_volcano(site: F64, radius_m: float, rng: np.random.Generator) -> Volcanoes:
+    """A titan shield at ``site`` whose height and caldera scale with its radius."""
+    scale = radius_m / TITAN_RADIUS_M
     return Volcanoes(
-        site[None, :],
-        np.array([TITAN_HEIGHT_M * rng.uniform(0.9, 1.1)]),
-        np.array([TITAN_RADIUS_M * rng.uniform(0.9, 1.1)]),
+        (site / np.linalg.norm(site))[None, :],
+        np.array([TITAN_HEIGHT_M * float(np.clip(scale, 0.6, 1.4)) * rng.uniform(0.9, 1.1)]),
+        np.array([radius_m]),
         np.array([SHIELD]),
         np.array([TITAN]),
         np.array([True]),
         np.array([0.0]),
-        np.array([TITAN_CALDERA_RADIUS_M]),
+        np.array([TITAN_CALDERA_RADIUS_M * scale]),
         np.array([TITAN_CALDERA_DEPTH_M]),
         np.array([np.nan]),
         np.array([False]),

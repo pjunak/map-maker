@@ -70,6 +70,25 @@ The command creates a project; **Generate terrain** produces its preview. Choose
 a fresh output folder for another transfer. Source, projected scale and physical
 land are identical with or without the optional recipe.
 
+## Place wonders by hand
+
+The **Landmarks** tab places fantastical wonders where you want them:
+- **Titan:** a giant ice-capped shield volcano. Its usual diameter is 560 km, and
+  200–1,200 km are allowed.
+- **Crater:** an impact crater with a central plateau that may hold a ring lake.
+  Its usual diameter is 240 km, and 20–600 km are allowed.
+
+To place one, choose its kind, optionally a name and a diameter, and click
+**Place on map**, then a point on land. Select a landmark in the tree to rename,
+resize (**Update**) or **Delete** it. Undo and redo cover landmarks too.
+
+When the planet is generated with this recipe, the placed landmarks replace the
+random wonders of their kind: placed titans replace the random titan, and placed
+craters replace random craters. The planet reports an error if a landmark lies at
+sea. Landmarks are saved in the recipe's optional `landmarks` list
+([schema](../schemas/world/geology-v2.schema.json)). Recipes without them still
+open.
+
 ## Values and overlap rules
 
 - `setting`: unspecified, stable-interior, active-belt, rift, volcanic, or
