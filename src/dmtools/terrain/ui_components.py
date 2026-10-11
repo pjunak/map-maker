@@ -9,18 +9,27 @@ from tkinter import ttk
 from dmtools.terrain.ui_jobs import JobState
 from dmtools.terrain.ui_style import GAP
 
+REWRAP_SLACK_PX = 12
+INITIAL_WRAP_PX = 300
+
 
 class WrappingLabel(ttk.Label):
     """A label whose text wraps to its current width."""
 
-    def __init__(self, parent: tk.Misc, *, minimum: int = 120, **options: object) -> None:
-        super().__init__(parent, **options)  # type: ignore[arg-type]
+    def __init__(
+        self, parent: tk.Misc, *, minimum: int = 120, initial: int = INITIAL_WRAP_PX,
+        **options: object,
+    ) -> None:
+        # Start narrow, so long text never makes its column claim the window.
+        super().__init__(parent, wraplength=initial, **options)  # type: ignore[arg-type]
         self._minimum = minimum
         self.bind("<Configure>", self._rewrap, add="+")
 
     def _rewrap(self, event: tk.Event[tk.Misc]) -> None:
         width = max(self._minimum, int(event.width) - 4)
-        if int(self.cget("wraplength") or 0) != width:
+        # Small changes are usually the label's own response to rewrapping; reacting
+        # to them can make the geometry manager oscillate.
+        if abs(int(str(self.cget("wraplength")) or 0) - width) > REWRAP_SLACK_PX:
             self.configure(wraplength=width)
 
 
@@ -56,6 +65,34 @@ def section(parent: tk.Misc, title: str, *, first: bool = False) -> ttk.Frame:
     body = ttk.Frame(parent, style="Panel.TFrame")
     body.pack(fill="x")
     return body
+
+
+class MapInfoStrip(ttk.Frame):
+    """Legend and under-the-cursor readout below a map.
+
+    Its height is fixed, so a longer readout never resizes (and redraws) the map.
+    """
+
+    HEIGHT = 92
+
+    def __init__(
+        self, parent: tk.Misc, legend: tk.StringVar, inspection: tk.StringVar
+    ) -> None:
+        super().__init__(parent, style="Panel.TFrame", padding=(GAP, GAP // 2, GAP, GAP),
+                         height=self.HEIGHT)
+        self.grid_propagate(False)
+        self.columnconfigure(0, weight=3, uniform="info")
+        self.columnconfigure(1, weight=2, uniform="info")
+        ttk.Label(self, text="Legend", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(self, text="Under the cursor", style="Section.TLabel").grid(
+            row=0, column=1, sticky="w", padx=(2 * GAP, 0)
+        )
+        WrappingLabel(self, textvariable=legend, style="Muted.TLabel").grid(
+            row=1, column=0, sticky="new"
+        )
+        WrappingLabel(self, textvariable=inspection, style="Readout.TLabel").grid(
+            row=1, column=1, sticky="new", padx=(2 * GAP, 0)
+        )
 
 
 class StatusBar(ttk.Frame):

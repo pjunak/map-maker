@@ -21,8 +21,6 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Use the bathymetry product as the ocean floor, or record why not.
 - [ ] **M3 climate:** monthly outputs, below-sea-level basins and an energy-balance check.
 - [ ] **M4 workflow:** compare and regenerate in the World tab.
-- [ ] **App:** move the geology and bathymetry editors onto the shared map canvas
-  (ADR-0089).
 - [ ] **M5 adoption:**
   - [ ] Reference-world quality gates and an accepted planet parent.
   - [ ] Port the stable kernels to a native core.

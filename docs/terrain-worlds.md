@@ -150,7 +150,8 @@ continent's last shape elsewhere removes that now-unused owner; Undo can restore
 
 ## Navigation and document handling
 
-- Mouse wheel zooms around the pointer. Middle/right drag pans. **Fit world** or
+- Mouse wheel zooms around the pointer. Drag (any button) pans; a click without
+  dragging selects. **Fit** or
   **F** restores the overview. Zoom inspects retained source geometry; it does
   not generate higher-resolution terrain.
 - The pointer readout shows longitude/latitude once frame and radius are valid;

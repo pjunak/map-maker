@@ -3,16 +3,14 @@
 
 from __future__ import annotations
 
-import queue
-import threading
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Literal, cast
+from typing import cast
 
 import numpy as np
-from PIL import ImageTk
+from PIL import Image
 
 from dmtools.terrain.adapters.world_bathymetry_inputs import (
     BATHYMETRY_EXTENSION,
@@ -37,11 +35,17 @@ from dmtools.terrain.application.world_bathymetry import (
 )
 from dmtools.terrain.application.world_context import WorldContextRun
 from dmtools.terrain.domain.world_bathymetry import BathymetryInputs, BathymetrySettings
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from dmtools.terrain.map_canvas import FlatMapCanvas, Rect
+from dmtools.terrain.pipeline.control import CancellationToken
+from dmtools.terrain.ui_components import MapInfoStrip, StatusBar, WrappingLabel
+from dmtools.terrain.ui_jobs import JobRunner, JobState, Report, TkPump
+from dmtools.terrain.ui_style import GAP, PAPER
 from dmtools.terrain.viewport import MapViewport
+from dmtools.terrain.world_view import map_label
 
-type _Mode = Literal["generate", "open-result", "open-input", "save-input", "export"]
-type _Event = BathymetryRun | BathymetryFile | Path | str | Exception
+CONNECTED = "Connected water"
+HINT = "Drag to pan · wheel to zoom · F fits the map"
+STALE = "PREVIOUS RESULT · Generate to apply the edited inputs"
 
 
 class BathymetryEditor(tk.Toplevel):
@@ -54,26 +58,20 @@ class BathymetryEditor(tk.Toplevel):
         saved: BathymetryFile | None = None,
     ) -> None:
         super().__init__(parent)
+        self.configure(background=PAPER)
         self.context = context
         self.run: BathymetryRun | None = None
         self.file: BathymetryFile | None = None
         self.on_close = on_close
-        self.busy = False
         self._closed = False
         self._loading = True
+        self._was_busy = False
         self._controls: list[tuple[ttk.Widget, str]] = []
-        self._events: queue.Queue[_Event] = queue.Queue()
-        self._mode: _Mode = "generate"
-        self._after_job: Callable[[], None] | None = None
-        self._cancellation: CancellationToken | None = None
-        self._draw_id: str | None = None
-        self._poll_id: str | None = None
-        self._photo: ImageTk.PhotoImage | None = None
         self._built_signature: object = None
         self._saved_signature: object = None
         self._frozen_selection: tuple[str, ...] = ()
-        self.viewport = MapViewport()
-        self._pan: tuple[int, int] | None = None
+        self.pump = TkPump(self)
+        self.jobs = JobRunner(self.pump, self._job_state, self._job_failed, self._job_cancelled)
         settings = BathymetrySettings(latitude_cells=context.context.grid.shape[0])
         self.values = {
             key: tk.StringVar(self, value=str(getattr(settings, key)))
@@ -85,7 +83,7 @@ class BathymetryEditor(tk.Toplevel):
                 "basin_depth_m",
             )
         }
-        self.layer = tk.StringVar(self, value="Connected water")
+        self.layer = tk.StringVar(self, value=CONNECTED)
         self.status = tk.StringVar(
             self,
             value="Largest water region is suggested. "
@@ -94,7 +92,7 @@ class BathymetryEditor(tk.Toplevel):
         self.summary = tk.StringVar(
             self, value="No bathymetry generated. Unselected water has no depth."
         )
-        self.inspection = tk.StringVar(self, value="Wheel: zoom · Middle/right drag: pan · F: fit")
+        self.inspection = tk.StringVar(self, value=HINT)
         self.legend = tk.StringVar(self)
         self.title("Bathymetry inputs — " + context.context.world.project.name)
         self.geometry("1320x850")
@@ -119,16 +117,22 @@ class BathymetryEditor(tk.Toplevel):
         self.bind("<Control-s>", lambda _e: self._key(self.save))
         self.bind("<Control-Shift-S>", lambda _e: self._key(lambda: self.save(save_as=True)))
         self.canvas.bind("f", lambda _e: self._key(self.fit))
-        self._poll_id = self.after(80, self._poll)
         self.grab_set()
         if saved is not None:
             self.load_inputs(saved.path)
-        self._schedule_draw()
 
     @staticmethod
     def _key(action: Callable[[], None]) -> str:
         action()
         return "break"
+
+    @property
+    def busy(self) -> bool:
+        return self.jobs.busy
+
+    @property
+    def viewport(self) -> MapViewport:
+        return self.canvas.viewport
 
     @property
     def dirty(self) -> bool:
@@ -141,15 +145,19 @@ class BathymetryEditor(tk.Toplevel):
     def _signature(self) -> object:
         return tuple(v.get() for v in self.values.values()), tuple(sorted(self.tree.selection()))
 
-    def _button(self, parent: tk.Misc, text: str, action: Callable[[], None]) -> ttk.Button:
-        button = ttk.Button(parent, text=text, command=action)
+    def _button(
+        self, parent: tk.Misc, text: str, action: Callable[[], None], *, style: str = "Quiet"
+    ) -> ttk.Button:
+        button = ttk.Button(parent, text=text, command=action, style=f"{style}.TButton")
         self._controls.append((button, "normal"))
         return button
+
+    # Layout
 
     def _build(self) -> None:
         self.columnconfigure(0, weight=1)
         self.rowconfigure(1, weight=1)
-        head = ttk.Frame(self, padding=(14, 10))
+        head = ttk.Frame(self, style="Paper.TFrame", padding=(14, 10))
         head.grid(row=0, column=0, sticky="ew")
         ttk.Label(head, text="Ocean-floor hypotheses", style="Header.TLabel").pack(side="left")
         for text, action in (
@@ -158,19 +166,47 @@ class BathymetryEditor(tk.Toplevel):
             ("Save As…", lambda: self.save(save_as=True)),
             ("Open result…", self.choose_result),
         ):
-            self._button(head, text, action).pack(side="left", padx=6)
-        main = ttk.Frame(self, padding=(14, 0))
+            self._button(head, text, action).pack(side="left", padx=(GAP, 0))
+        main = ttk.Frame(self, style="Paper.TFrame", padding=(14, 0))
         main.grid(row=1, column=0, sticky="nsew")
         main.columnconfigure(1, weight=1)
         main.rowconfigure(0, weight=1)
-        side = ttk.Frame(main, padding=(0, 0, 12, 0))
-        side.grid(row=0, column=0, sticky="nsew")
+        self._build_sidebar(main)
+        right = ttk.Frame(main, style="Panel.TFrame")
+        right.grid(row=0, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(1, weight=1)
+        toolbar = ttk.Frame(right, style="Toolbar.TFrame", padding=GAP)
+        toolbar.grid(row=0, column=0, sticky="ew")
+        ttk.Button(toolbar, text="Fit", style="Small.TButton", command=self.fit).pack(side="left")
+        choice = ttk.Combobox(
+            toolbar, textvariable=self.layer, values=(CONNECTED, *BATHYMETRY_LAYERS),
+            state="readonly", width=23,
+        )
+        choice.pack(side="left", padx=GAP)
+        choice.bind("<<ComboboxSelected>>", lambda _e: self.canvas.redraw())
+        frame = self.context.context.grid.frame
+        self.canvas = FlatMapCanvas(right, background=OCEAN, on_hover=self._hover)
+        self.canvas.configure(takefocus=True)
+        self.canvas.overlay = self._overlay
+        self.canvas.show(self._render, (frame.width, frame.height))
+        self.canvas.grid(row=1, column=0, sticky="nsew")
+        MapInfoStrip(right, self.legend, self.inspection).grid(row=2, column=0, sticky="ew")
+        footer = ttk.Frame(self, style="Paper.TFrame", padding=(14, GAP))
+        footer.grid(row=2, column=0, sticky="ew")
+        footer.columnconfigure(0, weight=1)
+        self.status_bar = StatusBar(footer, self.status, self.cancel)
+        self.status_bar.grid(row=0, column=0, sticky="ew")
+
+    def _build_sidebar(self, main: ttk.Frame) -> None:
+        side = ttk.Frame(main, style="Panel.TFrame", padding=10)
+        side.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
         side.columnconfigure(0, weight=1)
         side.rowconfigure(1, weight=1)
-        ttk.Label(
-            side, text="SELECT OCEANS · CTRL/SHIFT FOR MULTIPLE", style="Eyebrow.TLabel"
-        ).grid(row=0, column=0, sticky="w", pady=(0, 6))
-        tree_frame = ttk.Frame(side)
+        ttk.Label(side, text="Oceans (Ctrl/Shift for several)", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 6)
+        )
+        tree_frame = ttk.Frame(side, style="Panel.TFrame")
         tree_frame.grid(row=1, column=0, sticky="nsew")
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
@@ -188,7 +224,7 @@ class BathymetryEditor(tk.Toplevel):
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=scrollbar.set)
         self.tree.bind("<<TreeviewSelect>>", self._selected)
-        form = ttk.Frame(side)
+        form = ttk.Frame(side, style="Panel.TFrame")
         form.grid(row=2, column=0, sticky="ew", pady=10)
         form.columnconfigure(1, weight=1)
         for row, (key, label) in enumerate(
@@ -200,63 +236,29 @@ class BathymetryEditor(tk.Toplevel):
                 ("basin_depth_m", "Basin depth (m)"),
             )
         ):
-            ttk.Label(form, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=3)
+            ttk.Label(form, text=label, style="Body.TLabel").grid(
+                row=row, column=0, sticky="w", padx=(0, GAP), pady=3
+            )
             entry = ttk.Entry(form, textvariable=self.values[key], width=15)
             entry.grid(row=row, column=1, sticky="ew", pady=3)
             self._controls.append((entry, "normal"))
-        self._button(side, "Generate ocean floor", self.generate).grid(row=3, column=0, sticky="ew")
-        self._button(side, "Export result…", self.export).grid(row=4, column=0, sticky="ew", pady=6)
-        ttk.Label(
+        self._button(side, "Generate ocean floor", self.generate, style="Accent").grid(
+            row=3, column=0, sticky="ew"
+        )
+        self._button(side, "Export result…", self.export).grid(row=4, column=0, sticky="ew",
+                                                               pady=6)
+        WrappingLabel(
             side,
             text="One editable margin profile for the selected waters. "
             "These values are hypotheses, not inferred age or measured depth. "
             "Mixed-layer depth and water transport are separate future models.",
-            wraplength=330,
-        ).grid(row=5, column=0, sticky="ew", pady=8)
-        ttk.Label(side, textvariable=self.summary, wraplength=330).grid(
-            row=6, column=0, sticky="ew", pady=8
+            style="Muted.TLabel",
+        ).grid(row=5, column=0, sticky="ew", pady=GAP)
+        WrappingLabel(side, textvariable=self.summary, style="Body.TLabel").grid(
+            row=6, column=0, sticky="ew", pady=GAP
         )
-        ttk.Label(side, textvariable=self.legend, wraplength=330).grid(row=7, column=0, sticky="ew")
-        right = ttk.Frame(main)
-        right.grid(row=0, column=1, sticky="nsew")
-        right.columnconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
-        toolbar = ttk.Frame(right)
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        self._button(toolbar, "Fit world", self.fit).pack(side="left")
-        choice = ttk.Combobox(
-            toolbar,
-            textvariable=self.layer,
-            values=("Connected water", *BATHYMETRY_LAYERS),
-            state="readonly",
-            width=23,
-        )
-        choice.pack(side="left", padx=8)
-        choice.bind("<<ComboboxSelected>>", lambda _e: self._schedule_draw())
-        self.canvas = tk.Canvas(right, background=OCEAN, highlightthickness=0, takefocus=True)
-        self.canvas.grid(row=1, column=0, sticky="nsew")
-        self.canvas.bind("<Configure>", lambda _e: self._schedule_draw())
-        self.canvas.bind("<Motion>", self._motion)
-        self.canvas.bind("<MouseWheel>", self._wheel)
-        for button in (2, 3):
-            self.canvas.bind(f"<ButtonPress-{button}>", self._pan_start)
-            self.canvas.bind(f"<B{button}-Motion>", self._pan_move)
-        self.canvas.bind("<Button-1>", lambda _e: self.canvas.focus_set())
-        ttk.Label(right, textvariable=self.inspection, wraplength=680).grid(
-            row=2, column=0, sticky="ew", pady=6
-        )
-        footer = ttk.Frame(self, padding=(14, 8))
-        footer.grid(row=2, column=0, sticky="ew")
-        footer.columnconfigure(0, weight=1)
-        self.status_label = ttk.Label(footer, textvariable=self.status, wraplength=1000)
-        self.status_label.grid(row=0, column=0, sticky="ew")
-        footer.bind(
-            "<Configure>", lambda e: self.status_label.configure(wraplength=max(300, e.width - 120))
-        )
-        self.cancel_button = ttk.Button(
-            footer, text="Cancel job", command=self.cancel, state="disabled"
-        )
-        self.cancel_button.grid(row=0, column=1, padx=8)
+
+    # Inputs
 
     def _selected(self, _event: tk.Event[tk.Misc] | None = None) -> None:
         if self.busy:
@@ -277,7 +279,7 @@ class BathymetryEditor(tk.Toplevel):
             self.status.set(
                 "Inputs changed. The previous result is stale; generate to apply changes."
             )
-        self._schedule_draw()
+        self.canvas.redraw()
 
     def inputs(self) -> BathymetryInputs:
         return BathymetryInputs(
@@ -306,103 +308,78 @@ class BathymetryEditor(tk.Toplevel):
         self._loading = False
         self._changed()
 
-    def _work(
+    # Jobs
+
+    def _work[T](
         self,
-        mode: _Mode,
         label: str,
-        action: Callable[[], _Event],
+        work: Callable[[Report, CancellationToken], T],
+        done: Callable[[T], None],
         after: Callable[[], None] | None = None,
+        *,
+        cancellable: bool = True,
     ) -> None:
         if self.busy:
             return
-        self._mode, self._after_job = mode, after
-        self._cancellation = None if mode == "save-input" else CancellationToken()
-        self.busy = True
         self._frozen_selection = self.tree.selection()
-        for control, _ in self._controls:
-            control["state"] = "disabled"
-        self.cancel_button.configure(state="normal" if self._cancellation else "disabled")
-        self.status.set(label)
 
-        def worker() -> None:
-            try:
-                self._events.put(action())
-            except Exception as error:
-                self._events.put(error)
-
-        threading.Thread(target=worker, name="world-bathymetry-worker", daemon=True).start()
-
-    def _progress(self, fraction: float, label: str) -> None:
-        self._events.put(f"{fraction:.0%} · {label}")
-
-    def _poll(self) -> None:
-        self._poll_id = None
-        if self._closed:
-            return
-        while not self._events.empty():
-            event = self._events.get_nowait()
-            if isinstance(event, str):
-                self.status.set(event)
-                continue
-            self.busy = False
-            self._cancellation = None
-            for control, state in self._controls:
-                control["state"] = state
-            self.cancel_button.configure(state="disabled")
-            after, self._after_job = self._after_job, None
-            if isinstance(event, Exception):
-                self.status.set(
-                    "Cancelled; previous result and inputs retained."
-                    if isinstance(event, GenerationCancelled)
-                    else str(event)
-                )
-                continue
-            if isinstance(event, BathymetryFile):
-                if self._mode == "open-input":
-                    self._apply_inputs(event.inputs)
-                self.file = event
-                self._saved_signature = self._signature()
-                self.status.set(
-                    f"Inputs {'opened' if self._mode == 'open-input' else 'saved'}: "
-                    f"{event.path.name}. Generate to apply them."
-                )
-            elif isinstance(event, BathymetryRun):
-                self.context = WorldContextRun(event.result.context, event.runtime)
-                if self._mode == "open-result":
-                    self._apply_inputs(event.result.inputs)
-                    self.file = None
-                    self._saved_signature = self._signature()
-                self.run = event
-                self._built_signature = self._signature()
-                self.layer.set("Ocean floor")
-                missing = event.result.unsampled_ocean_ids
-                self.summary.set(
-                    f"{event.result.sampled_cells:,} ocean samples · "
-                    f"{event.result.context.grid.shape[1]} x "
-                    f"{event.result.context.grid.shape[0]} cells. "
-                    f"{event.result.context.mixed_cells:,} mixed coast cells remain approximate. "
-                    + (
-                        "No centre samples in selected waters: "
-                        + ", ".join(map(str, missing))
-                        + ". "
-                        if missing
-                        else ""
-                    )
-                    + "Cell-centre elevations are not cell-average depth or transport capacity."
-                )
-                self.status.set(
-                    "Ocean-floor hypothesis ready. Coastline unchanged; "
-                    "numerical error does not measure geological uncertainty."
-                )
-            else:
-                self.status.set(f"Exported completed bathymetry: {event}")
+        def finished(value: T) -> None:
+            done(value)
             self._changed()
-            self._schedule_draw()
             if after:
                 after()
-                if self._closed:
-                    return
-        self._poll_id = self.after(80, self._poll)
+
+        self.jobs.start(label, work, finished, cancellable=cancellable)
+
+    def _job_state(self, state: JobState | None) -> None:
+        self.status_bar.show(state)
+        busy = state is not None
+        if busy != self._was_busy:
+            self._was_busy = busy
+            for control, normal in self._controls:
+                control["state"] = "disabled" if busy else normal
+
+    def _job_failed(self, error: Exception) -> None:
+        self.status.set(str(error))
+
+    def _job_cancelled(self) -> None:
+        self.status.set("Cancelled; previous result and inputs retained.")
+
+    def _show_run(self, run: BathymetryRun, *, opened: bool) -> None:
+        self.context = WorldContextRun(run.result.context, run.runtime)
+        if opened:
+            self._apply_inputs(run.result.inputs)
+            self.file = None
+            self._saved_signature = self._signature()
+        self.run = run
+        self._built_signature = self._signature()
+        self.layer.set("Ocean floor")
+        missing = run.result.unsampled_ocean_ids
+        self.summary.set(
+            f"{run.result.sampled_cells:,} ocean samples · "
+            f"{run.result.context.grid.shape[1]} x "
+            f"{run.result.context.grid.shape[0]} cells. "
+            f"{run.result.context.mixed_cells:,} mixed coast cells remain approximate. "
+            + (
+                "No centre samples in selected waters: " + ", ".join(map(str, missing)) + ". "
+                if missing
+                else ""
+            )
+            + "Cell-centre elevations are not cell-average depth or transport capacity."
+        )
+        self.status.set(
+            "Ocean-floor hypothesis ready. Coastline unchanged; "
+            "numerical error does not measure geological uncertainty."
+        )
+
+    def _show_file(self, file: BathymetryFile, *, opened: bool) -> None:
+        if opened:
+            self._apply_inputs(file.inputs)
+        self.file = file
+        self._saved_signature = self._signature()
+        self.status.set(
+            f"Inputs {'opened' if opened else 'saved'}: {file.path.name}. Generate to apply them."
+        )
 
     def generate(self) -> None:
         if self.busy:
@@ -414,11 +391,11 @@ class BathymetryEditor(tk.Toplevel):
             return
         context = self.context
         self._work(
-            "generate",
-            "Preparing the ocean-depth scenario…",
-            lambda: generate_bathymetry(
-                inputs, context, self._progress, cancellation=self._cancellation
+            "Preparing the ocean-depth scenario",
+            lambda report, token: generate_bathymetry(
+                inputs, context, report, cancellation=token
             ),
+            lambda run: self._show_run(run, opened=False),
         )
 
     def save(self, *, save_as: bool = False, after: Callable[[], None] | None = None) -> None:
@@ -443,19 +420,21 @@ class BathymetryEditor(tk.Toplevel):
         except (ValueError, OSError) as error:
             self.status.set(str(error))
             return
-        target = path
+        target, context = path, self.context
         self._work(
-            "save-input",
-            "Saving portable inputs…",
-            lambda: save_bathymetry_inputs(inputs, self.context, target, digest),
+            "Saving portable inputs",
+            lambda _report, _token: save_bathymetry_inputs(inputs, context, target, digest),
+            lambda file: self._show_file(file, opened=False),
             after,
+            cancellable=False,
         )
 
     def load_inputs(self, path: Path) -> None:
+        context = self.context
         self._work(
-            "open-input",
-            "Opening bathymetry inputs…",
-            lambda: open_bathymetry_inputs(path, self.context, cancellation=self._cancellation),
+            "Opening bathymetry inputs",
+            lambda _report, token: open_bathymetry_inputs(path, context, cancellation=token),
+            lambda file: self._show_file(file, opened=True),
         )
 
     def choose_inputs(self) -> None:
@@ -473,12 +452,15 @@ class BathymetryEditor(tk.Toplevel):
     def load_result(self, path: Path) -> None:
         context = self.context
 
-        def operation() -> BathymetryRun:
-            result = open_bathymetry(path, cancellation=self._cancellation)
+        def operation(_report: Report, token: CancellationToken) -> BathymetryRun:
+            result = open_bathymetry(path, cancellation=token)
             match_context(result.result.inputs, context)
             return result
 
-        self._work("open-result", "Verifying bathymetry and its geographic dependency…", operation)
+        self._work(
+            "Verifying bathymetry and its geographic dependency", operation,
+            lambda run: self._show_run(run, opened=True),
+        )
 
     def choose_result(self) -> None:
         def choose() -> None:
@@ -508,14 +490,13 @@ class BathymetryEditor(tk.Toplevel):
             return
         run, target = self.run, Path(selected)
         self._work(
-            "export",
-            "Exporting a new result with its geographic source…",
-            lambda: export_bathymetry(run, target, cancellation=self._cancellation),
+            "Exporting a new result with its geographic source",
+            lambda _report, token: export_bathymetry(run, target, cancellation=token),
+            lambda path: self.status.set(f"Exported completed bathymetry: {path}"),
         )
 
     def cancel(self) -> None:
-        if self._cancellation:
-            self._cancellation.cancel()
+        self.jobs.cancel()
 
     def guard(self, action: Callable[[], None]) -> None:
         if self.busy:
@@ -533,27 +514,13 @@ class BathymetryEditor(tk.Toplevel):
         elif answer is False:
             action()
 
-    def _size(self) -> tuple[int, int]:
-        return max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height())
+    # Map
 
     def fit(self) -> None:
-        self.viewport.fit()
-        self._schedule_draw()
+        self.canvas.fit()
 
-    def _schedule_draw(self) -> None:
-        if not self._closed and self._draw_id is None:
-            self._draw_id = self.after(30, self._draw)
-
-    def _draw(self) -> None:
-        self._draw_id = None
-        self.canvas.delete("all")
+    def _render(self, viewport: MapViewport, size: tuple[int, int]) -> Image.Image:
         if self.run is not None and self.layer.get() in BATHYMETRY_LAYERS:
-            preview = render_bathymetry(
-                self.run.result,
-                self.viewport,
-                self._size(),
-                cast(BathymetryLayer, self.layer.get()),
-            )
             depth = self.run.result.inputs.settings.basin_depth_m
             if self.layer.get() == "Ocean floor":
                 legend = f"Light: 0 m · dark blue: -{depth:g} m. Green: land. "
@@ -562,38 +529,28 @@ class BathymetryEditor(tk.Toplevel):
             else:
                 legend = "Orange: mixed/split or subcell geography. "
             self.legend.set(legend + "Grey: unselected water. Zoom does not add samples.")
-        else:
-            preview = render_world_context(
-                self.context.context, self.viewport, self._size(), "Connected water"
+            return render_bathymetry(
+                self.run.result, viewport, size, cast(BathymetryLayer, self.layer.get())
             )
-            self.legend.set(
-                "Colours distinguish connected water regions. Hover shows the "
-                "dominant cell ID; mixed cells may contain other waters."
-            )
-        with preview:
-            self._photo = ImageTk.PhotoImage(preview, master=self)
-        self.canvas.create_image(0, 0, image=self._photo, anchor="nw")
-        if self.run is not None and not self.current:
-            self.canvas.create_rectangle(10, 10, 440, 39, fill="#684629", outline="")
-            self.canvas.create_text(
-                20,
-                24,
-                text="PREVIOUS RESULT · Generate to apply the edited inputs",
-                fill="#fff2cb",
-                anchor="w",
-            )
-
-    def _motion(self, event: tk.Event[tk.Misc]) -> None:
-        grid = self.context.context.grid
-        left, top, right, bottom = self.viewport.rect(
-            self._size(), (grid.frame.width, grid.frame.height)
+        self.legend.set(
+            "Colours distinguish connected water regions. Hover shows the "
+            "dominant cell ID; mixed cells may contain other waters."
         )
-        if not left <= event.x <= right or not top <= event.y <= bottom:
+        return render_world_context(self.context.context, viewport, size, CONNECTED)
+
+    def _overlay(self, canvas: FlatMapCanvas, _rect: Rect) -> None:
+        if self.run is not None and not self.current:
+            map_label(canvas, 12, 12, STALE)
+
+    def _hover(self, point: tuple[float, float] | None) -> None:
+        if point is None:
+            self.inspection.set(HINT)
             return
+        grid = self.context.context.grid
         rows, columns = grid.shape
-        row = min(rows - 1, int((event.y - top) / (bottom - top) * rows))
-        column = min(columns - 1, int((event.x - left) / (right - left) * columns))
-        if self.run and self.layer.get() != "Connected water":
+        row = min(rows - 1, int(point[1] * rows))
+        column = min(columns - 1, int(point[0] * columns))
+        if self.run and self.layer.get() != CONNECTED:
             result = self.run.result
             body = int(result.centre_water_body[row, column])
             bed = float(result.bed_elevation_m[row, column])
@@ -611,39 +568,12 @@ class BathymetryEditor(tk.Toplevel):
             f"{text} · geographic support flags {flags}"
         )
 
-    def _wheel(self, event: tk.Event[tk.Misc]) -> None:
-        frame = self.context.context.grid.frame
-        self.viewport.zoom_at(
-            1.2 if event.delta > 0 else 1 / 1.2,
-            (event.x, event.y),
-            self._size(),
-            (frame.width, frame.height),
-        )
-        self._schedule_draw()
-
-    def _pan_start(self, event: tk.Event[tk.Misc]) -> None:
-        self._pan = (event.x, event.y)
-
-    def _pan_move(self, event: tk.Event[tk.Misc]) -> None:
-        if self._pan:
-            frame = self.context.context.grid.frame
-            self.viewport.pan(
-                (event.x - self._pan[0], event.y - self._pan[1]),
-                self._size(),
-                (frame.width, frame.height),
-            )
-            self._pan = (event.x, event.y)
-            self._schedule_draw()
-
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
-        self.cancel()
-        for identifier in (self._poll_id, self._draw_id):
-            if identifier:
-                self.after_cancel(identifier)
-        self._photo = None
+        self.jobs.close()
+        self.pump.close()
         self.grab_release()
         if self.on_close:
             self.on_close(self.file)

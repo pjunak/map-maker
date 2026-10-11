@@ -53,5 +53,6 @@ Tk thread, so the app froze for 0.2–2 s on common actions. Nested detail level
 - Detail levels offer only the themes `region_views` can render: atlas and
   parchment (with climate), relief and topographic. Other themes stay world-level
   until they render from shared map fields.
-- The geology and bathymetry editors remain separate windows with their own
-  canvases. They can move to `FlatMapCanvas` when next reworked.
+- The geology and bathymetry editors stay separate windows (they edit their own
+  documents) but use the same map canvas, legend and readout strip, job runner and
+  status bar.

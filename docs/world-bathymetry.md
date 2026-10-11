@@ -16,9 +16,10 @@ change land terrain, drainage, climate or erosion.
    or calibrated values for your world.
 4. Choose **Generate ocean floor**. An older producer or changed row count triggers
    fresh geographic context. Generation and reopening run in the background and
-   support **Cancel job**; the previous result stays available on failure/cancel.
+   show progress and **Cancel** in the status bar; the previous result stays available
+   on failure/cancel.
 5. Compare **Ocean floor**, **Distance error** and **Resolution support**. Hover
-   reads sample values. Wheel zoom, middle/right drag and **Fit world** aid
+   reads sample values under the map. Wheel zoom, drag to pan and **Fit** aid
    inspection; zoom does not generate more samples.
 6. **Save inputs** writes a separate `.dmbathy.json` recipe. **Export result…**
    asks for a new directory and includes a complete geographic dependency.

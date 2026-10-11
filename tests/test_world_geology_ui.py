@@ -217,8 +217,8 @@ def test_recipe_open_retains_source_and_context_and_rejects_foreign_identity(
     wait(editor)
     assert len(editor.recipe.provinces) == 2 and not editor.dirty
     editor.layer.set("Shore distance")
-    editor._draw()
-    assert editor._photo is not None and view.context_run is run
+    editor.canvas.draw_now()
+    assert editor.canvas.photo is not None and view.context_run is run
     current = editor.recipe
     path = tmp_path / "bad.dmgeology.json"
     text = (EXAMPLES / "four-shores.dmgeology.json").read_text(encoding="utf-8")
@@ -256,20 +256,21 @@ def test_canvas_drawing_unwraps_the_seam_and_preserves_zoom(app: ui.TerrainApp) 
     editor.update()
     editor.start_drawing()
     frame = editor.world.project.frame
-    left, top, right, bottom = editor.viewport.rect(editor._size(), (frame.width, frame.height))
     for x, y in ((365, 92), (15, 92), (15, 113), (365, 113)):
-        event: tk.Event[tk.Misc] = tk.Event()
-        event.x = round(left + (x - frame.bounds[0]) / frame.width * (right - left))
-        event.y = round(top + (y - frame.bounds[1]) / frame.height * (bottom - top))
-        editor._pick(event)
+        cx, cy = editor.canvas.to_canvas(
+            (x - frame.bounds[0]) / frame.width, (y - frame.bounds[1]) / frame.height
+        )
+        point = editor.canvas.to_map(round(cx), round(cy))
+        assert point is not None
+        editor._click(point, tk.Event())
     assert editor._draft is not None and max(x for x, _ in editor._draft) > frame.bounds[2]
     editor.apply()
     wait(editor)
     assert len(editor.recipe.provinces) == 1
     assert editor.coverage is not None
     assert editor.coverage.regions[0].area_km2 > 0
-    editor.viewport.zoom_at(2, (500, 300), editor._size(), (frame.width, frame.height))
-    editor._draw()
+    editor.canvas.zoom_by(2, (500, 300))
+    editor.canvas.draw_now()
     assert editor.viewport.zoom == 2
     editor.start_drawing(redraw=True)
     editor.revert()

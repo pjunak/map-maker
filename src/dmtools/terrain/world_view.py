@@ -46,7 +46,7 @@ from dmtools.terrain.map_probes import (
     window_position,
 )
 from dmtools.terrain.pipeline.control import CancellationToken
-from dmtools.terrain.ui_components import SegmentedChoice, WrappingLabel
+from dmtools.terrain.ui_components import MapInfoStrip, SegmentedChoice
 from dmtools.terrain.ui_jobs import JobRunner, LatestWorker, Report
 from dmtools.terrain.ui_style import (
     FONT_MAP_LABEL,
@@ -67,7 +67,6 @@ AUTO_RADIUS = "Auto"
 # Radius choices when zooming from each level: the world, then region and province.
 REGION_RADII_KM = ((150, 300, 600, 1200), (30, 75, 150, 300), (6, 15, 30, 60))
 SAVE_PIXELS = 2048
-INFO_HEIGHT = 92
 
 SOURCE_LEGEND = (
     "Your source geography: continent colours show assignments. Generate context or a "
@@ -274,23 +273,7 @@ class WorldMapView(ttk.Frame):
         for canvas in (self.flat, self.globe):
             canvas.bind("<Escape>", lambda _e: self.escape())
 
-        # Fixed height, so a longer readout never resizes (and redraws) the map.
-        info = ttk.Frame(self, style="Panel.TFrame", padding=(GAP, GAP // 2, GAP, GAP),
-                         height=INFO_HEIGHT)
-        info.grid(row=3, column=0, sticky="ew")
-        info.grid_propagate(False)
-        info.columnconfigure(0, weight=3, uniform="info")
-        info.columnconfigure(1, weight=2, uniform="info")
-        ttk.Label(info, text="Legend", style="Section.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(info, text="Under the cursor", style="Section.TLabel").grid(
-            row=0, column=1, sticky="w", padx=(2 * GAP, 0)
-        )
-        WrappingLabel(info, textvariable=self.legend, style="Muted.TLabel").grid(
-            row=1, column=0, sticky="new"
-        )
-        WrappingLabel(info, textvariable=self.inspection, style="Readout.TLabel").grid(
-            row=1, column=1, sticky="new", padx=(2 * GAP, 0)
-        )
+        MapInfoStrip(self, self.legend, self.inspection).grid(row=3, column=0, sticky="ew")
         self._rebuild_crumbs()
 
     # Data from the workspace

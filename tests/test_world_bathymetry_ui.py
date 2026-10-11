@@ -92,15 +92,15 @@ def test_generate_stale_export_and_parent_source_isolation(
     previous = editor.run
     for layer in ("Connected water", "Ocean floor", "Distance error", "Resolution support"):
         editor.layer.set(layer)
-        editor._draw()
-        assert editor._photo is not None
+        editor.canvas.draw_now()
+        assert editor.canvas.photo is not None
     editor.values["basin_depth_m"].set("5000")
     assert editor.dirty and not editor.current and editor.run is previous
     path = tmp_path / "ocean"
     monkeypatch.setattr(module.filedialog, "asksaveasfilename", reply(str(path)))
     editor.export()
     assert not editor.busy and not path.exists()
-    editor._draw()
+    editor.canvas.draw_now()
     assert any(
         "PREVIOUS RESULT" in cast(str, editor.canvas.itemcget(item, "text"))
         for item in editor.canvas.find_all()
