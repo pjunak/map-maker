@@ -33,6 +33,7 @@ from dmtools.terrain.application.planet import PlanetRun
 from dmtools.terrain.application.planet_region import RegionRun
 from dmtools.terrain.application.region_views import region_themes, render_region_theme
 from dmtools.terrain.application.world_context import WorldContextRun
+from dmtools.terrain.domain.planet import REGION_LEVEL_MAX_RADIUS_KM, REGION_LEVEL_NAMES
 from dmtools.terrain.domain.world import WorldAssignment, WorldFrame, WorldSource
 from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
 from dmtools.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, Rect
@@ -41,6 +42,8 @@ from dmtools.terrain.map_probes import (
     context_readout,
     lonlat_text,
     region_readout,
+    window_lonlat,
+    window_position,
 )
 from dmtools.terrain.pipeline.control import CancellationToken
 from dmtools.terrain.ui_components import SegmentedChoice, WrappingLabel
@@ -61,8 +64,8 @@ EXPOSURE_LAYERS = ("Water exposure", "Exposure support")
 FLAT = "equirectangular"
 GRATICULE_STEP_DEG = 30
 AUTO_RADIUS = "Auto"
-REGION_RADII = (AUTO_RADIUS, "150 km", "300 km", "600 km", "1,200 km")
-AUTO_RADIUS_KM = (150.0, 1200.0)
+# Radius choices when zooming from each level: the world, then region and province.
+REGION_RADII_KM = ((150, 300, 600, 1200), (30, 75, 150, 300), (6, 15, 30, 60))
 SAVE_PIXELS = 2048
 INFO_HEIGHT = 92
 
@@ -95,8 +98,8 @@ HINTS = {
     "flat": "Drag to pan · wheel to zoom · F fits the map",
     "globe": "Drag to turn the globe",
     "polar": "Drag to turn · wheel to zoom",
-    "pick": "Click the map to build regional detail there · Esc cancels",
-    "region": "Drag to pan · wheel to zoom · World (above) returns to the whole planet",
+    "pick": "Click the map to build {name} detail there · Esc cancels",
+    "region": "Drag to pan · wheel to zoom · the path above returns to larger maps",
 }
 
 
@@ -124,8 +127,11 @@ class RegionLevel:
 
     @property
     def title(self) -> str:
+        """Short breadcrumb name: level and centre (the scale bar shows the size)."""
         lon, lat = self.run.window.centre
-        return f"Region {lonlat_text(lon, lat)} · {self.run.window.radius_m / 1000:,.0f} km"
+        name = REGION_LEVEL_NAMES[self.run.level - 1].title()
+        return (f"{name} {abs(lat):.1f}°{'N' if lat >= 0 else 'S'} "
+                f"{abs(lon):.1f}°{'E' if lon >= 0 else 'W'}")
 
 
 def map_label(
@@ -151,7 +157,7 @@ class WorldMapView(ttk.Frame):
         jobs: JobRunner,
         *,
         pick_shape: Callable[[tuple[float, float], bool], None],
-        request_region: Callable[[float, float, float], None],
+        request_region: Callable[[float, float, float, int], None],
         export_region: Callable[[RegionRun, Path], None],
         status: Callable[[str], None],
     ) -> None:
@@ -206,7 +212,7 @@ class WorldMapView(ttk.Frame):
         )
         self.save_button.pack(side="right", padx=(GAP // 2, 0))
         self.radius_input = ttk.Combobox(
-            tools, textvariable=self.region_radius, values=REGION_RADII, state="readonly",
+            tools, textvariable=self.region_radius, state="readonly",
             width=8,
         )
         self.radius_input.pack(side="right", padx=(GAP // 2, 0))
@@ -315,12 +321,17 @@ class WorldMapView(ttk.Frame):
         self.set_layer()
 
     def add_region(self, run: RegionRun, image: Image.Image, theme_id: str) -> None:
-        """Show a new regional window below the world map."""
+        """Show a new detail window at its level, below the maps it was picked from."""
         level = RegionLevel(run, region_themes(run.window), theme_id)
         level.images[theme_id] = ImagePyramid(image)
-        self.levels = [level]  # deeper levels (province, local) will extend this path
+        shown = self.display_layer.get()  # keep the map the user was looking at
+        if self.level:
+            self.levels[self.level - 1].viewport = self.flat.viewport
+        self.levels = [*self.levels[: run.level - 1], level]
         self.picking.set(False)
-        self.go_to_level(1)
+        self.go_to_level(run.level)
+        if shown != self.display_layer.get() and shown in self.layers_for(PLANET):
+            self.set_layer(shown)
 
     def _drop_levels(self) -> None:
         if self.level:
@@ -393,6 +404,8 @@ class WorldMapView(ttk.Frame):
         if self.level == 0:
             self._world_viewport = self.flat.viewport
             self._world_layer = self.display_layer.get()
+        elif self.level <= len(self.levels):
+            self.levels[self.level - 1].viewport = self.flat.viewport
         self.level = index
         if index == 0:
             self.flat.viewport = self._world_viewport
@@ -474,11 +487,20 @@ class WorldMapView(ttk.Frame):
             self.excluded_toggle.pack(side="left", padx=(GAP, 0))
         else:
             self.excluded_toggle.pack_forget()
-        can_pick = world and self.planet_run is not None and not busy
+        deepest = self.level >= len(REGION_LEVEL_NAMES)
+        can_pick = self.planet_run is not None and not busy and not deepest
         if not can_pick and self.picking.get():
             self.picking.set(False)
-        self.pick_button.configure(state="normal" if can_pick else "disabled")
-        self.radius_input.configure(state="readonly" if can_pick else "disabled")
+        target = REGION_LEVEL_NAMES[min(self.level, len(REGION_LEVEL_NAMES) - 1)]
+        self.pick_button.configure(
+            state="normal" if can_pick else "disabled", text=f"Zoom to {target}"
+        )
+        choices = (AUTO_RADIUS, *(f"{r:,} km" for r in REGION_RADII_KM[min(self.level, 2)]))
+        if self.region_radius.get() not in choices:
+            self.region_radius.set(AUTO_RADIUS)
+        self.radius_input.configure(
+            values=choices, state="readonly" if can_pick else "disabled"
+        )
         self.save_button.configure(
             state="normal" if self.scene is not None and not busy else "disabled"
         )
@@ -492,7 +514,8 @@ class WorldMapView(ttk.Frame):
 
     def _hint(self) -> str:
         if self.picking.get():
-            return HINTS["pick"] + f" · radius {self.radius_km():,.0f} km"
+            name = REGION_LEVEL_NAMES[min(self.level, len(REGION_LEVEL_NAMES) - 1)]
+            return HINTS["pick"].format(name=name) + f" · radius {self.radius_km():,.0f} km"
         if self.level:
             return HINTS["region"]
         if self._uses_globe():
@@ -542,11 +565,18 @@ class WorldMapView(ttk.Frame):
         choice = self.region_radius.get()
         if choice != AUTO_RADIUS:
             return float(choice.removesuffix(" km").replace(",", ""))
-        scene = self.scene
-        radius = scene.frame.radius_km if scene and scene.frame else 6371.0
+        choices = REGION_RADII_KM[min(self.level, 2)]
+        low = float(choices[0])
+        high = min(float(choices[-1]), REGION_LEVEL_MAX_RADIUS_KM[min(self.level, 2)])
         zoom = 1.0 if self._uses_globe() else self.flat.viewport.zoom
         # About half the visible width of the map.
-        return min(AUTO_RADIUS_KM[1], max(AUTO_RADIUS_KM[0], pi * radius / 2 / zoom))
+        if self.level:
+            half = self.levels[self.level - 1].run.window.radius_m / 1000 / zoom
+        else:
+            scene = self.scene
+            radius = scene.frame.radius_km if scene and scene.frame else 6371.0
+            half = pi * radius / 2 / zoom
+        return min(high, max(low, half))
 
     # Drawing
 
@@ -639,6 +669,15 @@ class WorldMapView(ttk.Frame):
                 if self.picking.get() and self._pick_at is not None:
                     self._draw_circle(canvas, scene, *self._pick_at, self.radius_km(),
                                       MAP_HIGHLIGHT, width=2)
+        if self.level:
+            current = self.levels[self.level - 1]
+            for child in self.levels[self.level:]:
+                lon, lat = child.run.window.centre
+                self._draw_local_circle(canvas, current, lon, lat,
+                                        child.run.window.radius_m / 1000, MAP_TEXT)
+            if self.picking.get() and self._pick_at is not None:
+                self._draw_local_circle(canvas, current, *self._pick_at, self.radius_km(),
+                                        MAP_HIGHLIGHT)
         canvas.create_rectangle(left, top, right, bottom, outline=MAP_FRAME)
         if self.level:
             self._draw_scale(canvas, self.levels[self.level - 1])
@@ -683,6 +722,19 @@ class WorldMapView(ttk.Frame):
             previous = u
         if len(segment) >= 4:
             canvas.create_line(*segment, fill=colour, width=width)
+
+    @staticmethod
+    def _draw_local_circle(
+        canvas: FlatMapCanvas, level: RegionLevel, lon: float, lat: float, radius_km: float,
+        colour: str,
+    ) -> None:
+        """A circle on a regional map (distances from its centre are true)."""
+        window = level.run.window
+        u, v = window_position(window, lon, lat)
+        r = radius_km * 1000 / (2 * window.radius_m)
+        x0, y0 = canvas.to_canvas(u - r, v - r)
+        x1, y1 = canvas.to_canvas(u + r, v + r)
+        canvas.create_oval(x0, y0, x1, y1, outline=colour, width=2)
 
     @staticmethod
     def _draw_scale(canvas: FlatMapCanvas, level: RegionLevel) -> None:
@@ -738,14 +790,21 @@ class WorldMapView(ttk.Frame):
             self.inspection.set(self._hint())
             return
         text = self.describe_at(*point)
-        if self.picking.get() and self.level == 0 and self.scene and self.scene.frame:
-            x0, y0, x1, y1 = self.scene.bounds
-            self._pick_at = self.scene.frame.source_to_lonlat(
-                (x0 + point[0] * (x1 - x0), y0 + point[1] * (y1 - y0))
-            )
+        if self.picking.get():
+            self._pick_at = self._lonlat_at(*point)
             self.flat.draw_overlay()
             text = f"{text}\n{self._hint()}"
         self.inspection.set(text)
+
+    def _lonlat_at(self, u: float, v: float) -> tuple[float, float] | None:
+        """Longitude and latitude at a normalized flat-map position, if known."""
+        if self.level:
+            return window_lonlat(self.levels[self.level - 1].run.window, u, v)
+        scene = self.scene
+        if scene is None or scene.frame is None:
+            return None
+        x0, y0, x1, y1 = scene.bounds
+        return scene.frame.source_to_lonlat((x0 + u * (x1 - x0), y0 + v * (y1 - y0)))
 
     def _hover_globe(self, lonlat: tuple[float, float] | None) -> None:
         if lonlat is None or self.probe is None:
@@ -755,15 +814,17 @@ class WorldMapView(ttk.Frame):
         self.inspection.set(f"{text}\n{self._hint()}" if self.picking.get() else text)
 
     def _click_flat(self, point: tuple[float, float], event: tk.Event[tk.Misc]) -> None:
+        if self.picking.get():
+            lonlat = self._lonlat_at(*point)
+            if lonlat is not None:
+                self._pick(*lonlat)
+            return
         scene = self.scene
-        if self.level or scene is None:
+        if self.level or scene is None or self.group.get() != SOURCE:
             return
         x0, y0, x1, y1 = scene.bounds
         position = (x0 + point[0] * (x1 - x0), y0 + point[1] * (y1 - y0))
-        if self.picking.get() and scene.frame is not None:
-            self._pick(*scene.frame.source_to_lonlat(position))
-        elif self.group.get() == SOURCE:
-            self._pick_shape(position, bool(int(event.state) & 0x0004))
+        self._pick_shape(position, bool(int(event.state) & 0x0004))
 
     def _click_globe(self, lonlat: tuple[float, float], _event: tk.Event[tk.Misc]) -> None:
         if self.picking.get():
@@ -773,7 +834,7 @@ class WorldMapView(ttk.Frame):
         radius = self.radius_km()
         self.picking.set(False)
         self._picking_changed()
-        self._request_region(lon, lat, radius)
+        self._request_region(lon, lat, radius, self.level + 1)
 
     # Saving
 

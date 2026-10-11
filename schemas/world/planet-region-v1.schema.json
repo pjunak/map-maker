@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": [
     "schema", "version", "status", "algorithm", "parent_build_sha256", "centre_lonlat_deg",
-    "radius_km", "pixels", "settings", "tile_store", "tiles", "crs_wkt", "outputs",
+    "radius_km", "level", "pixels", "settings", "tile_store", "tiles", "crs_wkt", "outputs",
     "region_sha256"
   ],
   "properties": {
@@ -19,6 +19,7 @@
       "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2
     },
     "radius_km": { "type": "number", "exclusiveMinimum": 0 },
+    "level": { "type": "integer", "minimum": 1, "maximum": 3 },
     "pixels": { "type": "integer", "minimum": 64 },
     "settings": {
       "type": "object",

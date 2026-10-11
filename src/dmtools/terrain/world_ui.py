@@ -42,7 +42,7 @@ from dmtools.terrain.application.world_terrain import (
     WorldTerrainCreated,
     create_world_terrain_project,
 )
-from dmtools.terrain.domain.planet import PlanetSettings
+from dmtools.terrain.domain.planet import REGION_LEVEL_NAMES, PlanetSettings
 from dmtools.terrain.domain.world import (
     WorldAssignment,
     WorldContinent,
@@ -712,8 +712,10 @@ class WorldWorkspace(ttk.Frame):
             ),
         )
 
-    def zoom_region(self, longitude: float, latitude: float, radius_km: float) -> None:
-        """Build regional detail around a point of the current planet and show it."""
+    def zoom_region(
+        self, longitude: float, latitude: float, radius_km: float, level: int = 1
+    ) -> None:
+        """Build detail of ``level`` (1 region, 2 province, 3 local) around a point."""
         run = self.planet_run
         if self.busy or run is None:
             return
@@ -724,7 +726,8 @@ class WorldWorkspace(ttk.Frame):
             parent = RegionalParent.from_result(run.result)
             region = region_window(
                 parent, identity, user_tile_cache(), (longitude, latitude), radius_km,
-                pixels=REGION_PIXELS, workers=workers, progress=report, cancellation=token,
+                level=level, pixels=REGION_PIXELS, workers=workers, progress=report,
+                cancellation=token,
             )
             report(0.96, "Drawing the map")
             theme = region_themes(region.window)[0].id
@@ -737,11 +740,14 @@ class WorldWorkspace(ttk.Frame):
             region, image, theme = ready
             self.map_view.add_region(region, image, theme)
             self.status.set(
-                f"Regional detail ready from {len(region.window.tiles)} tiles; tiles are "
-                "cached for later zooms."
+                f"{REGION_LEVEL_NAMES[level - 1].title()} detail ready from "
+                f"{len(region.window.tiles)} tiles; tiles are cached for later zooms."
             )
 
-        self._run(f"Generating regional detail ({radius_km:,.0f} km radius)", work, done)
+        self._run(
+            f"Generating {REGION_LEVEL_NAMES[level - 1]} detail ({radius_km:,.0f} km radius)",
+            work, done,
+        )
 
     def export_region(self, run: RegionRun, destination: Path) -> None:
         if self.busy:

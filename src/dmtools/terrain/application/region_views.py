@@ -4,21 +4,33 @@ from collections.abc import Callable
 
 from PIL import Image
 
-from dmtools.terrain.adapters.map_views import THEME_BY_ID, MapTheme
-from dmtools.terrain.adapters.planet_region import RegionWindow, window_image, window_topographic
+from dmtools.terrain.adapters.map_views import THEMES, MapTheme
+from dmtools.terrain.adapters.planet_region import (
+    RegionWindow,
+    window_image,
+    window_parchment,
+    window_topographic,
+)
 
 _RENDERERS: dict[str, Callable[[RegionWindow], Image.Image]] = {
     "atlas": lambda window: window_image(window, atlas=True),
     "relief": lambda window: window_image(window, atlas=False),
     "topographic": window_topographic,
+    "parchment": lambda window: _required(window_parchment(window)),
 }
+
+
+def _required(image: Image.Image | None) -> Image.Image:
+    if image is None:
+        raise ValueError("This map needs the planet's climate.")
+    return image
 
 
 def region_themes(window: RegionWindow) -> tuple[MapTheme, ...]:
     """Registry themes this window can show, in registry order."""
     return tuple(
-        THEME_BY_ID[theme_id] for theme_id in _RENDERERS
-        if not (THEME_BY_ID[theme_id].needs_climate and window.climate is None)
+        theme for theme in THEMES
+        if theme.id in _RENDERERS and not (theme.needs_climate and window.climate is None)
     )
 
 

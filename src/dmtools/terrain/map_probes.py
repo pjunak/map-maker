@@ -1,11 +1,11 @@
 """Plain-language readouts of what is under the cursor on each kind of map."""
 
-from math import asin, cos, isfinite, radians, sin
+from math import asin, atan2, cos, degrees, isfinite, radians, sin
 
 import numpy as np
 from scipy.spatial import KDTree  # pyright: ignore[reportMissingTypeStubs]
 
-from dmtools.terrain.adapters.planet_region import RegionWindow
+from dmtools.terrain.adapters.planet_region import RegionWindow, forward_aeqd
 from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_koppen import KOPPEN, KOPPEN_NAMES
@@ -130,10 +130,31 @@ def context_readout(context: WorldContext, layer: str, bearing: str, u: float, v
     )
 
 
-def region_readout(window: RegionWindow, u: float, v: float) -> str:
-    """Offset from the window centre and the surface at normalized position (u, v)."""
+def _pixel(window: RegionWindow, u: float, v: float) -> tuple[int, int]:
     row = min(window.pixels - 1, max(0, int(v * window.pixels)))
-    column = min(window.pixels - 1, max(0, int(u * window.pixels)))
+    return row, min(window.pixels - 1, max(0, int(u * window.pixels)))
+
+
+def window_lonlat(window: RegionWindow, u: float, v: float) -> tuple[float, float]:
+    """Longitude and latitude (degrees) at normalized window position (u, v)."""
+    row, column = _pixel(window, u, v)
+    x, y, z = (float(c) for c in window.points[row * window.pixels + column])
+    return degrees(atan2(y, x)), degrees(asin(max(-1.0, min(1.0, z))))
+
+
+def window_position(window: RegionWindow, lon: float, lat: float) -> tuple[float, float]:
+    """Normalized window position (u across, v down) of a longitude and latitude."""
+    phi, lam = radians(lat), radians(lon)
+    point = np.array([[cos(phi) * cos(lam), cos(phi) * sin(lam), sin(phi)]])
+    x, y = forward_aeqd(point, *window.centre, window.planet_m)[0]
+    return (float(x) + window.radius_m) / (2 * window.radius_m), (
+        window.radius_m - float(y)
+    ) / (2 * window.radius_m)
+
+
+def region_readout(window: RegionWindow, u: float, v: float) -> str:
+    """Place, offset from the window centre and the surface at normalized position (u, v)."""
+    row, column = _pixel(window, u, v)
     value = float(window.elevation_m[row, column])
     if not np.isfinite(value):
         return "Outside the region"
@@ -142,4 +163,5 @@ def region_readout(window: RegionWindow, u: float, v: float) -> str:
     where = f"{x / 1000:+,.0f} km E · {y / 1000:+,.0f} km N of centre"
     surface = "ground" if window.land[row, column] else "sea floor"
     lake = " · lake" if window.lakes[row, column] else ""
-    return f"{where} · {surface} {value:,.0f} m{lake}"
+    place = lonlat_text(*window_lonlat(window, u, v))
+    return f"{place}  ·  {where} · {surface} {value:,.0f} m{lake}"

@@ -307,3 +307,87 @@ def test_sand_seas_need_dry_flat_low_ground() -> None:
     assert dry.max() > 0.5
     assert np.all(erg_cover(points, 6.0e6, climate(30.0), steep, low) < 1e-9)
     assert np.all(erg_cover(points, 6.0e6, climate(900.0), flat, low) < 1e-9)
+
+
+TINY_LEVELS = (
+    RegionalSettings(
+        spacing_km=30, process_area_km2=3_000, calibration_iterations=1, tile_km=1500,
+        halo_km=200,
+    ),
+    RegionalSettings(
+        spacing_km=10, process_area_km2=300, calibration_iterations=2, tile_km=300,
+        halo_km=60,
+    ),
+)
+
+
+def test_detail_levels_have_their_own_seeds() -> None:
+    from dmtools.terrain.domain.planet import REGION_LEVELS, tile_stage_prefix
+    from dmtools.terrain.domain.seeds import stage_seed
+    from dmtools.terrain.pipeline.planet_tiles import tile_seed
+
+    assert tile_stage_prefix(1) == "planet.tile."
+    assert len({tile_stage_prefix(level) for level in (1, 2, 3)}) == 3
+    assert len({tile_seed(7, 5, level) for level in (1, 2, 3)}) == 3
+    assert tile_seed(7, 5) == stage_seed(7, "planet.tile.5")
+    spacings = [settings.spacing_km for settings in REGION_LEVELS]
+    assert spacings == sorted(spacings, reverse=True)
+
+
+def test_level_parent_carries_the_coarser_relief_and_drains(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from dmtools.terrain.application.planet_region import ensure_level_tiles
+    from dmtools.terrain.pipeline.planet_levels import level_parent
+
+    planet = RegionalParent.from_result(parent)
+    centre = _land_centre(parent)
+    grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
+    needed = grid.tiles_near(centre, 500e3)
+    grid, tiles = ensure_level_tiles(
+        planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
+    )
+    patch = level_parent(planet, grid, tiles, centre, 300e3, 30.0, 11)
+    land = patch.land
+    assert land.any()
+    coarse = blend(grid, tiles, patch.mesh.xyz)
+    assert np.allclose(patch.surface_m[land], np.maximum(coarse[land], 1.0))
+    assert np.all(patch.young_m() == 0.0)
+    # Every land node drains except the rim ring, which is the patch's outlet.
+    descending = patch.receiver[land] >= 0
+    assert descending.mean() > 0.75
+    assert np.all(patch.area_m2[land & (patch.receiver >= 0)] > 0)
+
+
+def test_level_two_windows_repeat_exactly_and_agree_with_level_one(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from dmtools.terrain.application.planet_region import region_window
+
+    planet = RegionalParent.from_result(parent)
+    centre = _land_centre(parent)
+
+    def window(level: int) -> np.ndarray:
+        run = region_window(
+            planet, "p" * 64, tmp_path, centre, 200.0, level=level, levels=TINY_LEVELS,
+            pixels=96, workers=1,
+        )
+        assert run.level == level
+        return run.window.elevation_m
+
+    fine, again = window(2), window(2)
+    assert np.array_equal(fine, again, equal_nan=True)
+    coarse = window(1)
+    inside = np.isfinite(fine) & np.isfinite(coarse) & (coarse > 0)
+    assert inside.mean() > 0.3
+    # The finer level adds detail but keeps the coarser level's broad relief.
+    from scipy.ndimage import gaussian_filter
+
+    def smooth(values: np.ndarray) -> np.ndarray:
+        # At the coarse level's own scale (its 30 km spacing is about 7 pixels).
+        return gaussian_filter(np.where(inside, values, 0.0), 8) / np.maximum(
+            gaussian_filter(inside * 1.0, 8), 1e-6
+        )
+
+    error = (smooth(fine) - smooth(coarse))[inside]
+    assert np.sqrt(np.mean(error**2)) < 0.35 * np.std(coarse[inside]) + 50.0

@@ -26,6 +26,7 @@ from numpy.typing import NDArray
 from PIL import Image, ImageDraw
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
 
+from dmtools.terrain.adapters.map_parchment import ParchmentInputs, parchment_image
 from dmtools.terrain.adapters.map_thematic import thematic_images
 from dmtools.terrain.adapters.map_topographic import topographic_image
 from dmtools.terrain.adapters.planet_render import (
@@ -319,32 +320,33 @@ class PixelClimate:
     growing_mm: F64 | None = None
 
 
-def land_colour(
+@dataclass(frozen=True, slots=True)
+class Vegetation:
+    """Land-cover fields shared by the atlas and symbol maps (per pixel)."""
+
+    patch: F64  # ~300 km mosaic noise
+    fine: F64  # finest mosaic noise
+    aridity: F64  # effective water / PET with mosaic and terrain
+    veg: F64  # 0 bare .. 1 closed vegetation
+    summer: F64  # effective warm-season temperature for treeline and tundra (C)
+    forest: F64  # 0..1 tree cover
+    wetland: F64  # 0..1 bog and fen cover
+
+
+def vegetation(
     points: F64,
     radius_m: float,
     climate: PixelClimate,
-    z: F64,
     slope: F64,
-    light: F64,
-    wet: F64 | None = None,
     position: F64 | None = None,
+    wet: F64 | None = None,
     fine_wavelength_m: float = 35e3,
-    volcanic: F64 | None = None,
     slope_scale: float = 1.0,
-    basalt: F64 | None = None,
-) -> F64:
-    """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
-
-    ``wet`` (0..1, blurred river coverage) greens river corridors in drylands.
-    ``position`` (-1 valley floor .. +1 ridge crest) ties the vegetation mosaic
-    to the terrain: valleys gather water and soil, ridges and steep slopes shed
-    them. ``fine_wavelength_m`` sets the finest mosaic scale (smaller when zoomed).
-    ``slope_scale`` raises the slope thresholds for bare rock: slopes measured on
-    fine pixels are steeper than the same terrain averaged over coarse ones.
-    """
-    shape = z.shape
+) -> Vegetation:
+    """Vegetation, forest and wetland cover from climate, terrain and rivers."""
+    shape = slope.shape
     zeros = np.zeros(len(points))
-    temperature, warm = climate.temperature_c, climate.warm_season_c
+    warm = climate.warm_season_c
     # Soil, groundwater and local relief make vegetation boundaries ragged at
     # every scale; the fine octave also hides the parent mesh's straight edges.
     patch = eroded_fbm(points, zeros, 41, 5, radius_m / 300e3, 0.55, 0.0).reshape(shape)
@@ -377,6 +379,47 @@ def land_colour(
     riparian = 0.0 if wet is None else 4.0 * wet
     summer = warm + ECOTONE_C * (0.7 * patch + 0.5 * fine) + sheltered + riparian
     forest = _smooth(aridity, 0.6, 1.25) * _smooth(summer, 9, 14)
+    # Flat, cool, humid lowlands drain badly into bogs and fens (West Siberian
+    # Plain, Hudson Bay Lowlands): dark mottled olive and brown peatland.
+    flat = 1 - _smooth(slope, 0.003 * slope_scale, 0.015 * slope_scale)
+    low_ground = 1.0 if position is None else _smooth(-position, -0.3, 0.4)
+    boggy = _smooth(aridity, 0.9, 1.6) * (1 - _smooth(summer, 14, 20)) * _smooth(summer, 5, 8)
+    mottle = _smooth(0.6 * patch + fine, -0.1, 0.4)
+    wetland = flat * low_ground * boggy * mottle
+    return Vegetation(patch, fine, aridity, veg, summer, forest, wetland)
+
+
+def land_colour(
+    points: F64,
+    radius_m: float,
+    climate: PixelClimate,
+    z: F64,
+    slope: F64,
+    light: F64,
+    wet: F64 | None = None,
+    position: F64 | None = None,
+    fine_wavelength_m: float = 35e3,
+    volcanic: F64 | None = None,
+    slope_scale: float = 1.0,
+    basalt: F64 | None = None,
+) -> F64:
+    """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
+
+    ``wet`` (0..1, blurred river coverage) greens river corridors in drylands.
+    ``position`` (-1 valley floor .. +1 ridge crest) ties the vegetation mosaic
+    to the terrain: valleys gather water and soil, ridges and steep slopes shed
+    them. ``fine_wavelength_m`` sets the finest mosaic scale (smaller when zoomed).
+    ``slope_scale`` raises the slope thresholds for bare rock: slopes measured on
+    fine pixels are steeper than the same terrain averaged over coarse ones.
+    """
+    shape = z.shape
+    zeros = np.zeros(len(points))
+    temperature, warm = climate.temperature_c, climate.warm_season_c
+    cover = vegetation(
+        points, radius_m, climate, slope, position, wet, fine_wavelength_m, slope_scale
+    )
+    patch, fine, veg, summer = cover.patch, cover.fine, cover.veg, cover.summer
+    forest = cover.forest
     desert = _mix(_fill(shape, DESERT_COLD), DESERT_HOT, _smooth(temperature, 5, 18))
     hue = eroded_fbm(points, zeros, 43, 4, radius_m / 450e3, 0.5, 0.0).reshape(shape)
     hue = hue + 0.6 * fine
@@ -397,13 +440,7 @@ def land_colour(
     colour = _mix(colour, sand, 0.9 * erg)
     # Treeline near the 10 C warmest-month isotherm (Koppen ET).
     colour = _mix(colour, TUNDRA, 1 - _smooth(summer, 7.5, 10.5))
-    # Flat, cool, humid lowlands drain badly into bogs and fens (West Siberian
-    # Plain, Hudson Bay Lowlands): dark mottled olive and brown peatland.
-    flat = 1 - _smooth(slope, 0.003 * slope_scale, 0.015 * slope_scale)
-    low_ground = 1.0 if position is None else _smooth(-position, -0.3, 0.4)
-    boggy = _smooth(aridity, 0.9, 1.6) * (1 - _smooth(summer, 14, 20)) * _smooth(summer, 5, 8)
-    mottle = _smooth(0.6 * patch + fine, -0.1, 0.4)
-    colour = _mix(colour, WETLAND, 0.7 * flat * low_ground * boggy * mottle)
+    colour = _mix(colour, WETLAND, 0.7 * cover.wetland)
     steep = _smooth(slope, 0.08 * slope_scale, 0.3 * slope_scale)
     rocky = np.clip(steep * 0.75 + _smooth(z, 3000, 4500) * 0.25, 0, 0.8)
     colour = _mix(colour, ROCK, rocky)
@@ -473,21 +510,51 @@ def _fill(shape: tuple[int, ...], colour: RGB) -> F64:
     return np.broadcast_to(np.asarray(colour, dtype=np.float64), (*shape, 3)).copy()
 
 
-def natural_colour(
-    result: PlanetResult, raster: FrameRaster, rivers: F64, fields: DisplayFields
-) -> F64:
+def pixel_climate(result: PlanetResult, raster: FrameRaster, fields: DisplayFields) -> PixelClimate:
+    """Mesh climate at each pixel, lapse-corrected to the displayed height."""
     climate = result.climate
     assert climate is not None
     mesh = result.mesh
     lapse = result.settings.climate.lapse_c_per_km
     lift = (fields.elevation_m - fields.base_m) / 1000
-    pixel = PixelClimate(
+    return PixelClimate(
         raster.interpolate(mesh, climate.temperature_c) - lapse * lift,
         raster.interpolate(mesh, climate.warm_c) - lapse * lift,
         raster.interpolate(mesh, climate.precipitation_mm),
         raster.interpolate(mesh, climate.pet_mm),
         raster.interpolate(mesh, climate.precip_warm_mm),
     )
+
+
+def parchment_inputs(
+    climate: PixelClimate,
+    cover: Vegetation,
+    elevation_m: F64,
+    land: B,
+    lakes: B,
+    rivers: F64,
+    light: F64,
+    ice: B,
+    volcanoes: tuple[tuple[float, float, bool], ...] = (),
+) -> ParchmentInputs:
+    """Symbol-map fields from the same climate and vegetation as the atlas."""
+    return ParchmentInputs(
+        elevation_m, land, lakes, rivers, light,
+        forest=cover.forest,
+        cold=(cover.summer < 14.0) | (climate.temperature_c < 2.0),
+        desert=1 - cover.veg,
+        wetland=cover.wetland,
+        ice=ice,
+        snow=climate.warm_season_c < equilibrium_line_c(climate.precipitation_mm),
+        volcanoes=volcanoes,
+    )
+
+
+def natural_colour(
+    result: PlanetResult, raster: FrameRaster, rivers: F64, fields: DisplayFields
+) -> F64:
+    mesh = result.mesh
+    pixel = pixel_climate(result, raster, fields)
     return land_colour(
         raster.queries,
         mesh.radius_m,
@@ -732,7 +799,41 @@ def preview_images(
         covered,
     )
     images |= thematic_images(result, rasters, fields.light, rivers)
+    if result.climate is not None:
+        images["Planet parchment"] = planet_parchment(result, rasters, fields, rivers, covered)
     return images
+
+
+def planet_parchment(
+    result: PlanetResult, rasters: PlanetRasters, fields: DisplayFields, rivers: F64, ice: B
+) -> Image.Image:
+    """The world as a hand-drawn map: symbols for mountains, forests and water."""
+    raster = rasters.raster
+    climate = pixel_climate(result, raster, fields)
+    cover = vegetation(
+        raster.queries, result.mesh.radius_m, climate, fields.slope, fields.position,
+        0.6 * rivers,
+    )
+    rows, columns = raster.shape
+    frame = raster.frame
+    v = result.volcanoes
+    marks: list[tuple[float, float, bool]] = []
+    for k in np.flatnonzero(v.kind != SEAMOUNT):
+        x, y, z = (float(c) for c in v.xyz[k])
+        lon = np.degrees(np.arctan2(y, x))
+        lat = np.degrees(np.arcsin(np.clip(z, -1, 1)))
+        if v.height_m[k] > 2000:  # only the great volcanoes get their own symbol
+            marks.append((
+                ((lon - frame.central_meridian_deg + 180) % 360) / 360 * columns,
+                (90 - lat) / 180 * rows,
+                bool(v.active[k]),
+            ))
+    inputs = parchment_inputs(
+        climate, cover, fields.elevation_m, rasters.land_px, rasters.lakes_px >= 0, rivers,
+        fields.light, ice, tuple(marks),
+    )
+    symbol_px = float(np.clip(columns / 170, 10, 30))
+    return parchment_image(inputs, result.settings.seed, symbol_px)
 
 
 def volcano_markers(atlas: Image.Image, result: PlanetResult, raster: FrameRaster) -> Image.Image:

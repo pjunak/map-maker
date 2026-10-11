@@ -21,6 +21,7 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
+from dmtools.terrain.adapters.map_parchment import parchment_image
 from dmtools.terrain.adapters.map_topographic import topographic_image
 from dmtools.terrain.adapters.planet_natural import (
     HYPSOMETRIC,
@@ -30,10 +31,12 @@ from dmtools.terrain.adapters.planet_natural import (
     PixelClimate,
     erg_cover,
     land_colour,
+    parchment_inputs,
     ramp,
     river_coverage,
     sea_depth_colour,
     shading,
+    vegetation,
 )
 from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
 from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
@@ -75,12 +78,15 @@ REGION_CARVE_STEPS = 4
 class TileStore:
     """Tiles for one parent and one set of regional settings, written atomically."""
 
-    def __init__(self, root: Path, parent_sha256: str, settings: RegionalSettings) -> None:
+    def __init__(
+        self, root: Path, parent_sha256: str, settings: RegionalSettings, level: int = 1
+    ) -> None:
         key = sha256(
             canonical_json(
                 {
                     "parent": parent_sha256,
                     "algorithm": REGIONAL_ALGORITHM,
+                    "level": level,
                     "settings": asdict(settings),
                 }
             )
@@ -546,6 +552,32 @@ def window_topographic(window: RegionWindow) -> Image.Image:
     )
 
 
+def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
+    """A regional window as a hand-drawn map (needs climate for vegetation)."""
+    climate = window.climate
+    if climate is None:
+        return None
+    z = display_relief(window)
+    gy = np.gradient(z, axis=0) / window.pixel_m
+    gx = np.gradient(z, axis=1) / window.pixel_m
+    slope, light = shading(gx, gy, REGION_EXAGGERATION)
+    lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
+    shown = PixelClimate(
+        climate.temperature_c - lapse, climate.warm_season_c - lapse,
+        climate.precipitation_mm, climate.pet_mm, climate.growing_mm,
+    )
+    wet = 0.6 * gaussian_filter(window.rivers, 2.0)
+    cover = vegetation(
+        window.points, window.planet_m, shown, slope, window_position(z, window.pixel_m), wet,
+        REGION_MOSAIC_WAVELENGTH_M, REGION_SLOPE_SCALE,
+    )
+    inputs = parchment_inputs(
+        shown, cover, np.where(np.isfinite(window.elevation_m), z, np.nan), window.land,
+        window.lakes | window.playa, window.rivers, light, np.zeros_like(window.land),
+    )
+    return parchment_image(inputs, seed, float(np.clip(window.pixels / 45, 12, 30)))
+
+
 def aeqd_crs_wkt(lon0: float, lat0: float, radius_m: float) -> str:
     return CRS.from_proj4(
         f"+proj=aeqd +lat_0={lat0!r} +lon_0={lon0!r} +R={radius_m!r} +units=m +no_defs"
@@ -559,6 +591,7 @@ def write_region(
     store_key: str,
     destination: Path,
     planet_m: float,
+    level: int = 1,
 ) -> Path:
     target = destination.absolute()
     if target.exists() or target.is_symlink():
@@ -596,6 +629,10 @@ def write_region(
         names.append("atlas.png")
     window_topographic(window).save(target / "topographic.png")
     names.append("topographic.png")
+    parchment = window_parchment(window)
+    if parchment is not None:
+        parchment.save(target / "parchment.png")
+        names.append("parchment.png")
     manifest: dict[str, object] = {
         "schema": REGION_SCHEMA,
         "version": REGION_VERSION,
@@ -604,6 +641,7 @@ def write_region(
         "parent_build_sha256": parent_sha256,
         "centre_lonlat_deg": [lon0, lat0],
         "radius_km": window.radius_m / 1000,
+        "level": level,
         "pixels": window.pixels,
         "settings": asdict(settings),
         "tile_store": store_key,

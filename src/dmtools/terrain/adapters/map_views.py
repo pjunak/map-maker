@@ -54,6 +54,12 @@ THEMES: tuple[MapTheme, ...] = (
         "every fifth bold), isobaths, soft hillshade, rivers and lakes.",
     ),
     MapTheme(
+        "parchment", "Planet parchment",
+        "A hand-drawn fantasy map: inked coasts with ripple lines, mountain, hill, tree, "
+        "marsh and dune symbols placed from the terrain and climate, rivers on old paper.",
+        needs_climate=True,
+    ),
+    MapTheme(
         "plates", "Planet plates",
         "Tectonic plates in distinct colours. Boundaries: red = converging, blue = "
         "spreading, yellow = sliding past. Arrows show plate motion (8 cm/yr fills a cell).",

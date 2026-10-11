@@ -3,7 +3,7 @@
 The World workspace now has a **Geology…** editor for pre-generation instructions.
 It resolves continent defaults and explicit provinces into inspectable land
 coverage. Optional explicit landform controls now transfer into ordinary terrain
-projects through **World → Terrain…** or `world terrain --geology`. These are
+projects through the World workspace's **Terrain** stage or `world terrain --geology`. These are
 procedural generation instructions, not reconstructed Earth history or implemented
 uplift, erosion, climate or a reviewed global terrain parent.
 
@@ -26,7 +26,7 @@ uplift, erosion, climate or a reviewed global terrain parent.
 6. Save a separate **`.dmgeology.json`** recipe. **Open recipe…** restores it against
    the currently open world. The editor remembers the last saved recipe during
    the application session and rechecks its file when reopened.
-7. Close the geology editor and choose **Terrain…**. Its recipe selection shows the
+7. Close the geology editor and open the **5 Terrain** stage. Its recipe selection shows the
    saved file; **Choose geology recipe…** can select another and **Clear** disables it.
    Creation rereads and validates the file against the current world.
 8. Generate in the Terrain workspace. Transferred landforms are ordinary editable

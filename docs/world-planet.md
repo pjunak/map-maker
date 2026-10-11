@@ -41,8 +41,8 @@ Open or import a world in the **World** tab. The stages run down the left
 4. **Choose what the map shows** with the bar above it:
    - **Source · Context · Planet** picks the data.
    - The list beside it picks the map: every theme the planet rendered, such as
-     atlas, relief, climate zones, plates, sea-floor age, drainage basins, geology
-     and topographic.
+     atlas, relief, climate zones, topographic, parchment, plates, sea-floor age,
+     drainage basins and geology.
    - **Flat world · Globe · North polar · South polar** picks the projection.
      **Grid** draws latitude and longitude every 30°.
 
@@ -58,7 +58,7 @@ Open or import a world in the **World** tab. The stages run down the left
 Editing the world (names, frame, assignments) discards the generated planet, so
 a stale planet is never shown as current.
 
-### Zoom into regional detail
+### Zoom into regional, province and local detail
 
 With a planet shown, click **Zoom to region** above the map:
 1. Choose a radius, or keep **Auto**. Auto takes about half the visible width,
@@ -67,19 +67,26 @@ With a planet shown, click **Zoom to region** above the map:
    cancels.
 
 The region opens in the same view, at about 5 km detail: ridges, valley networks,
-altitude zones and rivers.
-- The breadcrumb above the map (**World / Region …**) returns to the whole planet,
-  where each region is outlined.
-- Choose **Planet atlas**, **Planet relief** or **Planet topographic**. Each renders
-  in the background and is kept. The topographic view stretches its tints over the
-  window's own height range and draws contours at true heights.
+altitude zones and rivers. From a region, **Zoom to province** builds 1 km detail
+(30–300 km radius); from a province, **Zoom to local** builds 200 m detail
+(6–60 km radius). Each level is enriched from the one above
+([ADR-0088](adr/0088-nested-regional-detail-levels.md)).
+- The path above the map (**World / Region … / Province …**) returns to any larger
+  map. Each larger map outlines the smaller ones opened from it.
+- Choose **Planet atlas**, **Planet relief**, **Planet topographic** or **Planet
+  parchment**. Each renders in the background and is kept. The topographic view
+  stretches its tints over the window's own height range and draws contours at
+  true heights.
 - Volcanoes and impact craters are drawn sharply. Closed hollows deeper than 10 m
   (crater troughs, calderas) hold lakes where it is wet and dry playas where it is not.
-- A scale bar shows distance; hovering shows the offset from the centre and the height.
+- A scale bar shows distance. Hovering shows the place, the offset from the centre
+  and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
 
-The region is built from fixed, cached tiles. Zooming the same place again is
-quick and gives identical values, whichever window you choose.
+Every level is built from fixed, cached tiles. Zooming the same place again is
+quick and gives identical values, whichever window you choose. Deeper levels
+first build the coarser tiles they need, so a first province or local zoom takes
+a few minutes.
 
 ### Views of a saved build
 
@@ -140,9 +147,32 @@ dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-
 ```
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
-Use `--spacing-km` for a different detail spacing. A region writes `elevation.tif`
-(the blended tile relief), `relief.png`, `topographic.png` and, with climate, a
-natural-colour `atlas.png`.
+Go deeper with `--level`. Each level is enriched from the level above it, and
+windows at the same level agree wherever they overlap
+([ADR-0088](adr/0088-nested-regional-detail-levels.md)).
+
+| Level | Detail | Window radius | Example |
+|---|---|---|---|
+| 1 region | 5 km | up to 5,000 km | a kingdom, a mountain range |
+| 2 province | 1 km | up to 300 km | valleys, a crater, a coast |
+| 3 local | 200 m | up to 60 km | a few valleys, a town's surroundings |
+
+```powershell
+dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 120 --level 2 --output my-province
+```
+
+The first deep window takes a few minutes, because it also generates the coarser
+tiles it needs. Later windows nearby reuse the cache.
+
+Options:
+- `--spacing-km` sets the level-1 detail spacing (5 km by default).
+- `--pixels` sets the image size (1,024 by default).
+- `--cache` puts the tile cache elsewhere.
+- `--workers` sets how many tile processes run (0 = automatic).
+
+A region writes `elevation.tif` (the blended tile relief), `relief.png` and
+`topographic.png`. With climate it also writes the natural-colour `atlas.png` and
+the hand-drawn `parchment.png`.
 
 **What the images add.** Atlas and relief images draw small ridges, valleys and
 texture below the mesh resolution, so slopes do not shade as smooth ramps. This
@@ -158,6 +188,10 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
 | `koppen.png` | Köppen–Geiger climate zones in their standard colours. |
 | `volcanoes.png` | The atlas with land volcanoes marked: red for active, dark for extinct. |
+| `topographic.png` | Hypsometric tints, contour lines (every fifth bold), isobaths, soft hillshade and water. |
+| `parchment.png` | A hand-drawn fantasy map: inked coasts, mountain, hill, tree, marsh and dune symbols, and rivers on aged paper (needs climate). |
+| `plates.png`, `seafloor.png` | Tectonic plates with boundary types and motion; ocean-crust age. |
+| `basins.png`, `geology.png` | Drainage basins with divides; geological provinces. |
 | `elevation.tif` | Float32 elevation in metres (land, and an ocean floor with mid-ocean ridges, sea-floor ageing and trenches), on a geographic CRS for your world's sphere radius. |
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |

@@ -14,7 +14,11 @@ The window opens with **World** and **Terrain** tabs. World retains complete SVG
 source maps, continental ownership and an explicit spherical geographic frame.
 Read the [world guide](../../../docs/terrain-worlds.md), or try
 `dmtools terrain gui --world examples/world/four-shores.dmworld.json`.
-The **Context** page generates spherical coverage, connected water and resolution
+Its stages run down the left (Shapes, Frame, Adjustments, Context, Planet, Terrain)
+beside one map view that shows source, context and planet maps in any projection, with
+drill-down to regional detail ([planet guide](../../../docs/world-planet.md)). Long jobs
+show progress and **Cancel** in the status bar.
+The **Context** stage generates spherical coverage, connected water and resolution
 support, shared-edge openings, separate water-piece links, shore distance and exposure,
 with verified saved-context inspection; see
 [geographic context](../../../docs/world-context.md). **Geology…** opens the
@@ -24,7 +28,7 @@ geographic context can affect experimental rough terrain; geology ages do not.
 **Bathymetry…** opens a separate
 [ocean-floor workflow](../../../docs/world-bathymetry.md) from matching context,
 with explicit ocean selection, shelf/slope/basin inputs, numerical error/support
-views and independent saves/results. **Terrain…** now selects a continent and
+views and independent saves/results. The **Terrain** stage selects a continent and
 creates a local terrain project with connected neighbours, retained world identity
 and fixed projected scale. When context is currently generated or opened, Terrain
 embeds bounded immutable samples and labels the coastal consumer experimental. It

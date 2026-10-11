@@ -14,12 +14,12 @@ bundle is geographic input, not a generated terrain parent.
 
 1. Open a current `.dmworld.json`, or import and assign a world using the
    [world-source guide](terrain-worlds.md). Confirm its established frame and radius.
-2. Open **Context**. Choose **90**, **180** or **360** latitude cells. Longitude
+2. Open the **3 Context** stage. Choose **90**, **180** or **360** latitude cells. Longitude
    uses twice as many columns: 2°, 1° or 0.5° angular cells respectively.
 3. Click **Generate context**. The worker validates the current inputs and shows
-   row progress. **Cancel context job** stops at a checkpoint. Individual SVG/GEOS
+   row progress in the status bar. **Cancel** stops at a checkpoint. Individual SVG/GEOS
    operations cannot be interrupted mid-call; cancellation is cooperative.
-4. Use the preview selector for **Source**, **Land coverage**, **Connected water**,
+4. Choose **Context** above the map, then pick **Source**, **Land coverage**, **Connected water**,
    **Resolution support**, **Water openings**, **Shore distance**, **Water exposure**
    **Exposure support**, and **Water connectivity**. The compass selector changes
    the initial look direction
@@ -60,7 +60,7 @@ regeneration. No stochastic stage or seed is involved in this geographic analysi
 
 ## Bind context to rough terrain
 
-In the World workspace, generate or open context before choosing **Terrain…**; the
+In the World workspace, generate or open context before using the **Terrain** stage; the
 current matching context is passed automatically. The CLI accepts a completed
 manifest or its directory:
 

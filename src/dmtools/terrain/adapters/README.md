@@ -12,12 +12,21 @@ This package owns concrete file and rendering boundaries:
 - serialize diagnostics and publish a hashed completion manifest after the
   build application verifies completion inputs.
 
+Planet and map adapters:
+- `planet_build.py` and `planet_load.py` write and verify planet builds;
+- `planet_render.py` and `planet_natural.py` render world-frame rasters and the
+  atlas;
+- `map_views.py` is the theme registry;
+- `map_projection.py` draws globe, polar and flat views;
+- `map_topographic.py`, `map_parchment.py` and `map_thematic.py` render themes;
+- `planet_region.py` composes and exports regional windows.
+
+See the [planet guide](../../../../docs/world-planet.md) and ADR-0087.
+
 Read the [build contract](../../../../docs/terrain-builds.md) for the product
 inventory and publication rules, and the [world guide](../../../../docs/terrain-worlds.md)
-for retained-source formats. Local GeoTIFF export and spherical world-source
-placement are implemented; projected world terrain export, GeoPackage/vector
-products and external scientific-engine exchange
-remain future adapters.
+for retained-source formats. Vector products other than river and lake GeoJSON, and
+external scientific-engine exchange, remain future adapters.
 
 An adapter translates external behavior into domain contracts and reports its
 effective tool/library versions where required by the build manifest.

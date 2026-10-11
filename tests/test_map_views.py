@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
+from dmtools.terrain.adapters.map_parchment import ParchmentInputs
 from dmtools.terrain.adapters.map_projection import (
     SPACE,
     MapProjection,
@@ -83,3 +84,33 @@ def test_theme_registry_names_files_labels_and_legends_uniquely() -> None:
     assert len(set(ids)) == len(ids) == len(set(PREVIEW_LAYERS))
     assert theme_file(THEME_BY_ID["atlas"]) == "atlas.png"
     assert all(theme.legend for theme in THEMES)
+
+
+def _parchment_inputs(z: np.ndarray, land: np.ndarray) -> ParchmentInputs:
+    zeros = np.zeros(z.shape)
+    false = np.zeros(z.shape, dtype=bool)
+    return ParchmentInputs(
+        z, land, false, zeros, np.ones(z.shape), zeros, false, zeros, zeros, false, false
+    )
+
+
+def test_parchment_maps_draw_mountains_on_rugged_ground_and_repeat_exactly() -> None:
+    from dmtools.terrain.adapters.map_parchment import PAPER, parchment_image
+
+    rows, columns = 160, 320
+    y, x = np.mgrid[0:rows, 0:columns]
+    land = (x > 10) & (x < columns - 10) & (y > 10) & (y < rows - 10)
+    # Left half rugged mountains, right half a high flat plateau.
+    rugged = 1500 + 1200 * np.sin(x / 4.0) * np.cos(y / 5.0)
+    z = np.where(land, np.where(x < columns // 2, rugged, 2500.0), -3000.0)
+    image = parchment_image(_parchment_inputs(z, land), 7, 18.0)
+    again = parchment_image(_parchment_inputs(z, land), 7, 18.0)
+    assert image.tobytes() == again.tobytes()
+    ink = np.asarray(image, dtype=np.float64).sum(axis=-1) < 300
+    left, right = ink[20:-20, 30 : columns // 2 - 20], ink[20:-20, columns // 2 + 20 : -30]
+    assert left.mean() > 4 * max(right.mean(), 1e-3)
+    # Beyond a round window nothing is drawn but plain paper.
+    outside = z.astype(np.float64).copy()
+    outside[:, :40] = np.nan
+    blank = np.asarray(parchment_image(_parchment_inputs(outside, land), 7, 18.0))
+    assert np.allclose(blank[60:100, 15:30].mean(axis=(0, 1)), np.array(PAPER) * 0.93, atol=25)

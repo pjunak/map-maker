@@ -5,7 +5,7 @@ geographic frame, assign continents and islands, inspect it and save a portable
 source project. [Geographic context](world-context.md) now generates spherical
 coverage, connected water and resolution support. Matching context can be bound to
 experimental rough terrain; climate, runoff, aging and regional history remain
-planned. **Terrain…** now transfers a
+planned. The **5 Terrain** stage transfers a
 selected continent and connected land into a local metric terrain project,
 ready to use in the **Terrain** workspace.
 
@@ -37,7 +37,7 @@ remain available in the same window, with separate documents and dirty states.
 1. Open or import your world and confirm its frame, radius and assignments.
 2. Generate context or open a completed matching context bundle. Optionally author
    and save [Geology inputs](world-geology.md), including explicit **Landform guidance**.
-   Click **Terrain…** in the World header and choose a continent. The panel displays
+   Open the **5 Terrain** stage and choose a continent. The panel displays
    the saved geology recipe; choose another or clear it as needed. The currently
    generated/opened context is passed automatically.
 3. Click **Create terrain project…** and choose a **new folder name**. The current
@@ -124,12 +124,12 @@ retained in the source SVG, not encoded as a global raster CRS.
    select **Mainland**, **Island** or **Exclude**, then **Assign selected shapes**.
    Every source shape needs one assignment or explicit exclusion before saving.
    Ungrouped or invalid shapes are not guessed into a continent.
-5. In **World frame**, enter your planet radius and the exact projection bounds.
+5. In the **2 Frame** stage, enter your planet radius and the exact projection bounds.
    The SVG `viewBox` supplies an initial suggestion, not proof of that frame.
    Remove page margins, legends and scale bars from the geographic rectangle.
 6. Click **Validate world**. Tiny export overflow and narrow border overlaps are
    handled in derived coverage, and shared land within one continent is counted
-   once. Review the **Adjustments** tab; selecting a report highlights its original
+   once. Review the **Adjustments** stage; selecting a report highlights its original
    source shapes. Larger cross-continent conflicts, invalid shapes, unassigned
    objects and substantial out-of-frame land still require correction.
 7. **Save As** a `.dmworld.json` file. Reopen it to review the same source and

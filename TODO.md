@@ -1,269 +1,48 @@
-# Terrain tool roadmap
+# Terrain tool backlog
 
-This is the working backlog for the deterministic terrain tool. It collects the
-possibilities identified during the initial research and implementation without
-treating every idea as an accepted design. Items marked **Research** need a
-small prototype or architecture decision before they become implementation
-commitments.
+The categorized backlog of open work. The [implementation plan](docs/strategy/README.md)
+owns the order; [status](docs/research/status.md) says what already works, and Git
+history and the [dated reports](docs/research/README.md) keep completed work.
+Failed trials and revisit gates are in the
+[method register](docs/research/terrain-method-decisions.md).
 
-The [current development strategy](docs/strategy/README.md) is the authoritative
-dependency-aware execution order. The sections below are grouped by product
-area; their visual order is not a promise that every feature precedes algorithm
-or UI work.
+Labels: **P0** is a prerequisite within its feature; **P1** is high value once its
+P0 exists; **P2** is a later extension; **Research** means compare approaches on
+small synthetic terrain before choosing one.
 
-Priority labels:
+## Current milestones (open items)
 
-- **P0** — prerequisite within its feature; only the active strategy batch is next;
-- **P1** — high-value work after the relevant P0 contract exists;
-- **P2** — useful later extension; and
-- **Research** — compare approaches and validate with small synthetic terrain
-  before selecting one.
+See the [plan](docs/strategy/README.md) for states and evidence.
 
-The current baseline already includes deterministic coordinate-addressed
-detail, dissolved multipart SVG land geometry, absolute and relative
-brush/point/line constraints, per-tool settings, project save/open, colour
-preview and PNG export. Numeric builds, regional recipes, authored basin
-retention and sampled outlet transfer are also implemented as recorded below.
-Input editing now retains the last generated reference, supports selection and
-property changes, and provides undo/redo for committed instructions.
-The [research status](docs/research/status.md) separates completed slices from
-partially addressed research goals; unchecked broad items may contain completed
-substeps. The [living method decision register](docs/research/terrain-method-decisions.md)
-records attempted methods, measured failures, causes, retained work and revisit
-gates. Update it alongside dated evidence and this backlog after each substantial
-experiment; do not mark a desired feature complete merely because its trial ended.
-
-## Current execution focus — 2026-10-06
-
-**M2 is active: whole-planet relief by uplift and erosion on a sphere mesh.** The
-plan is now world-first; follow the single
-[M1-M8 implementation order](docs/strategy/README.md#next-implementation-order).
-The [research harness](benchmarks/planet/README.md) already evolves a whole world
-with converged, isotropic, strictly descending rivers
-([evidence](docs/research/2026-10-06-whole-planet-erosion-relief.md)). Climate
-moves to M3 on the same mesh. Further isolated local ridge/bank refinements stay
-deferred; existing hard correctness checks apply throughout.
-
-The [research decision catalog](docs/research/decision-catalog.md) is the first
-lookup for evaluated tools/math, conclusions and revisit triggers. The
-[method register](docs/research/terrain-method-decisions.md) retains failed trials;
-[status](docs/research/status.md) distinguishes available features from experiments.
-Update them with the affected milestone and evidence in every substantive batch.
-
-### Delivered foundations
-
-- [x] **World-to-terrain handoff:** World panel and CLI; connected neighbours,
-  islands/holes/seams, bounded custom-sphere projection, retained source identity,
-  fixed physical scale, portable folder, cancellation and guarded editor opening.
-- [x] **Shared-land independence:** dissolve ownership before projection and verify
-  exact mask/Float32 equality for the same land with different continent splits;
-  retain actual narrow straits. Correct confirmed private drawing offsets at source.
-- [x] **Geological landform transfer:** explicit controls in the geology editor,
-  optional recipe selection in World/CLI, identical-guidance dissolving across
-  labels/ages, priority holes and portable provenance. Public numeric/GUI checks
-  and a paired build demonstrate visible range/plateau/lowland differences.
-  See the [report](docs/research/2026-09-27-geological-landform-guidance.md).
-- [x] **Shared landform transitions:** replace internal background bands with
-  connected-coverage blending; retain blank holes, established enclave interiors,
-  hard heights and coast/mask. Water/crest probes and cut bounds follow the same
-  support. See [evidence and rejected kernel](docs/research/2026-09-27-shared-landform-blending.md).
-- [x] **Line-owned peak/pass/floor profiles:** explicit metre values along a ridge
-  or valley, dedicated curve editor, undo, current-format replay and bounded
-  narrow-feature water sampling. See [evidence and limits](docs/research/2026-09-27-line-owned-terrain-profiles.md).
-- [x] **Shared absolute ridge crests:** preserve authored contacts through smoothing,
-  retain separate crest heights, report incompatible profiles and verify public
-  corner/branch examples. See [evidence](docs/research/2026-09-27-shared-ridge-crests.md).
-
-### Integration and later work
-
-- [x] **M1 / WC1-WC2:** verified world/context binding, bounded non-polar AEQD
-  domain, immutable context support, context-consuming coastal relief and portable
-  application/CLI/build provenance. Experimental; see
-  [evidence](docs/research/2026-09-28-context-bound-rough-terrain.md).
-- [ ] **M2 / WC2 / R01 / R02 / R07 — ACTIVE:** whole-planet relief on an irregular
-  sphere mesh: uplift + implicit stream power with the coast as base level, fixed
-  process scale, ocean floor, geology-driven forcing, product command and
-  world-placed exports.
-  - [x] Research harness, synthetic fractal test worlds, realism metrics and
-    resolution sweep ([evidence](docs/research/2026-10-06-whole-planet-erosion-relief.md)).
-  - [x] Geology settings/ages/landform intent → uplift and erodibility with calibrated
-    elevation targets (research harness).
-  - [x] Promote to `src` with stage seeds, cancellation, CLI (`dmtools world planet`),
-    manifest-last build, schema and ADR-0085.
-  - [x] World-tab Planet stage: generate, cancel, atlas/relief/rainfall/temperature
-    layers, hover inspection, export; stale results discarded on edit.
-  - [x] First real authored world end to end (9 continents; ice-sheet fix).
-  - [x] Natural-colour atlas and regional display detail with carved valleys
-    ([evidence](docs/research/2026-10-07-natural-map-rendering.md)).
-  - [x] World-scale relief and climate detail: multi-scale forcing, physical moisture
-    mixing, carved display valleys ([evidence](docs/research/2026-10-07-world-scale-detail.md)).
-  - [x] Cheaper moisture transport: coarse climate and coupling meshes
-    ([evidence](docs/research/2026-10-07-earth-scale-landforms.md)).
-  - [x] Earth-scale range widths, valley spacing and river lengths (3.2M-node builds).
-  - [x] Composite orogens, strike-aligned lithology and a glacial buzzsaw
-    ([evidence](docs/research/2026-10-08-orogens-glaciers-and-speed.md)).
-  - [x] Foreland and intermontane basins filled to spill level (geometric flexure).
-  - [x] Ocean floor from sea-floor age: mid-ocean ridges between continents, trenches.
-  - [x] Plate tectonics: collision belts, rifts, leading-edge margins and trenches.
-  - [x] Volcanism: arcs, hotspot tracks, rift volcanoes, seamounts; volcano gazetteer.
-  - [x] Flood-basalt plateaus at old plume heads (forcing).
-  - [x] Trap basalt soils and stepped benches in rendering.
-  - [x] Opt-in volcanic islands: hotspot shields and island arcs.
-  - [x] Along-strike variety of mountain belts and rifts: bends, steps, massifs, saddles,
-    gaps and alternating half-grabens.
-  - [x] Mid-ocean ridge transform faults and ocean-wide fracture zones.
-  - [x] Opt-in wonders: a titan shield volcano.
-  - [x] Opt-in wonders: impact craters with level floors and ring lakes.
-  - [x] Sharp craters, crater lakes and playas in regional windows.
-  - [ ] More wonders (a great chasm); authored placement.
-  - [ ] Conserving sediment deposition with flexure; per-node G term rejected.
+- [ ] **M2 planet relief:**
+  - [ ] More wonders (a great chasm); authored placement of wonders and geology.
+  - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
-  - [x] Cold/warm boundary currents and coastal deserts; ice-sheet display domes.
-  - [x] Wind-driven continentality, seasonal rainfall and Köppen–Geiger zones.
-  - [ ] Bathymetry product as the ocean floor.
-- [ ] **M3 / WC3:** declared temperature/wind/moisture/runoff model on the planet
-  mesh, consuming its relief; provisional biome labels.
-  - [x] Research-harness climate v0, runoff-weighted erosion coupling, atlas render and
-    windward/leeward control ([evidence](docs/research/2026-10-06-planet-climate-v0.md)).
-  - [x] Young depressions and climate-balanced open/closed lakes; discharge-based rivers
-    ([evidence](docs/research/2026-10-06-planet-lakes-and-cratons.md)).
-  - [ ] Monthly/seasonal outputs, below-sea-level basins, energy-balance check.
-- [ ] **M4 / WC3-WC4:** runoff-weighted erosion with bounded climate feedback, lakes,
-  World-tab stage, comparison, cancellation and stale-result handling.
-- [ ] **M5 / adoption:** reference-world quality gates, accepted planet parent, native
-  core port of the stabilised kernels, and a decision on the local composed generator.
-  Connected ranges/spurs/passes, junction editing, cross-sections and transition
-  support follow measured needs here rather than leading integration.
-- [ ] **M6 / WC5/LE6:** same-present regional enrichment, inherited hydrology and zoom.
-  - [x] Research: parent-calibrated regional enrichment on fine meshes and
-    window-independent blended tiles ([evidence](docs/research/2026-10-06-regional-enrichment-tiles.md)).
-  - [x] Product: verified planet build reader, tile cache, `dmtools world region`,
-    World-tab zoom viewer and export, lapse-corrected regional biomes (ADR-0086).
-  - [ ] Tile boundary exchange (domain decomposition), regional lakes and climate.
-  - [ ] Nested local maps (region -> province -> local), each level consistent with
-    its parent; window-independent display detail, rivers and lakes.
-- [ ] **Map views** (ADR-0087): a theme registry, and projections for any theme.
-  - [x] Globe and polar projections, `dmtools world view`, the app's globe window.
-  - [x] Thematic maps: tectonic plates, drainage basins, geology, sea-floor age.
-  - [x] Topographic map with contours (world and regional windows).
-  - [ ] Fantasy / parchment style.
-  - [ ] Political and civilization views from authored overlays (later).
-  See M7/M8 for selected materials, specialized landforms and ecological extensions.
-
-### Generation-quality evidence retained
-
-The [quality reference](docs/strategy/terrain-quality.md) retains A-F comparisons
-and scientific adoption controls. T01-T18 in the method register link the actual
-failed and successful trials, including raster-bank limits and prepared-field
-checks. Those results are not accepted drainage/history. They guide M5 and any
-specific M1-M4 blocker; they no longer form a blanket ban on experimental coupling.
-Existing P0 labels below mean prerequisites within their feature, not a new queue.
-Consult before tests expected to exceed roughly two minutes or with uncertain
-long duration; report purpose, estimate and a stop condition.
+  - [ ] Use the bathymetry product as the ocean floor, or record why not.
+- [ ] **M3 climate:** monthly outputs, below-sea-level basins and an energy-balance check.
+- [ ] **M4 workflow:** compare and regenerate in the World tab.
+- [ ] **App:** move the geology and bathymetry editors onto the shared map canvas
+  (ADR-0089).
+- [ ] **M5 adoption:**
+  - [ ] Reference-world quality gates and an accepted planet parent.
+  - [ ] Port the stable kernels to a native core.
+  - [ ] Decide what replaces the local composed generator.
+- [ ] **M6 regional and local zoom:**
+  - [ ] Display detail, rivers and lakes that do not depend on the window
+    (nested levels exist: ADR-0088).
+  - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
+- [ ] **Map views (ADR-0087):** political and civilization views from authored
+  overlays.
 
 ### World-context checkpoint
 
-The [new source/tool review](docs/research/2026-09-24-world-context-enrichment.md)
-and [WC0-WC6 plan](docs/strategy/world-context.md) refine the full-world workflow.
-This advances world placement and forcing from the former final climate phase;
-WC0 source import, the World workspace and M1's bounded context-to-relief binding
-are implemented. Climate and continent-history generation remain planned.
+Open world-context work from the [WC0-WC6 plan](docs/strategy/world-context.md).
+World import, context and planet climate are implemented; see [status](docs/research/status.md).
 
-- [x] **Research and plan:** compare geographic/tectonic/climate models and existing
-  tools; define fixed-coast import → provisional context → rough relief → bounded
-  climate/history feedback → reviewed parent → same-present regional refinement.
-- [x] **WC0 — Retain the world source** (R01/R49): explicit full-sphere
-  Plate Carrée frame/radius, continent/island mapping, source preview, portable
-  SVG snapshot and guarded saves. See the [guide](docs/terrain-worlds.md) and
-  [validation report](docs/research/2026-09-25-world-source-workspace.md).
-- [x] **WC0 import corrections:** accept ordinary external SVG DOCTYPE metadata
-  without resolving it, retain modern Affinity labels and classify self-crossing
-  paths with SVG winding rules. Show import/exclusion counts and select shapes
-  responsible for validation failures. See the
-  [follow-up report](docs/research/2026-09-25-world-import-corrections.md).
-- [x] **WC0 bounded source preparation:** tolerate tiny polar export overflow,
-  count same-continent shared coverage once, and resolve thin cross-continent
-  border overlaps within linear and aggregate area limits. Keep the original
-  source/frame/assignments, record preparation identity, and expose selectable
-  adjustments in the editor and CLI. See the
-  [validation report](docs/research/2026-09-25-bounded-world-preparation.md).
 - [ ] **WC0 source-quality follow-up:** add zoom-to-conflict navigation and broader
   native/high-precision export comparison when needed. Current reports highlight
   affected shapes but do not automatically zoom or diagnose every export setting.
   Draft mapping saves and bounded import cancellation remain separate follow-ups.
-- [x] **WC1 geography batch:** bounded spherical cell grid, fractional land
-  coverage, vector-derived periodic water connectivity, explicit mixed/subgrid
-  support flags, Context preview, cancellation and reproducible context exports.
-  Area conservation, seam/pole behavior, islands/straits and source/runtime identity
-  controls pass. See the [guide](docs/world-context.md) and
-  [evidence report](docs/research/2026-09-25-geographic-world-context.md).
-- [x] **WC1 consumption/edge batch:** verified context reopening, finite shared-edge
-  water openings in km, editor preview/hover and source-save isolation. Corrected
-  fractional-origin seam closure; bounded archive and analytic/UI controls pass.
-  See [evidence](docs/research/2026-09-25-context-reopening-and-gateways.md).
-- [x] **WC1 exposure batch:** cell-centre spherical shore distance with a retained-curve
-  error bound, eight-direction water exposure and mixed-cell support, direction
-  previews/hover and verified current-format export/reopen. Public analytic, seam/pole,
-  orientation, island/interior, bounds and UI controls pass. See
-  [evidence](docs/research/2026-09-25-geographic-exposure.md).
-- [x] **WC1 geology inputs:** separate portable recipe, continent defaults and
-  cross-continent/seam provinces, explicit priorities and unknowns, independent
-  ages/duration at one common present, effective coverage preview, guarded
-  undo/save/reopen and cancellation. See the [guide](docs/world-geology.md) and
-  [evidence](docs/research/2026-09-25-authored-world-geology.md). Explicit landform
-  controls now drive ordinary terrain through the new handoff; categories and
-  ages still do not imply erosion, uplift or climate.
-- [x] **WC1 bathymetric hypotheses:** explicit ocean selection, shelf/slope/basin
-  inputs, conservative spherical coast-distance profile and numerical depth bound.
-  Actual water-centre membership excludes land/unselected lakes; unresolved support
-  and unsampled waters remain visible. Independent editor/input saves, verified
-  nested-context result bundles, CLI and schema controls are implemented. See the
-  [guide](docs/world-bathymetry.md) and
-  [evidence](docs/research/2026-09-25-authored-world-bathymetry.md).
-- [x] **WC1 water-piece topology:** separate positive-area pieces per cell, finite
-  shared intervals, periodic seam and closed polar/corner contacts, spherical areas,
-  bounded geometry and source-verified current context v4. Preview/hover and CLI
-  expose split pieces and precision-limited fragmented source regions. Those regions
-  retain their water and remain unsupported for transport. See the
-  [guide](docs/world-context.md) and [evidence](docs/research/2026-09-25-water-piece-connectivity.md).
-- [x] **B/R48 physical-path comparison:** shared bounded path/ground geometry,
-  exact graph coverage, sampled authoring/budget rejection and frozen receiver/outlet
-  sensitivity are now measured. See the [report](docs/research/2026-09-25-physical-channel-paths.md).
-  This is an experimental comparator; native generation is not changed.
-- [x] **B/C constrained network-led comparison:** one public range/valley/lowland
-  fixture, hard divide/off-grid heights, native cut/no-fill limits, whole-cell
-  descent constraints and repeat/rotation controls. Independent routing at common
-  125 m spacing rejects capture; see the [report](docs/research/2026-09-25-constrained-network-surface.md).
-- [x] **B/C bank feasibility and capture comparison:** physical probes,
-  junction ownership, coastal taper and local/joint conflict witnesses. Feasible
-  endpoint checks pass; cross-sections and capture fail, with more sinks at 250 m.
-  See the [measured report](docs/research/2026-09-25-valley-bank-feasibility.md).
-- [x] **B1 connected valley patches:** local valley/confluence/coastal construction,
-  fixed versus fresh input roles, conservative delivery caps and hard-height
-  projection are measured. Fresh local capture is 4/4; 250 m raster capture is
-  3/4, and some guide/bank checks still fail. See the
-  [report](docs/research/2026-09-26-connected-valley-patches.md).
-- [x] **B1 hard-target-aware automatic layout:** bounded guide relocation now
-  preserves every original vertex/reach and hard input, restoring 4/4 capture,
-  zero sinks and descending guide profiles in the 250 m raster. See the
-  [report](docs/research/2026-09-26-hard-target-valley-layout.md).
-- [x] **B1 head/mouth bank construction:** cap-aware head transitions and
-  perpendicular mouth sections pass all 575 local bank pairs at 25 m and <=2.5 m
-  stations. Same guides, targets and envelopes; 250 m raster banks still fail.
-  See the [report](docs/research/2026-09-26-valley-heads-and-mouths.md).
-- [x] **B1 cell-safe delivery bounds:** one-sided curvature allowances plus
-  constant handling beside protected areas reduce the worst 250 m bank rise from
-  54.062 to 0.316 m; five independent rectangle controls retain interior safety.
-  Raster quality remains rejected. See the
-  [report](docs/research/2026-09-27-cell-safe-terrain-delivery.md).
-- [x] **B1 short representation probes:** river-aligned analytic control and
-  trusted-field roundtrip preserve banks; generic splines lose outlets and bounds.
-  See the [report](docs/research/2026-09-27-feature-preserving-terrain-delivery.md).
-- [x] **B1 guarded feature delivery:** bounded snapshots, complete network
-  reopening, owned numeric arrays and query-order/batch/overlap checks are
-  implemented. All 575 banks and original gates survive reopening in the matched
-  four cases; raster controls still fail. See the
-  [report](docs/research/2026-09-27-prepared-feature-snapshots.md).
 - [ ] **M5 quality follow-up — B1 held-out geometry and detail consistency.**
   Test new bends, tributaries, junctions and oblique layouts, then irregular
   mouths and actual parent/detail filtering. Same-field tile agreement does not
@@ -289,17 +68,6 @@ are implemented. Climate and continent-history generation remain planned.
   when downstream scenarios need them; distinguish connected-ocean fetch from
   the current all-water geographic score. Retain coarse-cell and quadrature
   aliasing limits, including features missed without a mixed-support flag.
-- [x] **WC1 — Generate provisional context** (R07/R10/R11/R49): ocean topology and
-  exposure, bathymetric hypotheses, geological provinces and inspectable defaults.
-  Spherical coverage and periodic connected-water inspection are delivered.
-  Shore distance, directional geographic exposure, authored geology and a separate
-  bathymetry hypothesis product are delivered. M1 now consumes matching geographic
-  coastal support; physical transport and bathymetry/climate coupling remain follow-ups.
-- [x] **WC2 / M1 slice — Produce bounded rough physical terrain** (R02/R48/R49):
-  one supported connected landmass, fixed metric scale, authored macro relief and
-  conservative context-bound coastal distance are reproducible and portable.
-  Wider/polar domains, physical forcing and evolution remain M2-M5 work; B/C and LE
-  quality acceptance govern default adoption and WC4 in M5.
 - [ ] **WC3 — Couple climate/runoff and coarse history** (R33/R49): seasonal budgets,
   explicit epoch forcing, bounded feedback and visible nonconvergence.
 - [ ] **WC4 — Select a verified world parent** (R49/LE3/LE5): staged editor workflow,
@@ -311,104 +79,14 @@ are implemented. Climate and continent-history generation remain planned.
 
 ### Geological-history checkpoint
 
-The [source/tool review](docs/research/2026-09-24-landscape-evolution-models.md)
-and [detailed LE0–LE6 plan](docs/strategy/landscape-evolution.md) specify this work.
-These checkpoints group existing R IDs. The
-[first implementation report](docs/research/2026-09-24-landscape-evolution-reference.md)
-records execution and its remaining gates; the simulation is still research-only.
+Open items of the isolated [landscape-evolution reference](docs/strategy/landscape-evolution.md)
+(research only; the planet pipeline is the product path).
 
-- [x] **LE0 — Research models and existing implementations.** Compare stream power,
-  hillslope transport, SPACE, analytical erosion, depression routing and larger
-  frameworks. Record the successful 45-package Windows/Python wheel dry run,
-  GPL dependency and prereleases. That initial report predates execution.
-- [x] **LE1 — Validate an isolated reference** (R11/R14/R41). A 53-wheel Windows
-  lock, typed inputs, bounded adaptive solver, physical ledgers and analytic
-  controls are implemented. Steady channels, knickpoint time/grid refinement,
-  dry/flooded cases, Float64 runoff and incomplete publication are tested.
 - [ ] **LE2 — Accept a two-epoch landscape** (R11/R14/R40/R43). The comparison
   command, current/constant/reversed controls, three-seed cohort, process ablations,
   resistance, rotation/extent/spacing checks and figures are implemented. The
   D8/bilinear candidate fails the continuous-profile quality gate; keep chronology
   as a useful candidate while resolving grid sensitivity and surface/path agreement.
-- [x] **LE2 evidence — Make experiments inspectable and reproducible.** New output
-  directories contain epoch images, numeric states, profiles, input/runtime hashes,
-  fresh-process timing/memory, conservation checks and explicit incomplete results.
-- [x] **Reconstruction experiment — Compare frozen terrain and complete paths**
-  (R48/R32). The [measured follow-up](docs/research/2026-09-24-frozen-channel-reconstruction.md)
-  preserves every selected edge/head/terminal on 22 completed cases. A triangle
-  control removes sampled ascent on all 1,030 nodally nonascending routes at
-  100 m/25 m spacing; 153 nodally uphill routes remain unresolved. Hash checks,
-  paired ground figures, crossing rejection, off-grid anchor conflicts, separate
-  reconstruction volume and whole-climb affected length are implemented.
-  This closes the experiment, not the broader authoring or production gate.
-- [x] **Physical valley/path experiment and capture diagnostics** (R48/R32/R02).
-  The [measured prototype](docs/research/2026-09-25-physical-channel-paths.md) keeps
-  all 1,183 routes and introduces no new uphill routes; D8-aligned length falls
-  to 56.99%. All 22 cases fail the sampled no-fill policy, 17 exceed the diagnostic
-  30 m cut budget, and spacing changes move many sampled outlets. Native regional
-  constraints and rerouted catchment geography are not yet preserved.
-- [x] **Constrained catchment/network-led surface experiment** (R48/R32/R02).
-  The [public comparison](docs/research/2026-09-25-constrained-network-surface.md)
-  delivers a unique quadratic fit with native bounds, protected heights/divide,
-  descending physical guides and explicit infeasible-route rejection. Complete
-  profiles pass; independently rerouted catchments fail. This closes the bounded
-  experiment, not the production drainage gate.
-- [x] **Physical bank/confluence feasibility experiment** (R48/R32/R02).
-  Fixed physical support, explicit mouth taper, native-bound and joint-height
-  conflict diagnostics, and independent inward-profile/capture checks are measured.
-  The [report](docs/research/2026-09-25-valley-bank-feasibility.md) rejects promotion:
-  525 endpoint constraints pass in feasible cases, but no required head is captured
-  and the 250 m candidate adds sinks. No fixed constraint was softened.
-- [x] **Reassess failed methods and alternative processes** (R24/R32/R48).
-  The [method register](docs/research/terrain-method-decisions.md) records eleven
-  groups of failed/restricted approaches and their replacement gates. The
-  [groundwater/canyon review](docs/research/2026-09-25-groundwater-and-terrain-architecture.md)
-  checks primary models and existing component APIs; no new simulation was run.
-- [x] **B1 input-role audit and connected-patch comparison** (R48/R32/R02).
-  [Measured](docs/research/2026-09-26-connected-valley-patches.md): fixed/native and
-  separate fresh construction, rounded valley unions, explicit coastal transition,
-  local versus Float32 checks and inter-node envelope protection. Fresh local
-  routing captures 4/4 heads with no sinks; 250 m raster captures 3/4 with one sink.
-  Removing the mouth transition gives 0/4 and four sinks. Both modes retain hard
-  targets; fixed/native quality and some fresh guide/bank checks remain rejected.
-  That comparison held guides fixed; automatic relocation is covered below.
-  No time evolution was simulated.
-- [x] **B1 hard-target-aware guide placement** (R48/R32/R02).
-  [Measured](docs/research/2026-09-26-hard-target-valley-layout.md): an explicit
-  automatic-edge mask, bounded clearance/corridors/length, unchanged original
-  nodes and reach ownership, no new crossings and repeat/rotation checks. The
-  250 m raster captures 4/4 with no sinks or uphill guide routes; all interior
-  checking samples reach the coast. Hard targets and fresh/native controls are
-  preserved. Local/raster banks and 500/1,000 m delivery still fail. Rejected
-  sine-squared detours and sampled-envelope bed lifting are documented.
-- [x] **B1 head and mouth transitions** (R48/R32/R02).
-  [Measured](docs/research/2026-09-26-valley-heads-and-mouths.md): the same 575 bank
-  pairs change from 21 local inward failures and five endpoint failures to zero.
-  All local gates also pass with <=2.5 m stations and the unchanged 1 cm tolerance.
-  250 m raster delivery keeps 4/4 capture but has 217/575 ordinary and 241/575 dense
-  inward failures, plus five endpoint failures. Coarser delivery remains rejected.
-  Rejected head tapers, envelope lifting and the initial mouth wedge are recorded.
-- [x] **B1 curvature-bounded raster capacities** (R48/R32/R02).
-  [Measured](docs/research/2026-09-27-cell-safe-terrain-delivery.md): the maximum
-  250 m inward rise drops from 54.062 to 0.316 m; ordinary/dense failures change
-  from 217/241 to 214/238 and endpoints from five to two. Capture stays 4/4.
-  Whole-cell protection has an explicit bound and independent corner/thin-area
-  controls. Node-only and clipped-negative shortcuts remain rejected. Coarse
-  routing and delivered bank quality still fail.
-- [x] **B1 representation and trusted-field roundtrip probes** (R48/R32/R02).
-  [Measured](docs/research/2026-09-27-feature-preserving-terrain-delivery.md): seven
-  analytic orientations give 114/238 world-bilinear bank failures and none for a
-  river-aligned strip at similar maximum height error. Generic splines reduce
-  failure counts but increase rises and lose capture. Stored prepared fields
-  preserve all 575 profiles and common-grid heights exactly at three background
-  spacings plus a quarter turn. These are ignored exploratory scripts, not a
-  supported reader or accepted product representation.
-- [x] **B1 feature-preserving artifact and query boundary** (R48/R32/R02).
-  [Implemented and measured](docs/research/2026-09-27-prepared-feature-snapshots.md):
-  owned arrays, deterministic snapshots, bounded non-pickle loading, complete
-  graph/segment consistency and query-order/batch/tile/halo checks. All 575 dense
-  banks and original quality metrics match after reopening at three background
-  spacings plus a quarter turn. Current application generation is unchanged.
 - [ ] **M5 — B1 held-out geometry and parent/detail checks** (R48/R32/R02/R15).
   Add bounded new bends, short tributaries, junctions, hard-height proximity and
   oblique layouts. Explicitly extend or reject irregular coasts; the reader still
@@ -457,15 +135,8 @@ records execution and its remaining gates; the simulation is still research-only
 
 ### Drainage inspection checkpoint
 
-- [x] Add an authored automatic drainage-density multiplier with deterministic,
-  downstream-connected channel initiation and current-format persistence.
-- [x] Derive connected reaches and unique D8 contributing areas for network
-  inspection; keep MFD capture and physical incision budgets separate.
-- [x] Draw drainage at viewport resolution, reveal tributaries by scale, and
-  retain an all-channel review plus every sampled uphill conflict. A separate
-  Depressions toggle keeps coarse basin polygons out of the default channel view.
-- [x] Record public-fixture density, connectivity, unchanged-default-reference,
-  zoom-rendering and performance evidence before accepting the changes.
+Open drainage work for the local terrain path.
+
 - [ ] **P0 — Reduce D8 direction bias in actual terrain generation (R48).** Compare
   terrain-guided subgrid paths shared by routing, floor fitting and rendering;
   preserve junctions, authored divides, incision limits and lake terminals.
@@ -484,17 +155,6 @@ records execution and its remaining gates; the simulation is still research-only
 
 ### Durable data and output products
 
-- [x] **P0 — Define the versioned build manifest.** Record project and input
-  hashes, generator and schema versions, master and stage seeds, effective
-  parameters, working extent and units, runtime/dependency versions, warnings,
-  and authoritative output hashes.
-  Completed builds record named stage seeds, numeric product hashes,
-  and explicit local-only NPY/GeoTIFF coordinates. World-bound terrain placement
-  remains open; WC0 source placement is implemented separately.
-- [x] **P0 — Export the authoritative Float32 DEM as local-metric GeoTIFF.**
-  Implemented point registration, metre units, NaN nodata, embedded masks,
-  numeric-source hashes and manifest linkage. See the
-  [export contract](docs/terrain-geotiff.md).
 - [ ] **P1 — Verify local GeoTIFF import in desktop GIS and standalone GDAL.**
   Rasterio numeric reads and Pillow TIFF-tag checks pass. Desktop display is
   unverified; Rasterio 1.5.1 `rio info` assumes an Earth-coordinate conversion
@@ -503,11 +163,6 @@ records execution and its remaining gates; the simulation is still research-only
   Declare the planetary model, source correspondence and metric working
   projection; validate distortion and coordinate round trips. Local TIFF
   coordinates do not yet place a continent on a world map.
-- [x] **P1 — Add a non-interactive build command.** Let
-  `dmtools terrain build <project.dmterrain.json>` use the same domain,
-  pipeline, and adapters as the desktop workbench.
-  Implemented with required `--output NEW_DIRECTORY`, lossless NPY arrays,
-  both existing preview styles, diagnostics and completion-last publication.
 - [ ] **P1 — Derive contour vectors from a completed DEM.** Make interval,
   index-contour cadence, smoothing, and minimum feature size explicit; identify
   the source DEM in metadata.
@@ -530,158 +185,15 @@ records execution and its remaining gates; the simulation is still research-only
 - [ ] **P1 — Add divides, rivers, faults, escarpments, and general breaklines.**
   Define the semantics of each constraint before extending the project schema;
   a drawn line must not imply more geological certainty than the user supplied.
-- [x] **P1 — Add first terrain-character regions.** Polygon authoring,
-  plain/hills/plateau/mountain recipes, base height, local relief, feature size,
-  orientation and shared recipe transitions feed both terrain and routing.
-  See [the region guide](docs/terrain-regions.md) and ADR-0030.
-- [x] **P1 — Bound automatic incision by regional relief.** Plains and
-  plateau interiors now receive smaller budgets with the same regional
-  transitions. Floor/steepness corrections respect those limits; numeric builds
-  retain the effective limits and exact authored anchors remain authoritative.
-  See [ADR-0031](docs/adr/0031-bound-incision-by-regional-relief.md).
-- [x] **P1 — Classify channels blocked by regional cutting limits.** Retained
-  edge evidence reports depression contact, remaining-cut deficits, final
-  adjustment and regional transitions. Counts overlap; they are not causes.
-  Read-only diagnostics now have their own module. See
-  [ADR-0032](docs/adr/0032-classify-channel-conflicts.md).
-- [x] **P1 — Map depression extents and spill/outlet candidates.** A shared
-  257-node routing/review grid replaces the coarse separate inventory. Numeric
-  labels, conditioned receivers, representative exit/spill/terminal records and
-  exterior/enclosed boundary context support the workbench and four-panel review.
-  See [ADR-0033](docs/adr/0033-map-basin-spill-candidates.md).
-- [x] **P1 — Author lake levels, outlets and dry-basin footprints.** Polygon
-  authoring, saved lake controls, automatic-cut retention, separate water/ground
-  exports and shoreline/anchor/outflow review are implemented. See
-  [ADR-0034](docs/adr/0034-author-lakes-and-dry-basins.md).
-- [x] **P1 — Terminate planned flow inside authored basin footprints.**
-  Canonical footprint nodes now absorb both D8 and MFD flow; contributing area
-  is conserved and exported per intent; eligible outlet transfer follows below. See
-  [ADR-0035](docs/adr/0035-retain-basin-flow-and-assess-outlets.md).
-- [x] **P1 — Assess candidate downstream lake outlets on finished ground.**
-  Review nearest outward attachments, whole candidate paths, uphill steps,
-  basin re-entry, vector coastline gaps, cycles and terminal boundary context.
-  Export sampled path evidence; clearance alone is insufficient for transfer
-  until shoreline, wet/dry collection and whole-route gates also pass.
-- [x] **P1 — Connect eligible lake outlets and transfer retained area.**
-  Finished-ground routes now carry captured MFD area from connected lake water
-  and dry nodes that drain into it. Extra shoreline openings and invalid routes
-  block connection; isolated pockets stay retained. Shared path segments add
-  area once per source, and full terminal accounting is checked. See
-  [ADR-0036](docs/adr/0036-connect-lake-outflow-with-area-transfer.md).
-- [x] **P1 — Show collected and retained basin nodes.** The workbench and
-  finished-ground review now map collected water, collected dry ground and
-  retained nodes. Build v18 exports the classification and retained contribution
-  at each footprint node; sample counts and area accounting remain distinct.
-  Exact outlet ground minus water level is reported, including submerged outlets,
-  without treating a clear sampled route as proof of a stable lake level. See
-  [ADR-0037](docs/adr/0037-expose-basin-catchment-outcomes.md).
-- [x] **P1 — Route internal flats with known exits.** Integer ranks now route
-  exact flats without editing the DEM. Every link is vector-contained, real
-  downhill alternatives take precedence, and paths to closed pits stay retained.
-  Build v18 exports internal receivers and ranks; details separate resolved flat
-  donors from those reaching lake water. The public flat-outlet fixture covers
-  both outcomes. See [ADR-0038](docs/adr/0038-route-basin-flats-with-integer-gradients.md)
-  and the [measured rundown](docs/research/2026-09-11-basin-flat-routing.md).
-- [x] **P1 — Check shorelines and outlet contact between canonical nodes.**
-  Bounded profiles now sample every boundary corner and the water/outlet/first
-  attachment connection. Low boundary openings and above-water connection ground
-  block transfer; exports retain positions/heights and the review marks failures.
-  The public shoreline-gap fixture catches a real narrow opening missed by the
-  coarse review. See [ADR-0039](docs/adr/0039-sample-shorelines-and-outlet-connections.md)
-  and the [measured rundown](docs/research/2026-09-11-finer-water-connections.md).
-- [x] **P1 — Target narrow authored cores and crossings.** Local intervals now
-  refine to the evaluator's narrowest core radius, preserve every baseline probe,
-  merge overlaps and reject excessive plans before evaluation. The public
-  narrow-shoreline-gap fixture detects a 200 m influence missed by the fixed
-  3.90625 km profile; ground and incoming flow stay unchanged. See
-  [ADR-0040](docs/adr/0040-refine-water-profiles-around-authored-features.md) and
-  the [measured rundown](docs/research/2026-09-11-feature-guided-water-sampling.md).
-- [x] **P1 — Review complete downstream outlet profiles.** External candidate
-  paths now receive bounded feature-guided Float32 profiles, canonical vertex
-  mappings and cumulative uphill evidence. Unresolved profiles block transfer;
-  details and red crest markers explain the result. A public 100 m point fixture
-  catches a 43.85 m climb missed by canonical nodes without changing its DEM.
-  See [ADR-0041](docs/adr/0041-review-complete-downstream-outlet-profiles.md) and
-  the [measured rundown](docs/research/2026-09-11-downstream-outlet-profiles.md).
-- [x] **P1 — Complete internal wet-link evidence.** Batched feature-guided
-  checks now remove links with above-water ground, preserving alternate wet paths.
-  All wet nodes must reach the unchanged selected contact; separated pools and
-  excessive whole-lake sample budgets retain captured area. Builds retain each
-  candidate link's maximum, location and sample provenance; the review marks
-  barriers. See [ADR-0042](docs/adr/0042-review-internal-water-links.md) and the
-  [measured rundown](docs/research/2026-09-11-internal-water-links.md).
-- [x] **P1 — Check dry collection links between canonical nodes.** Batched
-  profiles now reject dry-to-dry, dry-to-water and exact-flat climbs before
-  routing; clear alternatives and lower closed pits remain eligible. Complete
-  chosen paths also check cumulative rises before collecting area. Build v18
-  exports per-link evidence and path excursions. A public narrow point catches
-  a 131.44 m climb and reroutes without changing ground. See
-  [ADR-0043](docs/adr/0043-review-dry-collection-paths.md) and the
-  [measured rundown](docs/research/2026-09-11-dry-collection-paths.md).
 - [ ] **Research — Compare path-aware alternatives after a cumulative rejection.**
   Local blocked links already admit other descents and flat exits. A composed
   path exceeding tolerance retains that donor and its upstream paths; it does
   not search different downstream choices. Compare bounded state-aware methods
   without favouring lake exits over closed pits or perturbing the DEM.
-- [x] **P1 — Reuse exact water-sampling work.** Prepared features now retain
-  normalized parts, and each profile/network call evaluates duplicate coordinate
-  bytes once before restoring every station. Budgets, Float32 ground, endpoint
-  checks, routing and complete evidence remain unchanged. See the
-  [measured comparison](docs/research/2026-09-13-water-sampling-reuse.md).
-- [x] **P1 — Reject distant sampling guides before geometry queries.** Immutable
-  guide bounds now cover core/context corridors and polygon interiors, with
-  outward rounding and unchanged exact checks for possible contacts. Shared
-  runtime/forecast plans retain every station and budget decision. Three opt-in
-  fixtures add 4/16 lakes, 16/64 points and broad overlap; see the
-  [measured comparison](docs/research/2026-09-13-water-guide-bounds.md).
 - [ ] **P1 — Measure remaining network planning and evidence overhead.** Compare
   feature indexing on many-constraint scenes, project-scale profile memory and
   compact diagnostic serialization. Retain every required probe, complete budget
   decision and reviewable failed link; exact per-call reuse is already implemented.
-- [x] **P1 — Compare nested and shifted finished-ground profiles.** A read-only
-  five-case runner now measures regional transitions, global/regional procedural
-  detail, context tails and overlapping points across scales, directions and seeds.
-  Shared positions/Float32 ground must match exactly; unresolved budgets remain
-  explicit. The initial 64-run matrix is finite-reference evidence, not an error bound.
-  See the [convergence report](docs/research/2026-09-13-water-sampling-convergence.md).
-- [x] **P1 — Guide water probes through regional transitions.** Polygon boundary
-  corridors and local contained intervals now expose a 950 m plateau rise missed
-  by regular probes on a 4000 km object. Preserve ground, baseline stations,
-  complete budgets and existing wet/dry/outlet gates. See
-  [ADR-0044](docs/adr/0044-guide-water-profiles-through-regional-transitions.md).
-- [x] **P1 — Add procedural detail and context-shoulder sampling.** Global and
-  regional density now follows half the finest active noise lattice cell; local
-  context guidance uses evaluator radii and closest approaches. The expanded
-  matrix includes oblique paths and a rotated regional-detail case, with fixed-
-  input controls and complete-budget failures. See
-  [ADR-0045](docs/adr/0045-sample-procedural-detail-and-context-shoulders.md) and
-  the [measured report](docs/research/2026-09-13-detail-and-context-sampling.md).
-- [x] **P1 — Measure bounded midpoint refinement and false convergence.** The
-  research runner retains production probes, enforces complete-wave/depth limits
-  and checks apparent convergence against a denser nested reference. A narrow
-  20 m peak defeats an exactly zero midpoint residual. This indicator is not
-  adopted for runtime clearance; see the
-  [adaptive experiment](docs/research/2026-09-13-adaptive-water-profile-refinement.md).
-- [x] **P1 — Establish and measure rounded procedural-noise component bounds.**
-  The research harness compares natural intervals with monotone polynomial and
-  bilinear-cell enclosures, including derived binary64 error allowances and final
-  Float32 conversion. Complete cell budgets, exact-rational checks, finite
-  references and replay hashes are enforced. The twelfth-octave hash now wraps
-  explicitly without overflow warnings or changed values. See the
-  [component report](docs/research/2026-09-13-noise-component-bounds.md).
-- [x] **P1 — Restrict noise-bound work to rounded profile strips.** A separate
-  research policy clips the original affine path through major-axis grid strips,
-  preserves rounding at contacts and enforces complete strip/cell limits. Ordered
-  uphill bounds include possible rises hidden within one interval. All 864 profile
-  trials fit the comparison limits, while fine-path overhead and rough-field
-  uncertainty remain; see the [profile report](docs/research/2026-09-14-noise-profile-bounds.md).
-- [x] **P1 — Compare bound-driven noise refinement and geometry selection.** Hybrid
-  geometry uses rectangles for spans touching at most two minor-axis cells and
-  clipped strips elsewhere. Adaptive refinement preserves completed intervals,
-  targets local extrema and both contributors to ordered-rise uncertainty, and
-  enforces cumulative cell/strip/sample limits. Uniform and strip-only controls
-  use the same acceptance contract. See the
-  [refinement report](docs/research/2026-09-16-bounded-noise-refinement.md).
 - [ ] **P1 — Reduce unresolved high-detail bound work.** Compare retaining reusable
   octave/lattice work across refinement waves, intersecting child ranges with
   retained parent bounds, and tighter within-cell/cross-octave correlation.
@@ -704,15 +216,6 @@ records execution and its remaining gates; the simulation is still research-only
   coast/region/constraint composition and rounding of distance/exponential
   operations remain open. Neither component bounds nor the
   completed midpoint experiment close the full-field contract.
-- [x] **P1 — Expose sampling demand before high-detail water reviews.**
-  `terrain water-budget PROJECT` shares canonical terrain preparation and actual
-  shoreline/internal-link planning. It reports exact counts or bounded required
-  lower bounds and distinguishes potential networks from executed review. No fine
-  profiles, delivered raster or source writes are needed. The five/six-detail
-  flat fixtures match actual review demand. See the
-  [command guide](docs/terrain-water-budget.md),
-  [ADR-0046](docs/adr/0046-forecast-water-sampling-budgets.md) and
-  [measured report](docs/research/2026-09-13-water-budget-forecast.md).
 - [ ] **P1 — Extend cost forecasts only with measured workflow value.** Evaluate
   saved-project forecast access in the workbench and an explicit exportable report;
   preserve input identity and distinguish saved from unsaved edits. Measure
@@ -744,13 +247,6 @@ records execution and its remaining gates; the simulation is still research-only
   anchor preservation and downstream closure; never silently expand budgets.
 - [ ] **P1 — Extend regional process controls.** Add drainage density,
   runoff and erosion resistance with measurable effects and authored authority.
-- [x] **P1 — Render drainage review at viewport size.** Connected reaches are
-  redrawn with bounded antialiasing at each view scale, with monotone catchment
-  selection and All channels review. Every red conflict remains visible.
-  Routing accuracy is unchanged; grid-aligned paths still need geometry work.
-- [x] **P1 — Support adjacent mainland sections and disconnected islands.** SVG
-  land objects are dissolved into one polygonal mask, sub-sampling border
-  slivers are repaired, and all components share one metric field and seed.
 - [ ] **P1 — Classify SVG water holes and ocean boundaries.** Declare ocean
   levels and enclosed-water semantics. Authored lake/dry-basin footprints are
   implemented; an enclosed SVG gap still has no inferred lake level or intent.
@@ -776,54 +272,6 @@ records execution and its remaining gates; the simulation is still research-only
 This is a core planned generation capability. It is separate from directly
 editing a finished DEM; see [ADR-0048](docs/adr/0048-keep-zoom-driven-detail-generation.md).
 
-- [x] **P0 — Add bounded unchanged-field regional sampling.** The saved-project
-  `sample-region` command binds full input/algorithm identity, reference grid,
-  power-of-two subdivision, a globally aligned window and a clipped halo. It
-  rejects over-budget requests before preparing the shared field; samples only
-  the requested finer nodes; preserves global constraints, routing context and
-  basin IDs; and publishes numeric products, ground preview and completion-last
-  provenance. Public 65/129/257 windows, overlaps and repeat visits agree exactly.
-  See [ADR-0058](docs/adr/0058-sample-bounded-regional-windows.md) and the
-  [measurements](docs/research/2026-09-22-regional-field-sampling.md).
-- [x] **P0 — Keep existing noise-band weights when adding detail.** Each band
-  owns a fixed geometric amplitude share. Regional shapes use a separate fixed
-  two-band carrier and add only finer bands as texture. Base macro fields stay
-  exact when moving from 2 to 6 or 12 bands. This does not preserve a finished
-  parent DEM: measured coarse-cell averages still change, and authored guidance
-  can redirect drainage. See [ADR-0059](docs/adr/0059-preserve-noise-band-amplitudes.md)
-  and [the comparison](docs/research/2026-09-22-stable-detail-band-amplitudes.md).
-- [x] **P0 — Measure an explicit parent-cell preservation candidate.** The
-  all-land projection keeps parent nodes, bilinear edges and cell means within
-  Float32 rounding, with exact same-density overlaps. Public 65/129/257 trials
-  reject it for runtime use: the bilinear reference loses existing structure,
-  authored heights move by up to 29.161 m, shared coordinates drift across
-  densities and eight sampled channel edges worsen. See the
-  [experiment](docs/research/2026-09-23-parent-cell-preservation.md).
-- [x] **P0 — Bind regional requests to a verified immutable parent.** Build v18
-  contains typed portable inputs; `sample-parent` verifies completion, hashes,
-  frame, runtime and all delivered ground/water values plus reused routing.
-  Original source files are no longer needed. Requests and separate output
-  artifacts bind the parent ID and preserve its frame. See
-  [ADR-0061](docs/adr/0061-verify-parents-and-isolate-local-detail.md).
-- [x] **P0 — Add a bounded experimental residual on the retained reference.**
-  `enrich-region --experimental` conditions only an added smooth residual,
-  with globally addressed edge coefficients, fixed 17-by-17 preparation probes,
-  parent-node equality and measured zero-added-mean moments. Authored cores,
-  basin footprints, coastal margins and planned channel corridors are protected.
-  65/129/257, overlap/revisit, water and bounds checks pass on public fixtures.
-  [The measurements](docs/research/2026-09-23-verified-parent-detail.md) also expose
-  regular cell support and windows completely excluded by protection. This is
-  an executable experiment, not accepted cartographic terrain or finer hydrology.
-- [x] **P1 — Connect experimental detail across parent-cell edges.**
-  Shared deterministic edge modes replace isolated cell-interior stamps. Fixed
-  terrain slopes weight horizontal/vertical contributions; adjacent cell budgets
-  and protections agree. A one-cell support halo counts against the unchanged
-  4096-cell limit, and the temporary probe bank is included in admission.
-  [Paired measurements](docs/research/2026-09-23-shared-edge-detail.md) cover three
-  public projects, three seeds and 65/129/257 outputs: exact nodes/overlaps,
-  cell means, final Float32 edge secants and coarse spectral power. Shared edges
-  carry detail; there is no old-formula compatibility path. See
-  [ADR-0068](docs/adr/0068-share-terrain-detail-across-edges.md).
 - [ ] **P0 — Complete parent/child and neighboring-window acceptance.**
   Remove remaining grid direction with oblique, terrain-character-aware support;
   set acceptance tolerances for coarse spectral leakage and final Float32 slopes
@@ -834,49 +282,6 @@ editing a finished DEM; see [ADR-0048](docs/adr/0048-keep-zoom-driven-detail-gen
   returns to zero at every parent-cell boundary. Cover oblique boundaries and
   extreme detail scales. Fixed probes do not certify unseen extrema; observed
   violations reject a request. R34 remains open.
-- [x] **P1 — Reuse fixed detail-cell preparation under a bounded budget.** Each
-  prepared detail context now retains at most 4,096 scalar protection/amplitude/
-  terrain-direction/moment records with least-recently-used eviction, explicit
-  clearing and an uncached control. Overlap, refinement, eviction and retry preserve numeric
-  results, evidence and artifacts exactly. See
-  [ADR-0062](docs/adr/0062-reuse-bounded-detail-cell-support.md) and the
-  [measurements](docs/research/2026-09-23-detail-cell-reuse.md).
-- [x] **P1 — Reuse verified parents and bounded numeric results in sessions.**
-  A serial application session owns one loaded/prepared parent, one detail context
-  and at most 32 numeric results under an explicit byte budget. Every write checks
-  parent/runtime freshness; changed identities close the session. Cache keys bind
-  aligned requests and detail settings; artifact bounds remain caller-specific.
-  Clearing and close release retained work. See
-  [ADR-0063](docs/adr/0063-reuse-verified-parent-region-sessions.md).
-- [x] **P1 — Cancel regional requests without losing reusable parent work.**
-  One-way tokens stop at preparation/sampling/export checkpoints; cancelled
-  numeric work cannot become a cached result or a completed artifact. Valid
-  completed results can be retried to a new destination, with fresh source/runtime
-  checks. See [ADR-0064](docs/adr/0064-cancel-generation-at-safe-checkpoints.md).
-- [x] **P1 — Admit saved-parent jobs against shared memory estimates.** Default
-  sessions share 1024 MiB of estimated capacity, charging staged parent decoding,
-  loaded/prepared arrays, complete-source geometry allowances, cache capacity and
-  active sampling/rendering. Reject before expensive work, release on all exits,
-  and preserve valid reusable work. Bounded file reads avoid allocating the product
-  safety ceiling; detail protection queries batch all intersections without
-  dropping features. See [ADR-0065](docs/adr/0065-admit-regional-memory-estimates.md).
-- [x] **P1 — Bound ground-rendering scratch and regional comparison canvases.**
-  Tile both ground styles with exact gradient halos; keep native scientific and
-  numeric outputs. Cap review-only comparison panels at 1024 per side, retaining
-  native difference extrema and explicit preview metadata. Close owned pixel
-  buffers and check saved-parent cancellation between tiles. Thin-region detail
-  peaks fell from 1078 to 157 MiB in the public stress case; see
-  [ADR-0066](docs/adr/0066-bound-terrain-rendering-scratch.md) and the
-  [measurements](docs/research/2026-09-23-bounded-terrain-rendering.md).
-- [x] **P1 — Bound water-colouring scratch and release editor image owners.**
-  Native water composition now uses 256-square tiles without a full water overlay;
-  one-shot rendering reuses its owned ground image. Preserve exact display pixels
-  and current visibility thresholds. Close old ground, water and diagnostic caches
-  on replacement/reset/shutdown; release viewport images after Tk transfer and
-  keep the old view/legend on failed style changes. Synthetic 4096 composition
-  peaks fell from 639 to 257 MiB. See
-  [ADR-0067](docs/adr/0067-own-preview-images-and-tile-water.md) and the
-  [measurements](docs/research/2026-09-23-preview-image-ownership.md).
 - [ ] **P1 — Finish total local-generation memory calibration and ownership.**
   Shared admission is implemented for saved-parent application jobs, not an OS
   memory cap. The [rendering follow-up](docs/research/2026-09-23-bounded-terrain-rendering.md)
@@ -897,13 +302,6 @@ editing a finished DEM; see [ADR-0048](docs/adr/0048-keep-zoom-driven-detail-gen
   estimates now supply foundations; application-wide memory calibration remains.
   No viewport scheduler or recursive enrichment is implemented.
 
-- [x] **P1 — Make sampled lake visibility follow display scale.** Classify
-  each connected wet pool independently; hide pools at or below 9 output pixels
-  squared and fade to full opacity at 36. Cache whole-pool areas before viewport
-  clipping; retain small pools in numeric water and show ground sample spacing.
-  Scientific ground, authored instructions and diagnostic overlays remain
-  complete. Native-size PNG exports use the same rule independently of zoom.
-  See [ADR-0057](docs/adr/0057-display-water-at-the-appropriate-scale.md).
 - [ ] **P1 — Couple small-river visibility to local generation.** Distant views
   should show only major water bodies and accepted trunk rivers. Define physical
   width/runoff or explicitly ranked size evidence, screen-size thresholds and
@@ -940,10 +338,6 @@ contracts and provisional context forward. Coupled climate/runoff follows rough
 terrain acceptance; ecological interpretations remain downstream. R49 owns the
 workflow, with shared numeric responsibilities in R01/R02/R07/R10/R11/R15/R33/R34.
 
-- [x] **P0 — Preserve full-world import and continent identities.** World source
-  snapshots retain SVG groups/IDs, islands, holes and explicit frame/radius.
-  Derived wrapped views validate physical overlap without dissolving ownership.
-  Continents are not connected components, plates or watersheds.
 - [ ] **P1 — Extend world-source usability after measured need.** Checkpoint/cancel
   long imports, profile dense curved coastlines and decide whether incomplete
   mapping drafts need a separate format. The current world save requires valid
@@ -956,18 +350,14 @@ workflow, with shared numeric responsibilities in R01/R02/R07/R10/R11/R15/R33/R3
   rotational and atmospheric assumptions, rough relief, ocean scenarios and
   authored overrides. Outputs need seasonal units, validity, budgets, provenance
   and uncertainty. Fixed modern geography is an explicit historical assumption.
-- [ ] **P1 — Prototype deterministic continuous climate fields.** Compare seasonal
-  temperature, precipitation, coastal moderation, continentality, rain shadows,
-  potential/actual evapotranspiration, aridity and runoff before named zones.
-  Re-evaluate them after rough mountains; cap feedback and report nonconvergence.
 - [ ] **P1 — Author climate-region guidance before generation.** Once consumed by
   a backend, let the user specify intended aridity/desert areas over the previous
   map, with conflicts and uncertainty visible. Do not expose a no-op paint tool.
 - [ ] **P0 — Preserve world-to-region consistency.** Share one parent revision,
   global present, history and boundary forcing. Changes to macro relief or gateways
   can invalidate distant climates. Local aging must not replay time twice.
-- [ ] **P2 — Add versioned climate-zone classification views.** Derive familiar
-  Köppen–Geiger-like and ecological Holdridge-like views from continuous fields;
+- [ ] **P2 — Add versioned climate-zone classification views.** Köppen–Geiger exists
+  on the planet; add an ecological Holdridge-like view from continuous fields;
   keep thresholds, limitations and classification-version metadata explicit.
 - [ ] **P2 — Generate biome suitability and display classes.** Use climate,
   elevation, growing season, slope, aspect, wetness, substrate and authored
@@ -1017,13 +407,6 @@ execution order.
   retain their different meanings. The overlapping absolute-point defect
   exposed by parent-preservation research is fixed separately below; a complete
   mixed-constraint solver and its conflict diagnostics remain open.
-- [x] **P0 — Preserve overlapping absolute height points.** Interpolating
-  target shares now keep every point exact and make nearby terrain converge to
-  it. Conflicting coincident targets and nonzero sea-level-boundary targets fail
-  before routing. The public lake fixture's 250 m point is now 250 m; its former
-  331.149811 m value came from point averaging, not basin precedence. See
-  [ADR-0060](docs/adr/0060-interpolate-overlapping-height-points.md) and
-  [the measurements](docs/research/2026-09-23-exact-height-points.md).
 - [ ] **P1 — Make transitions aware of surrounding terrain.** Estimate the
   stable low-frequency reference surface entering a stage, then adapt shoulder
   reach and blending to local slope and relief without using an order-dependent
@@ -1040,11 +423,6 @@ execution order.
 
 ### Mountain systems, ridges, and passes
 
-- [x] **P0 — Solve a continuous longitudinal ridge profile.** Interpolate
-  authored peaks and passes along arc length, enforce minimum crests where
-  requested, and avoid circular point stamps or abrupt changes at vertices.
-  Absolute point anchors on absolute structures now use a shape-preserving
-  cubic profile with controlled shoulders.
 - [ ] **P0 — Generalize passes beyond absolute structure anchors.** An attached
   absolute point now forms a validated geometric saddle, lower along the ridge
   and higher across it. Relative points now shape the relief/depth profile of
@@ -1075,66 +453,6 @@ execution order.
 
 ### Valleys, rivers, and hydrology
 
-- [x] **P0 — Give valleys a downstream longitudinal profile.** Enforce
-  non-increasing flow toward an outlet except where an authored lake or basin
-  permits otherwise; let high-terrain valleys remain high while retaining
-  relative incision. Valleys are now ordered head-to-outlet and use a stable
-  pre-valley metric reference profile plus downstream-only floor correction. Authored
-  lake/dry-basin retention limits automatic cuts only; explicit valley floors
-  still apply inside those footprints. Water-aware valley exceptions remain open.
-- [x] **P1 — Reduce reconstruction creases in generated valleys.** Shared
-  bounded cubic derivatives now reconstruct incision and detail suppression
-  between unchanged routing nodes. Existing cut ceilings and retention remain
-  authoritative. [ADR-0050](docs/adr/0050-reconstruct-valleys-with-bounded-cubics.md)
-  and the [measurements](docs/research/2026-09-16-bounded-valley-reconstruction.md)
-  record improvement, cost and remaining D8/cap artifacts.
-- [x] **P1 — Connect diagonal valley shaping between samples.** Compact,
-  metric corrections now connect incision and suppression along selected D8
-  diagonals while preserving cell edges, canonical nodes and cut ceilings.
-  [ADR-0051](docs/adr/0051-connect-diagonal-valley-shaping.md) and the
-  [comparison](docs/research/2026-09-16-connected-diagonal-valleys.md) record
-  reduced scalloping and climb size, including additional dense checks.
-- [x] **P1 — Fit channel cuts to the sampled source.** Classification found
-  source humps, artificial cut pits and large cap-limited mountain crests.
-  Cardinal/diagonal corridors now adjust cuts toward canonical floor targets
-  using the actual macro height and retained detail, within unchanged cut
-  ceilings. [ADR-0052](docs/adr/0052-fit-channel-cuts-to-sampled-terrain.md) and the
-  [measurements](docs/research/2026-09-16-source-aware-channel-floors.md) record
-  profile, canonical-authority, visual and performance checks.
-- [x] **P1 — Observe hidden mountain crests before routing.** Shared regional
-  carrier signs now select bounded interior probes. Priority-Flood relaxes
-  alternate passes, and both D8 and MFD respect the same sampled barriers.
-  Regional/global cut-budget policy remains unchanged; routing and its derived
-  shaping can change. [ADR-0053](docs/adr/0053-observe-mountain-crests-in-drainage.md)
-  and the [comparison](docs/research/2026-09-16-mountain-crest-routing.md) record
-  rejected local swaps, exhaustive-probe cost and the adopted targeted method.
-- [x] **P1 — Reduce crest-aware routing overhead and bound region storage.**
-  Ordered D8 array sweeps, shared metric/scalar work and streamed regional
-  candidate masks preserve numeric outputs. The [comparison](docs/research/2026-09-17-drainage-routing-cost.md)
-  records 8-28% faster generation on ten case/seed pairs and an 83.7% reduction
-  in observed peak allocation at 128 overlapping regions. Full many-region
-  builds and larger grids remain performance work; see R46 below.
-- [x] **P1 — Refine observed mountain-crest positions.** Source-scale screening
-  now admits same-sign endpoints; bounded carrier searches target observed
-  crossings and tangent approaches before full macro evaluation. Shared regular
-  probes remain, with streamed regions and bounded batches. The
-  [comparison](docs/research/2026-09-17-refined-mountain-crests.md) records fewer
-  underestimated barriers, mixed finished-channel outcomes and added cost;
-  [ADR-0054](docs/adr/0054-refine-observed-mountain-crests.md) owns the policy.
-- [x] **P1 — Avoid extra channel dips around unattainable floors.** Seventeen
-  source/ceiling observations per eligible segment now carry obstacles upstream
-  and unfillable pits downstream. Sparse cubic targets preserve canonical pins,
-  routing, cut ceilings and authored authority. At that implementation revision,
-  the diagnosed seed-7 climb fell to approximately 50.93 m; see
-  [ADR-0055](docs/adr/0055-prepare-attainable-channel-floor-profiles.md) and the
-  [comparison](docs/research/2026-09-17-attainable-channel-floors.md).
-- [x] **P1 — Condition network floors in both directions.** Propagate downstream
-  cut limits through tributaries before adjusting receivers; recover unnecessary
-  upstream excavation within source bounds. Routing and cut ceilings stay fixed,
-  while generated nodal cuts can change. Compare large-climb reductions and new
-  smaller rises with severity counts; see
-  [ADR-0056](docs/adr/0056-condition-network-floors-in-both-directions.md) and the
-  [comparison](docs/research/2026-09-17-network-floor-conditioning.md).
 - [ ] **P1 — Complete between-node channel geometry.** Extend observation to
   unresolved sub-probe extrema, other recipes, authored features and blended-field
   maxima. Define explicit source-scale/process-grid contracts beyond the current
@@ -1160,12 +478,6 @@ execution order.
   Horton-Strahler order, but measured regressions rejected using it as a direct
   width or depth control without valley character or confinement; authored
   per-vertex shape, glacial forms, floodplains, and terraces remain.
-- [x] **P0 — Derive canonical drainage direction and flow accumulation.**
-  Priority-Flood, MFD accumulation and a complementary D8 tree drive automatic
-  valleys; initiation, downstream closure, Strahler order and bounded floor/
-  steepness corrections have numeric fixtures. Builds retain basin labels,
-  topology and finished-field conflicts on the same 257-node review grid.
-  Authored lake/dry intent absorbs area and eligible outlets transfer it.
 - [ ] **P1 — Complete physical drainage policy and river products.** Define
   nested depressions, controlling sills, ocean semantics and constrained repair;
   add exportable river/catchment vectors and regional density/runoff controls.
@@ -1223,21 +535,6 @@ execution order.
   distributions, clipping fractions, hypsometry and profile statistics remain open.
 - [ ] **P1 — Add explicit prominence and saddle analysis.** Keep this derived
   measurement separate from the current relative-relief controls.
-- [x] **P0 — Record algorithm and stage identifiers in each build.** Record
-  generator, noise, automatic-valley and diagnostic IDs plus source hashes.
-  Deliberate improvements may change outputs; update identifiers and tests.
-- [x] **P0 — Preserve hashed SVG inputs across Git checkouts.** Explicit LF
-  attributes keep public project coastline hashes valid on Windows. Regression
-  tests load every example after real Git checkout conversion with automatic
-  line-ending conversion enabled and disabled.
-- [x] **P0 — Derive stable named seeds.** All generation uses
-  `named-stage-sha256@1` with `terrain.relief` and `terrain.landforms`. Macro/full detail stay
-  views of one relief field. Portable reference values and current generation
-  checks exercise the [seed contract](docs/terrain-seeds.md).
-- [x] **P0 — Remove early-development compatibility overhead.** Removed the
-  original seed mode, policy selector, old-save loaders, four superseded
-  schemas, duplicate example and dual-version tests. Only current project/build
-  formats are supported. Keep obsolete code in Git history, not active support paths.
 - [ ] **P0 — Profile memory and runtime by stage.** Establish repeatable draft,
   regional and maximum-resolution benchmarks with simple and complex coasts,
   authored constraints and multiple seeds. Separate generation, rendering,
@@ -1278,7 +575,7 @@ execution order.
   as those features change. Basin/conflict diagnostics are now extracted;
   keep typed values and one owner per operation.
 
-### Realism research register — 2026-09-04
+### Realism research register (R01–R48)
 
 These additions extend the existing region, hydrology, and
 diagnostic items. They are possible improvements, not a commitment to implement
@@ -1320,17 +617,6 @@ Priorities remain conditional on the current strategy's prerequisites.
   Endpoint registration, interval-based grid subdivision, axis-specific spacing
   and current stage shape rounding now have a shared domain implementation and
   numerical tests. Cell averages and resampling remain open.
-- [x] **P0 — R04: Route on currently authored macro geography.** Brush, ridge,
-  point and prepared valley constraints now participate in canonical routing.
-  Relative valley profiles use a stable pre-incision reference, with one
-  planning pass and existing final constraint precedence. Lake levels and dry
-  retention intent are implemented; explicit river/divide entities remain open.
-  See ADR-0029 and the [water contract](docs/terrain-water.md).
-- [x] **P1 — R05: Retain inspectable drainage topology.** Builds retain source
-  and filled routing DEMs, final-field samples, D8 receivers, MFD accumulation,
-  stream order, channels, heads and outlets with coordinates, mask and hashes.
-  Same-grid receiver differences and uphill edges are reported; the workbench
-  overlay and headless review image expose planned channel conflicts.
 - [ ] **P1 — Reconcile remaining planned/final channel conflicts.** Quantify
   hard-anchor conflicts separately from residual-detail and depression effects.
   Compare matched directed edges separately from changed channel selection:
@@ -1710,38 +996,12 @@ must have a real backend consumer. Broader editor polish remains deferred.
 [ADR-0049](docs/adr/0049-navigate-and-save-authored-inputs.md) records navigation,
 geometry movement and project-saving behavior.
 
-- [x] **P1 — Scroll long World context summaries in compact windows.** The Context
-  details use a read-only scrollable text region; jobs and legends remain visible
-  at 1160 x 760. Larger windows expose more details without changing the map.
 - [ ] **P1 — Reflow long World source summaries in compact windows.** The separate
   nine-continent source summary below the map can still clip horizontally at
   1160 x 760; bind its wrapping width or give it a bounded scrollable region.
 
 ### Editing and navigation
 
-- [x] **P0 — Keep generated terrain as a read-only authoring background.** Input
-  edits retain the previous map and its review overlays. Exact worker snapshots
-  control current/stale status and PNG export; regeneration uses authored inputs
-  only. No brush, area tool or property edit writes into generated heights.
-
-- [x] **P0 — Select and edit generation instructions.** Choose any instruction
-  with Select, the list or Ctrl+click on the map. Edit properties with the existing
-  controls, Apply, then regenerate. Regions and lake levels/outlet enablement are
-  included. White handles identify the selected geometry.
-- [x] **P0 — Add instruction undo and redo.** Immutable input history restores
-  additions, property edits, movement, deletion and clear-all. Draft vertices
-  still use backstep Undo; opening a project/coastline resets history. Generator
-  settings and draft redo are outside this completed slice.
-- [x] **P0 — Add pan and zoom.** Pointer-anchored wheel zoom, middle/Space drag,
-  Fit and toolbar buttons preserve the normalized geographic frame. The view
-  exposes visible bounds, km/display-pixel and local cursor coordinates. Brush
-  size uses Shift+wheel; strength uses Ctrl+Shift+wheel. Raster allocation stays
-  bounded to the canvas and diagnostic layers are cached. Navigation alone adds
-  no terrain detail.
-- [x] **P1 — Drag instructions and vertices.** Whole-input moves and individual
-  handles work across all instruction families. Commit once per completed drag;
-  reject off-land, self-crossing or overlapping-basin geometry atomically.
-  Closed rings and attached lake outlets follow their moved boundary edges.
 - [ ] **P1 — Insert/remove vertices and enter precise coordinates.** Extend the
   implemented dragging with topology-safe vertex insertion/removal and numeric
   local/normalized coordinates.
@@ -1762,19 +1022,10 @@ geometry movement and project-saving behavior.
   presets are implemented; these change the saved setting, not a hidden preview.
   Lower output resolution does not reduce fixed canonical routing or all water
   work. Debounce/cancel only after a useful latency budget is demonstrated.
-- [x] **P0 — Add stage-aware progress and cancellation.** The workbench shows
-  elapsed time, stage and Cancel/Esc status. It retains the previous map, waits
-  for worker acknowledgement and rejects cancelled/old queued results. Headless
-  application operations check tokens before completion publication. Stops are
-  cooperative; individual native operations and file writes have no latency bound.
-  See [the guide](docs/terrain-generation-control.md).
 - [ ] **P1 — Add switchable inspection overlays.** Include contours, hillshade,
   slope, curvature, influence extents, hard-constraint residuals, drainage,
   catchments and clipped-elevation warnings. Drainage and basin catchment
   toggles are implemented; the other listed overlays remain open.
-- [x] **P1 — Show ground elevation under the cursor.** Read the nearest sample
-  of the last reference DEM, including water/no-ground status and local x/y km.
-  Reference freshness stays visible; water surfaces are not reported as ground.
 - [ ] **P0 — Extend terrain inspection for quality comparisons.**
   Add local slope, active constraint contributions and a cross-section through the selected ridge or valley.
   Start with a selected-channel longitudinal profile of actual finished ground,
@@ -1784,35 +1035,17 @@ geometry movement and project-saving behavior.
   ridge relief, or valley incision in the correct terms.
 - [ ] **P0 — Add before/after and seed comparison views (R27).** Compare a changed
   constraint, profile, or seed without relying on memory of the previous image.
-- [x] **P2 — Add separate cartographic and scientific elevation styles.** Use
-  expressive hypsometric tint and stronger relief for everyday mapping while
-  retaining an ordered, colour-vision-deficiency-safe inspection view.
 - [ ] **P2 — Add tint-only and hillshade-only display modes.** Keep these as
   derived inspection choices that never change the authoritative DEM.
 
 ### Project safety and everyday workflow
 
-- [x] **Collect closed Tk test cycles on their owning thread.** The full
-  [head/mouth batch](docs/research/2026-09-26-valley-heads-and-mouths.md) reproduced
-  a save-on-close timeout twice, with off-main-thread variable finalization.
-  The test protocol now collects released UI cycles after pytest drops fixture
-  references; ordinary fixture teardown is too early. Existing deadlines and
-  save assertions are unchanged; no application garbage-collection policy is added.
 - [ ] **P1 — Audit closed editor ownership and callback retention.** A separate
   shutdown probe retains a closed workbench through Tcl variable traces until
   those traces are removed. Establish deterministic release of callbacks and
   resources at editor/application shutdown, including jobs finishing after close.
   The test-isolation correction does not establish a runtime lifecycle fix.
 
-- [x] **P0 — Track unsaved changes.** A title marker compares authored inputs
-  against the saved snapshot, including unfinished instructions. Open/import/close
-  offer Save / Discard / Cancel; cancellation, failure or a newer input snapshot
-  prevents a save continuation. Navigation/tool defaults alone do not mark dirty.
-- [x] **P0 — Add Save, Save As, and keyboard shortcuts.** Save updates the known
-  path atomically. Open/save/generate, undo/redo, delete, apply/finish and cancel
-  have shortcuts; instruction undo/delete shortcuts leave text entry alone.
-  GUI --project opens
-  an existing project on startup.
 - [ ] **P1 — Add recoverable autosave.** Keep autosave outside the authored
   project, identify recovery state clearly, and never treat recovery data as a
   completed user save.
@@ -1830,74 +1063,3 @@ geometry movement and project-saving behavior.
 - [ ] **P2 — Prepare a hosted UI without changing the engine contract.** Reuse
   the same project schema and build operation; add upload, job, quota, and
   download UX only at the service boundary.
-
-## Related decisions and research
-
-- [Living terrain method decisions](docs/research/terrain-method-decisions.md)
-  records failures, reasons, useful retained work, alternatives and revisit gates.
-- [Groundwater, canyons and architecture reassessment — 2026-09-25](docs/research/2026-09-25-groundwater-and-terrain-architecture.md)
-  reviews existing models and proposes connected construction, explicit input
-  roles, groundwater capture, layered/lateral canyons and bounded karst tests.
-  Component APIs were checked; no new solver simulation or product adoption.
-- [World-context enrichment — 2026-09-24](docs/research/2026-09-24-world-context-enrichment.md)
-  reviews primary geographic, tectonic and climate models, existing tools and
-  deployment limits. The [WC0-WC6 plan](docs/strategy/world-context.md) advances
-  world inputs/context and specifies shared-time regional history refinement.
-- [Valley-bank feasibility — 2026-09-25](docs/research/2026-09-25-valley-bank-feasibility.md)
-  records physical support and conflict diagnostics, failed cross-sections/capture
-  and the next river-aligned local surface-patch experiment.
-- [Constrained network-led terrain — 2026-09-25](docs/research/2026-09-25-constrained-network-surface.md)
-  records successful hard constraints but failed actual drainage capture.
-- [Coupled physical channel paths — 2026-09-25](docs/research/2026-09-25-physical-channel-paths.md)
-- [Frozen terrain/channel reconstruction — 2026-09-24](docs/research/2026-09-24-frozen-channel-reconstruction.md)
-  records complete-route profile gains, remaining nodal failures, authoring limits,
-  explicit composition volume and base-environment cost on the frozen cohort.
-- [Landscape-evolution reference implementation — 2026-09-24](docs/research/2026-09-24-landscape-evolution-reference.md)
-  records the executed first batch, isolated command, numerical controls,
-  public comparisons and failed product-quality gates.
-- [Landscape-evolution models and tools — 2026-09-24](docs/research/2026-09-24-landscape-evolution-models.md)
-  compares primary papers and existing engines; records a wheel-only dependency
-  probe. The [detailed implementation plan](docs/strategy/landscape-evolution.md)
-  owns LE0–LE6, equations, integration boundaries and acceptance/rejection gates.
-
-- [Progress and generation strategy reassessment — 2026-09-24](docs/research/2026-09-24-progress-and-generation-strategy.md)
-  records the current eight-case profile baseline, research/tool refresh and
-  quality-first batches A–F; adds R48 and refines existing candidate gates.
-
-- [ADR-0025](docs/adr/0025-centralize-local-frames-and-endpoint-grids.md) centralizes
-  source/local conversion and endpoint grids while preserving existing terrain.
-
-- [Selective terrain sampling — 2026-09-05](docs/research/2026-09-05-selective-terrain-sampling.md)
-  records implemented profiling and ocean-sample elimination, exact numeric
-  comparisons, runtime/memory results and the remaining measurement limits.
-- [Language and performance — 2026-09-05](docs/research/2026-09-05-language-and-performance.md)
-  records generation timings, native geometry/noise bottlenecks, a foundations-
-  first recommendation, language tradeoffs and proposed migration gates R45–R47.
-- [Geological structure and terrain composition — 2026-09-05](docs/research/2026-09-05-geological-structure-and-terrain-composition.md)
-  connects geological controls, network semantics, measured descriptor limits
-  and optional structural/topology tools to R40–R44 and existing experiments.
-- [Terrain prototype contracts — 2026-09-04](docs/research/2026-09-04-terrain-prototype-contracts.md)
-  records measured noise/grid effects, external source audits, R34–R39 and
-  historical prototype proposals. The current strategy and ADR-0047 determine
-  which proposals remain in product scope.
-- [Terrain realism and landform diversity — 2026-09-04](docs/research/2026-09-04-terrain-realism-and-landform-diversity.md)
-  connects R01–R33 to code limitations, scientific papers, tool/runtime
-  boundaries, real-data comparisons and ordered prototype gates.
-- [Current development strategy](docs/strategy/README.md) orders work by
-  dependencies and records the evidence gates for adopting evaluated tools.
-- [Technology and world systems — 2026-09-04](docs/research/2026-09-04-technology-and-world-systems.md)
-  refreshes numerical, GIS, hydrology, storage, climate, classification, and
-  licensing options.
-
-- [Terrain algorithm options — 2026-09-03](docs/research/2026-09-03-terrain-algorithm-options.md)
-  records the current solver, hydrology, erosion, multiresolution, validation,
-  tooling, and license findings without accepting an implementation.
-
-- [ADR-0003](docs/adr/0003-map-authored-constraints.md) records the initial
-  feature-curve conditioning decision and diffusion/process-informed options.
-- [ADR-0004](docs/adr/0004-soft-elevation-brush.md) explains why authored brush
-  guidance remains vector-based rather than resolution-bound raster paint.
-- [ADR-0005](docs/adr/0005-relative-relief.md) defines absolute versus relative
-  semantics and links the existing terrain-interpolation research.
-- [Terrain tool guide](src/dmtools/terrain/README.md) documents the implemented
-  behavior that this roadmap builds on.

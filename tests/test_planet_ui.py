@@ -210,10 +210,14 @@ def test_zoom_to_region_drills_down_in_the_map_and_reuses_cached_tiles(
         spacing_km=40, process_area_km2=4_000, calibration_iterations=1, tile_km=1500,
         halo_km=200,
     )
+    province = RegionalSettings(
+        spacing_km=10, process_area_km2=2_400, calibration_iterations=1, tile_km=400,
+        halo_km=100,
+    )
     original = world_ui.region_window
 
     def coarse_window(*args: object, **kwargs: object) -> object:
-        return original(*args, settings=coarse, **kwargs)  # type: ignore[arg-type]
+        return original(*args, levels=(coarse, province), **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(world_ui, "region_window", coarse_window)
     view = app.world_workspace
@@ -247,6 +251,24 @@ def test_zoom_to_region_drills_down_in_the_map_and_reuses_cached_tiles(
     assert maps.display_layer.get() == "Planet topographic"
     tiles = sorted((tmp_path / "cache").rglob("tile-*.npz"))
     stamps = [p.stat().st_mtime_ns for p in tiles]
+    # Drill down again: a province inside the region, picked on the regional map.
+    assert str(maps.pick_button["state"]) == "normal"
+    assert maps.pick_button.cget("text") == "Zoom to province"
+    maps.picking.set(True)
+    maps._picking_changed()
+    maps.region_radius.set("150 km")
+    maps._hover_flat((0.5, 0.5))
+    assert maps._pick_at is not None
+    maps._click_flat((0.5, 0.5), SimpleNamespace(state=0))  # type: ignore[arg-type]
+    wait(app)
+    assert maps.level == 2 and [lvl.run.level for lvl in maps.levels] == [1, 2]
+    assert maps.levels[1].title.startswith("Province")
+    settle(app, lambda: maps.levels[1].theme_id == "topographic")  # keeps the shown map
+    assert len(maps.crumbs.winfo_children()) == 5  # World / Region / Province
+    assert "°" in maps.describe_at(0.5, 0.5)
+    maps.go_to_level(1)
+    maps.draw_now()  # the province is outlined on the region
+    assert maps.level == 1 and len(maps.levels) == 2
     # Back to the world keeps its map; the region is outlined there.
     maps.go_to_level(0)
     assert maps.level == 0 and maps.display_layer.get() == "Planet atlas"

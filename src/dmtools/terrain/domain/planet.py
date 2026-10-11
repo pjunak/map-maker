@@ -116,6 +116,11 @@ REGIONAL_ALGORITHM = "planet-blended-tiles-v4"
 TILE_STAGE_PREFIX = "planet.tile."
 
 
+def tile_stage_prefix(level: int) -> str:
+    """Stage-seed prefix of a detail level's tiles (level 1 keeps the plain prefix)."""
+    return TILE_STAGE_PREFIX if level == 1 else f"{TILE_STAGE_PREFIX}l{level}."
+
+
 @dataclass(frozen=True, slots=True)
 class RegionalSettings:
     """Fine detail inside a planet: fixed blended tiles enriched from the parent.
@@ -133,9 +138,9 @@ class RegionalSettings:
     support_factor: float = 0.8
 
     def __post_init__(self) -> None:
-        _finite(self.spacing_km, "Regional spacing", 0.5, 100)
-        _finite(self.process_area_km2, "Regional process area", 1, 1e5)
-        _finite(self.tile_km, "Tile spacing", 50, 5000)
+        _finite(self.spacing_km, "Regional spacing", 0.05, 100)
+        _finite(self.process_area_km2, "Regional process area", 0.01, 1e5)
+        _finite(self.tile_km, "Tile spacing", 10, 5000)
         _finite(self.halo_km, "Tile halo", 0, 2000)
         _finite(self.support_factor, "Tile support factor", 0.7, 2.0)
         if self.tile_km < 20 * self.spacing_km:
@@ -143,3 +148,14 @@ class RegionalSettings:
         iterations = self.calibration_iterations
         if type(iterations) is not int or not 0 <= iterations <= 10:
             raise ValueError("Regional calibration iterations must be an integer from 0 to 10.")
+
+
+# Nested detail levels (ADR-0088): region, province, local. Each refines the
+# spacing about fivefold and is enriched from the level above.
+REGION_LEVELS: tuple[RegionalSettings, ...] = (
+    RegionalSettings(),
+    RegionalSettings(spacing_km=1.0, process_area_km2=24.0, tile_km=120.0, halo_km=30.0),
+    RegionalSettings(spacing_km=0.2, process_area_km2=0.96, tile_km=24.0, halo_km=6.0),
+)
+REGION_LEVEL_NAMES = ("region", "province", "local")
+REGION_LEVEL_MAX_RADIUS_KM = (5000.0, 300.0, 60.0)
