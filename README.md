@@ -53,6 +53,13 @@ dmtools world region artifacts/four-shores --lon 10 --lat 5 --radius-km 400 --ou
 Run the checks with `python -m pytest`, `python -m ruff check .` and
 `python -m pyright`. CI runs the same on Windows with Python 3.14.
 
+A Git worktree can reuse the main checkout's `.venv`, whose editable install
+points at the main checkout's `src`. The test suite puts its own checkout's `src`
+first, including for the subprocesses it starts. Pyright needs the interpreter
+named explicitly, for example `python -m pyright --pythonpath <main>\.venv\Scripts\python.exe`.
+Outside pytest, `dmtools` and `python -m benchmarks.*` still import the main
+checkout's package unless `PYTHONPATH` names the worktree's `src`.
+
 ## Documentation
 
 - [Documentation index](docs/README.md): guides, architecture, decisions and
