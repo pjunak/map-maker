@@ -18,8 +18,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
+from dmtools.terrain.pipeline.planet_coast import coastline, level_finest_m
 from dmtools.terrain.pipeline.planet_evolution import route
-from dmtools.terrain.pipeline.planet_forcing import land_on_mesh
 from dmtools.terrain.pipeline.planet_regional import (
     RegionalParent,
     parent_inflows,
@@ -50,7 +50,9 @@ def level_parent(
     )
     mesh = region.mesh
     xyz = mesh.xyz
-    land = land_on_mesh(planet.world, mesh)
+    land = coastline(planet.world).contains(
+        xyz, level_finest_m(region.spacing_m), planet.settings.seed
+    )
     relief = np.where(land, np.maximum(blend(grid, tiles, xyz), 1.0), 0.0)
 
     def sample(values: F64 | None) -> F64 | None:

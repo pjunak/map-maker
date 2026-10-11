@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Regional coast detail — 2026-10-11](2026-10-11-regional-coast-detail.md) smooths the
+  traced coast at its drawing precision and adds nested fractal detail at regional levels,
+  so province and local maps show rugged shores instead of straight traced runs.
+
 - [Continentality and Köppen zones — 2026-10-08](2026-10-08-continentality-and-koppen.md)
   carries maritime air downwind for seasonal ranges, keeps seasonal rainfall and classifies
   Köppen–Geiger zones (new climate-zones layer); vegetation follows growing-season water.

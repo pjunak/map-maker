@@ -29,7 +29,10 @@ backlog, and [status](../research/status.md) records what works now.
    - Display detail is now world-anchored and scaled per level.
    - Next: trace rivers on the level's tiles rather than per window.
    - Rock texture now follows each level's spacing, so fine tiles branch rather
-     than cutting parallel gullies (tile algorithm `planet-blended-tiles-v5`).
+     than cutting parallel gullies.
+   - Regional coasts are refined below the drawing's precision, so local maps
+     show bays and headlands instead of smooth traced curves (ADR-0090, tile
+     algorithm `planet-blended-tiles-v6`).
 2. **More wonders.** Wonders can now be placed by hand in the geology recipe
    (titans and craters). A great chasm is next.
 3. **Political and civilization overlays** as registered themes.

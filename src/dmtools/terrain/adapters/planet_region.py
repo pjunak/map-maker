@@ -12,14 +12,11 @@ from typing import Any, cast
 
 import numpy as np
 import rasterio
-import shapely
 from affine import Affine
 from numpy.typing import NDArray
 from PIL import Image
 from rasterio.crs import CRS
 from scipy.ndimage import binary_erosion, distance_transform_edt, gaussian_filter
-from shapely.geometry import Polygon
-from shapely.ops import unary_union
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.map_parchment import parchment_image
@@ -41,8 +38,8 @@ from dmtools.terrain.adapters.planet_natural import (
 )
 from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
 from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
+from dmtools.terrain.pipeline.planet_coast import coastline, window_finest_m
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
-from dmtools.terrain.pipeline.planet_forcing import source_xy
 from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
@@ -179,15 +176,6 @@ def window_points(
     return inverse_aeqd(gx.ravel(), gy.ravel(), lon, lat, planet_m), np.hypot(gx, gy) <= radius_m
 
 
-def window_land(parent: RegionalParent, points: F64) -> B:
-    land = unary_union(
-        [Polygon(c.exterior, c.holes) for view in parent.world.land for c in view.components]
-    )
-    shapely.prepare(land)
-    x, y = source_xy(parent.world.project.frame, points)
-    return np.asarray(shapely.contains_xy(land, x, y), dtype=bool)
-
-
 def compose_window(
     parent: RegionalParent,
     grid: TileGrid,
@@ -205,7 +193,9 @@ def compose_window(
     from dmtools.terrain.pipeline.planet_tiles import blend
 
     surfaces = tiles
-    land = window_land(parent, points).reshape(pixels, pixels) & inside
+    finest = window_finest_m(spacing_m, 2 * radius_m / pixels)
+    land = coastline(parent.world).contains(points, finest, parent.settings.seed)
+    land = land.reshape(pixels, pixels) & inside
     floor = parent.sea_floor_m
     if floor is None:
         floor = np.where(parent.land, 0.0, -2000.0)

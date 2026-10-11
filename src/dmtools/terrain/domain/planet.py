@@ -112,7 +112,7 @@ class PlanetSettings:
         return max(1, round(self.duration_myr * 1e3 / self.step_kyr))
 
 
-REGIONAL_ALGORITHM = "planet-blended-tiles-v5"
+REGIONAL_ALGORITHM = "planet-blended-tiles-v6"
 TILE_STAGE_PREFIX = "planet.tile."
 
 

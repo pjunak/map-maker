@@ -192,6 +192,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0087-map-themes-and-projections.md](adr/0087-map-themes-and-projections.md) | Map themes rendered once on the world frame; globe, polar and flat projections of any theme; `world view` and the app's map view. |
 | [docs/adr/0088-nested-regional-detail-levels.md](adr/0088-nested-regional-detail-levels.md) | Nested regional detail levels (region 5 km, province 1 km, local 200 m), each enriched from a level parent built from the coarser level's tiles. |
 | [docs/adr/0089-one-map-view-with-drill-down-levels.md](adr/0089-one-map-view-with-drill-down-levels.md) | One World map view: registry themes in any projection, drill-down levels with a breadcrumb, background jobs and shared UI styles. |
+| [docs/adr/0090-regional-coast-detail-below-drawing-precision.md](adr/0090-regional-coast-detail-below-drawing-precision.md) | Regional levels use the drawn coast smoothed at its precision plus nested fractal detail; the planet keeps the exact coast. |
 
 ## Dated research reports (93)
 
@@ -200,6 +201,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-11-regional-coast-detail.md](research/2026-10-11-regional-coast-detail.md) | Regional coast detail below the drawing's precision: method trials, chosen parameters and Aethelara before/after. |
 | [docs/research/2026-10-08-volcanism.md](research/2026-10-08-volcanism.md) | Arc, hotspot, rift and intraplate volcanoes: placement, shapes, rendering, export and limits. |
 | [docs/research/2026-10-08-plate-tectonics-and-sediment.md](research/2026-10-08-plate-tectonics-and-sediment.md) | Plate-driven collision belts, rifts, leading-edge margins and trenches; old orogens; results and limits. |
 | [docs/research/2026-10-08-orogens-glaciers-and-speed.md](research/2026-10-08-orogens-glaciers-and-speed.md) | Methods survey; composite orogens, strike lithology, glacial buzzsaw, Horton gates, openness shading, speed-ups and rejected deposition trials. |

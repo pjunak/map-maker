@@ -9,7 +9,8 @@ map. It produces:
 - lakes, both open and closed basins;
 - river lines.
 
-Your coastline is never changed. An optional geology recipe (`.dmgeology.json`)
+The planet keeps your coastline exactly; zoomed maps only add detail finer than
+you drew it. An optional geology recipe (`.dmgeology.json`)
 says where mountains, plateaus, old worn ranges and basins should be. The
 generator honours those elevations approximately and lets erosion shape every
 valley and divide.
@@ -77,6 +78,13 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   parchment**. Each renders in the background and is kept. The topographic view
   stretches its tints over the window's own height range and draws contours at
   true heights.
+- Coasts gain detail as you zoom. The planet keeps your drawn coastline exactly.
+  Regional, province and local maps smooth it at the precision you drew it, then
+  add bays, headlands, coves and islets at every finer scale. Each deeper level
+  only adds smaller detail, so a coast keeps its shape as you zoom in. The coast
+  can move by up to about one drawing unit from your line, which is 13 km on an
+  Earth-size world drawn 2,880 units wide
+  ([ADR-0090](adr/0090-regional-coast-detail-below-drawing-precision.md)).
 - Volcanoes and impact craters are drawn sharply. Closed hollows deeper than 10 m
   (crater troughs, calderas) hold lakes where it is wet and dry playas where it is not.
 - A scale bar shows distance. Hovering shows the place, the offset from the centre

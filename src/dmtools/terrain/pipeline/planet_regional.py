@@ -6,7 +6,7 @@ A circular region is regenerated with finer, physically eroded detail:
 
 * **Mesh.** A jittered triangular lattice in a local azimuthal-equidistant plane,
   plus an even outer ring, mapped to the sphere. Planet kernels run unchanged.
-* **Land** is the exact vector coastline at the finer spacing.
+* **Land** is the refined coast (ADR-0090) with detail down to twice the spacing.
 * **Boundary.** Ring land nodes are fixed at the parent surface. Parent rivers
   that cross into the region enter as drainage-area sources.
 * **Forcing.** Parent uplift, erodibility and runoff are interpolated, with finer
@@ -25,8 +25,9 @@ from scipy.spatial import Delaunay, KDTree
 from dmtools.terrain.domain.planet import PlanetSettings
 from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
 from dmtools.terrain.pipeline.planet import PlanetResult
+from dmtools.terrain.pipeline.planet_coast import coastline, level_finest_m
 from dmtools.terrain.pipeline.planet_evolution import EvolutionRun, evolve
-from dmtools.terrain.pipeline.planet_forcing import Forcing, land_on_mesh, smooth_over_land
+from dmtools.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles, sample_field
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
@@ -166,6 +167,7 @@ class Region:
     boundary: B
     centre: tuple[float, float]
     radius_m: float
+    spacing_m: float  # nominal lattice spacing (the mesh's own estimate varies at its rim)
 
 
 def regional_mesh(
@@ -188,7 +190,7 @@ def regional_mesh(
     mesh = mesh_from_triangles(inverse_aeqd(px, py, lon0, lat0, planet_m), triangles, planet_m)
     boundary = np.zeros(len(px), dtype=bool)
     boundary[-ring:] = True
-    return Region(mesh, plane, boundary, (lon0, lat0), r)
+    return Region(mesh, plane, boundary, (lon0, lat0), r, s)
 
 
 def parent_inflows(parent: RegionalParent, region: Region) -> F64:
@@ -231,7 +233,9 @@ def enrich(
     cancellation: CancellationToken | None = None,
 ) -> RegionalResult:
     mesh = region.mesh
-    land = land_on_mesh(parent.world, mesh)
+    land = coastline(parent.world).contains(
+        mesh.xyz, level_finest_m(region.spacing_m), parent.settings.seed
+    )
     water = ~land
     # Volcanoes and craters are drawn on top of the regional relief, not eroded
     # from uplift (erosion would fill a crater).
