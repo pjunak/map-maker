@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
+from dmtools.terrain.adapters.planet_region import RegionWindow
 from dmtools.terrain.application.world import open_world
 from dmtools.terrain.domain.planet import PlanetSettings, RegionalSettings
 from dmtools.terrain.pipeline.planet import PlanetResult, generate_planet
@@ -421,3 +422,36 @@ def test_display_detail_is_world_anchored_and_shrinks_with_finer_levels(
         return float(np.std((relief - window.elevation_m)[land]))
 
     assert added(1_000.0) < 0.5 * added(5_000.0)
+
+
+def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path: Path) -> None:
+    from scipy.ndimage import binary_dilation
+
+    from dmtools.terrain.adapters.planet_region import forward_aeqd
+    from dmtools.terrain.application.planet_region import region_window
+
+    planet = RegionalParent.from_result(parent)
+    lon, lat = _land_centre(parent)
+    shifted = (lon + np.degrees(120e3 / (parent.mesh.radius_m * np.cos(np.radians(lat)))), lat)
+
+    def window(centre: tuple[float, float]) -> RegionWindow:
+        return region_window(
+            planet, "p" * 64, tmp_path, centre, 300.0, levels=TINY_LEVELS, pixels=160,
+            workers=1, river_km2=500.0,
+        ).window
+
+    a, b = window((lon, lat)), window(shifted)
+    rivers_b = b.rivers > 0.5
+    # B's river pixels in A's grid, away from both windows' edges.
+    x, y = forward_aeqd(b.points, *a.centre, a.planet_m).T
+    column = np.round((x + a.radius_m) / a.pixel_m - 0.5).astype(int)
+    row = np.round((a.radius_m - y) / a.pixel_m - 0.5).astype(int)
+    xb, yb = forward_aeqd(b.points, *b.centre, b.planet_m).T
+    # Where they overlap near either window's edge, where routing used to start:
+    # unpadded routing agreed on about 92 % of river pixels here, padded about 96 %.
+    ra, rb = np.hypot(x, y) / a.radius_m, np.hypot(xb, yb) / b.radius_m
+    edge = (ra < 0.98) & (rb < 0.98) & ((ra > 0.75) | (rb > 0.75))
+    check = rivers_b.ravel() & edge
+    assert check.sum() > 20
+    near_a = binary_dilation(a.rivers > 0.5, iterations=2)
+    assert near_a[row[check], column[check]].mean() > 0.94

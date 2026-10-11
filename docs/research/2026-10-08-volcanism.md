@@ -179,8 +179,9 @@ which is limited by the local ground, varies.
 Regional windows draw craters too. Their target surface leaves out volcanoes and
 craters, as regional erosion would otherwise fill a crater, and each window adds the
 sharp crater back. Crater lakes fill the sharp trough to the parent level. The
-regional tile algorithm became `planet-blended-tiles-v4`. Dry crater troughs, and
-other closed hollows deeper than 10 m, show as playas.
+regional tile algorithm became `planet-blended-tiles-v4`. Closed hollows deeper than
+10 m (crater troughs among them) fill with lakes where it is wet. Where it is dry, a
+playa lies in the lowest quarter of the basin's depth (20–400 m).
 
 Volcanoes rise after the climate is simulated, but the atlas and regional
 windows had lapse-corrected only the sharp detail above the mesh's widened

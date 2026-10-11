@@ -86,7 +86,8 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   Earth-size world drawn 2,880 units wide
   ([ADR-0090](adr/0090-regional-coast-detail-below-drawing-precision.md)).
 - Volcanoes and impact craters are drawn sharply. Closed hollows deeper than 10 m
-  (crater troughs, calderas) hold lakes where it is wet and dry playas where it is not.
+  (crater troughs, calderas) fill with lakes where it is wet. Where it is dry, a playa
+  lies only in the lowest part.
 - A scale bar shows distance. Hovering shows the place, the offset from the centre
   and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.

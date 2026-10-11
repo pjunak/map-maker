@@ -62,7 +62,10 @@ depend on where that window happened to be drawn.
   Overlapping windows therefore draw the same hills. At 200 m, detail sized for
   5 km tiles had cut straight D8 grooves and sunbursts.
 - **Remaining window dependence.** Valley carving (capped at the small detail
-  height) and river tracing still run on each window's pixel grid, with inflow
-  from the parent at the rim.
+  height) and river tracing run on each window's pixel grid, with inflow from the
+  parent at the rim. Windows are therefore composed over 1.25× their radius and
+  cropped, so that rim stays off the map. Near the edges of two overlapping
+  windows, river pixels then agree about 96 % of the time (92 % before). The rest
+  is pixel-grid alignment.
 - **Not yet regenerated.** Climate, lakes and volcanoes are not regenerated per
   level. They come from the planet, lapse-corrected and redrawn sharply.

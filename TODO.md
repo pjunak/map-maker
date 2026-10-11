@@ -26,8 +26,8 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Port the stable kernels to a native core.
   - [ ] Decide what replaces the local composed generator.
 - [ ] **M6 regional and local zoom:**
-  - [ ] Rivers traced on the level's tiles instead of per window (display detail is
-    already world-anchored).
+  - [ ] Rivers exactly identical across windows (routing over a padded window
+    leaves only pixel-grid differences, about 4 % near edges).
   - [ ] Check drainage realism at fine levels: rock texture now follows each level's
     spacing and level-3 tiles branch; compare against reference terrain.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.

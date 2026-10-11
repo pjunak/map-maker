@@ -16,7 +16,13 @@ from affine import Affine
 from numpy.typing import NDArray
 from PIL import Image
 from rasterio.crs import CRS
-from scipy.ndimage import binary_erosion, distance_transform_edt, gaussian_filter
+from scipy.ndimage import (
+    binary_erosion,
+    distance_transform_edt,
+    gaussian_filter,
+    label,
+    maximum,
+)
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.map_parchment import parchment_image
@@ -60,7 +66,11 @@ MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
 DUNE_SPACING_M = 2500.0
 DUNE_HEIGHT_M = 45.0
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
+ROUTE_PAD = 1.25  # rivers are routed over this multiple of a window's radius
 POND_DEPTH_M = 10.0  # filled depressions deeper than this hold water or a playa
+PLAYA_SHARE = 0.25  # a playa bed spans this share of its basin's depth
+PLAYA_MIN_M = 20.0
+PLAYA_MAX_M = 400.0
 POND_LAKE_ARIDITY = 0.65  # ponds hold standing water above this P/PET
 LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
@@ -186,9 +196,79 @@ def compose_window(
     river_km2: float,
     *,
     spacing_m: float = 5000.0,
+    pad: float = ROUTE_PAD,
+) -> RegionWindow:
+    """A regional window, composed over a padded square and cropped to its circle.
+
+    River routing has to start somewhere, and where it starts depends on the
+    window. Routing over ``pad`` times the radius keeps that start outside the
+    visible map: rivers inside follow the tile surface, which does not depend
+    on the window, so overlapping windows draw the same rivers.
+    """
+    extra = round(pixels * (pad - 1) / 2)
+    size = pixels + 2 * extra
+    padded = _compose(
+        parent, grid, tiles, centre, radius_km * 1e3 * size / pixels, size, river_km2,
+        spacing_m,
+    )
+    return crop_window(padded, extra, pixels)
+
+
+def crop_window(window: RegionWindow, extra: int, pixels: int) -> RegionWindow:
+    """The central ``pixels`` square of a padded window, masked to its circle."""
+    if extra == 0:
+        return window
+    rows = slice(extra, extra + pixels)
+    radius_m = window.pixel_m * pixels / 2
+    centres = (np.arange(pixels) + 0.5) * window.pixel_m - radius_m
+    gx, gy = np.meshgrid(centres, -centres)
+    circle = np.hypot(gx, gy) <= radius_m
+
+    def cut[T: np.generic](values: NDArray[T]) -> NDArray[T]:
+        return values[rows, rows]
+
+    climate = window.climate
+    if climate is not None:
+        climate = PixelClimate(
+            cut(climate.temperature_c), cut(climate.warm_season_c),
+            cut(climate.precipitation_mm), cut(climate.pet_mm),
+            None if climate.growing_mm is None else cut(climate.growing_mm),
+        )
+    size = window.pixels
+    return RegionWindow(
+        window.centre,
+        radius_m,
+        pixels,
+        np.where(circle, cut(window.elevation_m), np.nan),
+        cut(window.land) & circle,
+        climate,
+        np.where(circle, cut(window.rivers), 0.0),
+        window.points.reshape(size, size, 3)[rows, rows].reshape(-1, 3),
+        window.tiles,
+        window.planet_m,
+        window.lapse_c_per_km,
+        cut(window.volcanic),
+        cut(window.lakes) & circle,
+        cut(window.salt) & circle,
+        cut(window.basalt),
+        None if window.wind is None else window.wind[rows, rows],
+        cut(window.playa) & circle,
+        window.detail_spacing_m,
+        window.seed,
+    )
+
+
+def _compose(
+    parent: RegionalParent,
+    grid: TileGrid,
+    tiles: dict[int, TileSurface],
+    centre: tuple[float, float],
+    radius_m: float,
+    pixels: int,
+    river_km2: float,
+    spacing_m: float,
 ) -> RegionWindow:
     planet_m = parent.mesh.radius_m
-    radius_m = radius_km * 1e3
     points, inside = window_points(*centre, radius_m, pixels, planet_m)
     from dmtools.terrain.pipeline.planet_tiles import blend
 
@@ -247,7 +327,7 @@ def compose_window(
     salt = lakes & closed.reshape(pixels, pixels)
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
-    coverage, ponds = window_rivers(
+    coverage, ponds, depth = window_rivers(
         parent, points, elevation, land, lakes, inside, river_km2, 2 * radius_m / pixels
     )
     # Ponds are closed basins: lakes where it is wet enough, playas where it is dry.
@@ -256,7 +336,9 @@ def compose_window(
         dry = (
             climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < POND_LAKE_ARIDITY
         )
-    playa = ponds & dry
+    # A wet basin fills to its spill level; a dry one keeps only an ephemeral
+    # lake bed in its lowest part, flat and bright (a playa or salar).
+    playa = ponds & dry & playa_beds(ponds, depth)
     lakes = lakes | (ponds & ~dry)
     salt = salt | (ponds & ~dry)
     coverage = np.where(land & ~lakes, coverage, 0.0)
@@ -294,6 +376,18 @@ def compose_window(
     )
 
 
+def playa_beds(ponds: B, depth: F64) -> B:
+    """The lowest part of each closed basin, where an ephemeral lake bed lies."""
+    found = cast(tuple[NDArray[np.int32], int], label(ponds))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    if not count:
+        return np.zeros_like(ponds)
+    deepest = np.zeros(count + 1)
+    deepest[1:] = np.asarray(maximum(depth, labels, np.arange(1, count + 1)), dtype=np.float64)
+    bed = np.clip(PLAYA_SHARE * deepest, PLAYA_MIN_M, PLAYA_MAX_M)
+    return ponds & (depth >= deepest[labels] - bed[labels])
+
+
 def window_rivers(
     parent: RegionalParent,
     points: F64,
@@ -303,8 +397,8 @@ def window_rivers(
     inside: B,
     river_km2: float,
     pixel_m: float,
-) -> tuple[F64, B]:
-    """River coverage routed on the window's blended relief, and closed ponds.
+) -> tuple[F64, B, F64]:
+    """River coverage routed on the window's blended relief, closed ponds and their depth.
 
     One drainage network over the whole window follows the drawn valleys and
     has no seams between tiles. Rivers entering from outside the window carry
@@ -338,7 +432,7 @@ def window_rivers(
         x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
         meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0),
     )
-    return coverage, ponds
+    return coverage, ponds, np.where(ponds, filled - z, 0.0)
 
 
 def regional_climate(

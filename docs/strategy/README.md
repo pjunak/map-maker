@@ -27,7 +27,8 @@ backlog, and [status](../research/status.md) records what works now.
 
 1. **M6 seamless local maps.**
    - Display detail is now world-anchored and scaled per level.
-   - Next: trace rivers on the level's tiles rather than per window.
+   - Rivers are routed over a padded window, so overlapping windows draw the
+     same rivers (about 96 % agreement near the edges).
    - Rock texture now follows each level's spacing, so fine tiles branch rather
      than cutting parallel gullies.
    - Regional coasts are refined below the drawing's precision, so local maps

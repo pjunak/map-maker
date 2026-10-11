@@ -13,6 +13,7 @@ from pathlib import Path
 
 from dmtools.terrain.adapters.planet_load import LoadedPlanet, read_planet_parent
 from dmtools.terrain.adapters.planet_region import (
+    ROUTE_PAD,
     RegionWindow,
     TileStore,
     compose_window,
@@ -250,7 +251,9 @@ def region_window(
     planet_m = parent.mesh.radius_m
     workers = workers or default_workers()
     grid = TileGrid.for_planet(planet_m, levels[level - 1])
-    needed = grid.tiles_near(centre, radius_km * 1e3)
+    # Windows are composed over a padded area so rivers do not depend on the window.
+    reach_m = radius_km * 1e3 * ROUTE_PAD
+    needed = grid.tiles_near(centre, reach_m)
 
     def tile_progress(at: int, done: int, total: int) -> None:
         if progress is not None:
@@ -265,7 +268,7 @@ def region_window(
     if level > 1:
         coarse_settings = levels[level - 2]
         coarse_grid = TileGrid.for_planet(planet_m, coarse_settings)
-        coarse_needed = coarse_grid.tiles_near(centre, radius_km * 1e3 * 1.3)
+        coarse_needed = coarse_grid.tiles_near(centre, reach_m * 1.3)
         _, coarse = ensure_level_tiles(
             parent, parent_sha256, cache, level - 1, coarse_needed, levels, workers=workers,
             cancellation=cancellation,
@@ -273,7 +276,7 @@ def region_window(
         if progress is not None:
             progress(0.91, "Preparing the coarser level")
         window_parent = level_parent(
-            parent, coarse_grid, coarse, centre, radius_km * 1e3,
+            parent, coarse_grid, coarse, centre, reach_m,
             coarse_settings.spacing_km,
             stage_seed(parent.settings.seed, f"planet.level-window.l{level}"),
         )
