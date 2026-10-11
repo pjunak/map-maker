@@ -94,7 +94,7 @@ def test_displayed_globe_positions_follow_the_drawn_disc() -> None:
 def test_globe_canvas_renders_off_the_tk_thread_and_reports_positions(root: tk.Tk) -> None:
     worker = LatestWorker(TkPump(root), lambda error: (_ for _ in ()).throw(error))
     hovered: list[tuple[float, float] | None] = []
-    canvas = GlobeCanvas(root, worker, background="#000000", on_hover=hovered.append)
+    canvas = GlobeCanvas(root, worker, on_hover=hovered.append)
     canvas.pack(fill="both", expand=True)
     root.update()
     canvas.show(gradient(512, 256), central_meridian_deg=0.0)

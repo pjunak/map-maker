@@ -17,7 +17,12 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image, ImageTk
 
-from dmtools.terrain.adapters.map_projection import MapProjection, displayed_lonlat, reproject
+from dmtools.terrain.adapters.map_projection import (
+    SPACE,
+    MapProjection,
+    displayed_lonlat,
+    reproject,
+)
 from dmtools.terrain.ui_jobs import LatestWorker
 from dmtools.terrain.ui_style import FONT_HERO, FONT_MAP_LABEL, MAP_TEXT, MAP_TEXT_MUTED
 from dmtools.terrain.viewport import MapViewport
@@ -133,7 +138,7 @@ class FlatMapCanvas(tk.Canvas):
     # Content and view
 
     def show(self, renderer: Renderer | None, world_size: Point, *, fit: bool = False) -> None:
-        if fit or world_size != self.world_size:
+        if fit:
             self.viewport.fit()
         self.renderer, self.world_size = renderer, world_size
         self.redraw()
@@ -158,9 +163,17 @@ class FlatMapCanvas(tk.Canvas):
             return
         with self.renderer(self.viewport, (width, height)) as image:
             self.photo = ImageTk.PhotoImage(image, master=self)
-        self.create_image(0, 0, image=self.photo, anchor="nw")
-        if self.overlay is not None:
-            self.overlay(self, self.map_rect())
+        self.create_image(0, 0, image=self.photo, anchor="nw", tags=("map",))
+        self.draw_overlay()
+
+    def draw_overlay(self) -> None:
+        """Redraw only the vector marks over the current image (cheap, e.g. on hover)."""
+        self.delete("overlay")
+        if self.overlay is None or self.renderer is None:
+            return
+        self.overlay(self, self.map_rect())
+        self.addtag_all("overlay")
+        self.dtag("map", "overlay")
 
     def fit(self) -> None:
         self.viewport.fit()
@@ -261,6 +274,7 @@ POLAR_SPAN_DEG = (30.0, 150.0)  # pole-to-edge angle range for polar zoom
 DEGREES_PER_PIXEL = 0.35
 DRAG_FRAME_SCALE = 0.4  # drag frames render at this fraction of the canvas, then scale up
 DRAG_SOURCE_WIDTH = 1024
+SPACE_COLOUR = "#{:02x}{:02x}{:02x}".format(*SPACE)  # matches the projected views' surround
 
 
 class GlobeCanvas(tk.Canvas):
@@ -276,12 +290,11 @@ class GlobeCanvas(tk.Canvas):
         parent: tk.Misc,
         worker: LatestWorker,
         *,
-        background: str,
         on_click: Callable[[Point, tk.Event[tk.Misc]], None] | None = None,
         on_hover: Callable[[Point | None], None] | None = None,
         on_view_changed: Callable[[], None] | None = None,
     ) -> None:
-        super().__init__(parent, background=background, highlightthickness=0)
+        super().__init__(parent, background=SPACE_COLOUR, highlightthickness=0)
         self._worker = worker
         self._on_click = on_click
         self._on_hover = on_hover
@@ -308,15 +321,20 @@ class GlobeCanvas(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._release)
 
     def show(self, image: Image.Image | None, central_meridian_deg: float) -> None:
+        changed = image is not self.image or central_meridian_deg != self.central_meridian_deg
         if image is not self.image:
             self.image = image
             self._drag_source = None
         self.central_meridian_deg = central_meridian_deg
+        if changed and image is not None:
+            self.request(quick=True)
         self.request()
 
     def set_kind(self, kind: str) -> None:
         if kind != self.kind:
             self.kind = kind
+            if self.image is not None:
+                self.request(quick=True)
             self.request()
 
     def projection(self) -> MapProjection:

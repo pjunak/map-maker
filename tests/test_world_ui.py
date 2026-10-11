@@ -156,16 +156,21 @@ def test_world_close_cancel_and_failed_load_preserve_work(
 
 
 def test_world_busy_guard_and_cleanup(app: ui.TerrainApp) -> None:
+    import threading
+
     view = app.world_workspace
     calls: list[bool] = []
-    view._set_busy(True)
+    release = threading.Event()
+    view.jobs.start("Blocking", lambda _report, _token: release.wait(5), lambda _done: None)
+    assert view.busy
     view.guard(lambda: calls.append(True))
-    assert not calls
-    view._set_busy(False)
+    assert not calls and "Wait" in view.status.get()
+    release.set()
+    wait_world(app)
     view.guard(lambda: calls.append(True))
     assert calls
     app._close()
-    assert view._closed and view._poll_id is None and view._draw_id is None
+    assert view._closed and view.pump.closed and not view.busy
 
 
 def test_import_issues_are_visible_and_selected(app: ui.TerrainApp) -> None:
@@ -285,26 +290,24 @@ def test_context_generate_inspect_export_and_invalidate(
     view.generate_context()
     wait_world(app)
     assert view.context_run is not None
-    assert view.display_layer.get() == "Land coverage"
+    assert view.map_view.display_layer.get() == "Land coverage"
     assert "connected water regions" in view.context_detail.get()
     assert not view.dirty
     generated = view.context_run
-    view.display_layer.set("Water exposure")
-    view._layer_changed()
-    assert str(view.bearing_input.cget("state")) == "readonly"
-    view.exposure_bearing.set("W")
-    view._layer_changed()
-    view._draw()
+    maps = view.map_view
+    maps.set_layer("Water exposure")
+    assert maps.bearing_input.winfo_manager() == "pack"
+    maps.exposure_bearing.set("W")
+    maps.set_layer()
+    maps.draw_now()
     assert view.context_run is generated and not view.dirty
-    assert "not rainfall" in view.context_legend.get()
-    view.display_layer.set("Shore distance")
-    view._layer_changed()
-    assert str(view.bearing_input.cget("state")) == "disabled"
-    assert "inland shores" in view.context_legend.get()
-    view.display_layer.set("Resolution support")
-    view._layer_changed()
-    view._draw()
-    assert view._photo is not None
+    assert "not rainfall" in maps.legend.get()
+    maps.set_layer("Shore distance")
+    assert not maps.bearing_input.winfo_manager()
+    assert "inland shores" in maps.legend.get()
+    maps.set_layer("Resolution support")
+    maps.draw_now()
+    assert maps.photo is not None
     target = tmp_path / "context"
 
     def choose_path(**_kwargs: object) -> str:
@@ -316,7 +319,7 @@ def test_context_generate_inspect_export_and_invalidate(
     assert (target / "context.json").exists()
     assert "Context exported" in view.status.get()
     view.context_rows.set("24")
-    assert view.context_run is None and view.display_layer.get() == "Source"
+    assert view.context_run is None and view.map_view.display_layer.get() == "Source"
     assert not view.dirty
     view.generate_context()
     wait_world(app)
@@ -332,7 +335,7 @@ def test_context_cancel_and_changed_inputs_never_install_new_results(app: ui.Ter
     )
     view.context_rows.set("12")
     view.generate_context()
-    view.cancel_context()
+    view.cancel_job()
     wait_world(app)
     assert view.context_run is None
     assert "cancelled" in view.status.get()
@@ -355,7 +358,7 @@ def test_issue_highlighting_returns_to_source_after_context(app: ui.TerrainApp) 
     assert view.context_run is not None and view.source is not None
     selected = view.source.features[0].id
     view._select_issues((selected,))
-    assert view.display_layer.get() == "Source"
+    assert view.map_view.display_layer.get() == "Source"
     assert view.tree.selection() == (selected,)
 
 
@@ -379,10 +382,9 @@ def test_context_reopen_restores_inputs_without_making_snapshot_a_save_target(
     assert view.context_run is not None and view.path is None and not view.dirty
     assert view.context_rows.get() == "12"
     assert view.context_run.context.world.project == source.project
-    view.display_layer.set("Water openings")
-    view._layer_changed()
-    view._draw()
-    assert view._photo is not None
+    view.map_view.set_layer("Water openings")
+    view.map_view.draw_now()
+    assert view.map_view.photo is not None
     edited = tmp_path / "edited.dmworld.json"
 
     def choose_save(**_kwargs: object) -> str:
@@ -420,7 +422,7 @@ def test_failed_cancelled_or_obsolete_context_open_preserves_current_work(
     wait_world(app)
     assert errors and view.source == source.project.source
     view.load_context(bundle)
-    view.cancel_context()
+    view.cancel_job()
     wait_world(app)
     assert view.context_run is None and "cancelled" in view.status.get()
     view.load_context(bundle)
@@ -444,13 +446,12 @@ def test_water_connectivity_inspection_shows_pieces_and_finite_links(app: ui.Ter
     run = generate_context(p, WorldContextSettings(12))
     view = app.world_workspace
     view.accept_world(run.context.world, None)
-    view.context_run = run
-    view._show_context_details()
-    view.display_layer.set("Water connectivity")
-    view._layer_changed()
-    view._draw()
-    assert view._photo is not None
-    assert "gold" in view.context_legend.get()
+    view._show_context(run)
+    maps = view.map_view
+    maps.set_layer("Water connectivity")
+    maps.draw_now()
+    assert maps.photo is not None
+    assert "gold" in maps.legend.get()
     assert "shared intervals" in view.context_detail.get()
     assert "components match source" in view.context_detail.get()
     view.pages.select(view.context_page)
@@ -463,10 +464,9 @@ def test_water_connectivity_inspection_shows_pieces_and_finite_links(app: ui.Ter
     assert view.context_text.winfo_height() > 40
     cell = int(np.flatnonzero(np.diff(run.context.connectivity.cell_offsets) > 1)[0])
     row, col = divmod(cell, 24)
-    left, top, right, bottom = view.viewport.rect(view._size(), view._world_size())
+    x, y = maps.flat.to_canvas((col + 0.5) / 24, (row + 0.5) / 12)
     event: tk.Event[tk.Misc] = tk.Event()
-    event.x = round(left + (col + 0.5) / 24 * (right - left))
-    event.y = round(top + (row + 0.5) / 12 * (bottom - top))
-    view._motion(event)
-    assert "2 water pieces" in view.inspection.get()
-    assert "region 1" in view.inspection.get() and "intervals" in view.inspection.get()
+    event.x, event.y = round(x), round(y)
+    maps.flat._motion(event)
+    assert "2 water pieces" in maps.inspection.get()
+    assert "region 1" in maps.inspection.get() and "intervals" in maps.inspection.get()

@@ -2,21 +2,18 @@
 
 import tkinter as tk
 from collections.abc import Callable
-from math import asin, cos, radians, sin
 from pathlib import Path
 from tkinter import filedialog, ttk
 from uuid import uuid4
 
 import numpy as np
-from scipy.spatial import KDTree  # pyright: ignore[reportMissingTypeStubs]
 
+from dmtools.terrain.adapters.map_views import THEMES
 from dmtools.terrain.application.planet import PlanetRun
 from dmtools.terrain.domain.planet import PlanetSettings
-from dmtools.terrain.globe_ui import GlobeViewer
 from dmtools.terrain.pipeline.planet import PlanetResult
-from dmtools.terrain.pipeline.planet_koppen import KOPPEN, KOPPEN_NAMES
-from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
-from dmtools.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETTINGS
+from dmtools.terrain.ui_components import WrappingLabel, section
+from dmtools.terrain.ui_style import GAP
 
 DETAIL_PRESETS = {
     "Quick · 50,000 nodes (~100 km)": 50_000,
@@ -28,75 +25,23 @@ DETAIL_PRESETS = {
 DEFAULT_PRESET = "Standard · 200,000 nodes (~50 km)"
 
 
-class PlanetProbe:
-    """Nearest-node description of a planet result under the cursor."""
-
-    def __init__(self, result: PlanetResult) -> None:
-        self.result = result
-        self.tree = KDTree(result.mesh.xyz)
-        volcanoes = result.volcanoes
-        self.volcano_tree = KDTree(volcanoes.xyz) if len(volcanoes) else None
-
-    def describe(self, longitude_deg: float, latitude_deg: float) -> str:
-        lon, lat = radians(longitude_deg), radians(latitude_deg)
-        point = (cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat))
-        node = int(self.tree.query(point)[1])  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-        result = self.result
-        volcano = self._volcano(point)
-        if not result.land[node]:
-            sea = f"Sea · floor {result.elevation_m[node]:,.0f} m (display bathymetry)"
-            return sea if volcano is None else f"{sea} · {volcano}"
-        lakes = result.lakes
-        parts = [f"Ground {result.elevation_m[node]:,.0f} m"]
-        lake = int(lakes.lake[node])
-        if lake >= 0:
-            kind = "closed lake" if lakes.endorheic[lake] else "lake"
-            parts.append(f"{kind} surface {lakes.level_m[lake]:,.0f} m")
-        flow = float(lakes.discharge_m3_s[node])
-        if flow >= 1:
-            parts.append(f"river {flow:,.0f} m³/s")
-        climate = result.climate
-        if climate is not None:
-            code = KOPPEN[int(climate.koppen[node])]
-            parts.append(
-                f"{climate.temperature_c[node]:.0f} °C · "
-                f"{climate.precipitation_mm[node]:,.0f} mm/yr · "
-                f"{code} {KOPPEN_NAMES.get(code, '')}"
-            )
-        if volcano is not None:
-            parts.append(volcano)
-        return " · ".join(parts)
-
-    def _volcano(self, point: tuple[float, float, float]) -> str | None:
-        """The volcano whose edifice is under the cursor, if any."""
-        if self.volcano_tree is None:
-            return None
-        v = self.result.volcanoes
-        chord, found = self.volcano_tree.query(point)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        index = int(found)  # pyright: ignore[reportUnknownArgumentType]
-        distance = 2 * asin(min(float(chord) / 2, 1.0)) * self.result.mesh.radius_m  # pyright: ignore[reportUnknownArgumentType]
-        if distance > max(float(v.radius_m[index]), 1.5 * self.result.mesh.spacing_m):
-            return None
-        state = "active" if v.active[index] else f"extinct ~{v.age_myr[index]:.1f} Myr"
-        return (
-            f"{state} {VOLCANO_KINDS[int(v.kind[index])]} "
-            f"({VOLCANO_SETTINGS[int(v.setting[index])]}, {v.height_m[index]:,.0f} m edifice)"
-        )
-
-
 def mean_land(result: PlanetResult, values: np.ndarray[tuple[int], np.dtype[np.float64]]) -> float:
     weights = result.mesh.area_m2[result.land]
     return float((values[result.land] * weights).sum() / weights.sum())
 
 
 class PlanetPanel(ttk.Frame):
+    """Planet stage: generation settings, Generate and Export, and a result summary.
+
+    The maps themselves, globe and polar views and regional zoom live in the map
+    view, so this page only makes and keeps planets.
+    """
+
     def __init__(
         self,
         parent: tk.Misc,
         generate: Callable[[PlanetSettings, Path | None], None],
         export: Callable[[Path], None],
-        cancel: Callable[[], None],
-        zoom: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame", padding=12)
         self._generate = generate
@@ -104,6 +49,8 @@ class PlanetPanel(ttk.Frame):
         self.run: PlanetRun | None = None
         self.detail_preset = tk.StringVar(self, value=DEFAULT_PRESET)
         self.climate = tk.BooleanVar(self, value=True)
+        self.islands = tk.BooleanVar(self, value=False)
+        self.wonders = tk.BooleanVar(self, value=False)
         self.seed = tk.StringVar(self, value=str(PlanetSettings().seed))
         self.geology_path: Path | None = None
         self.geology_label = tk.StringVar(self, value="Automatic ranges · no geology recipe")
@@ -112,76 +59,62 @@ class PlanetPanel(ttk.Frame):
             value="Generate relief for the whole planet. Your coastline stays exactly as drawn; "
             "uplift and river erosion shape everything inland.",
         )
-        ttk.Label(self, text="Whole planet (experimental)", style="Value.TLabel").pack(
-            anchor="w", pady=(0, 10)
+        ttk.Label(self, text="Whole planet (experimental)", style="Section.TLabel").pack(
+            anchor="w"
         )
-        ttk.Label(self, text="Detail", style="Body.TLabel").pack(anchor="w")
+        mesh = section(self, "Detail")
         self.preset_input = ttk.Combobox(
-            self, textvariable=self.detail_preset, values=tuple(DETAIL_PRESETS), state="readonly"
+            mesh, textvariable=self.detail_preset, values=tuple(DETAIL_PRESETS), state="readonly"
         )
-        self.preset_input.pack(fill="x", pady=(4, 8))
-        self.climate_input = ttk.Checkbutton(
-            self, text="Climate, lakes and biomes", variable=self.climate
-        )
-        self.climate_input.pack(anchor="w", pady=(0, 4))
-        self.islands = tk.BooleanVar(self, value=False)
-        self.islands_input = ttk.Checkbutton(
-            self, text="Volcanic islands (adds land beyond your coastline)",
-            variable=self.islands,
-        )
-        self.islands_input.pack(anchor="w", pady=(0, 4))
-        self.wonders = tk.BooleanVar(self, value=False)
-        self.wonders_input = ttk.Checkbutton(
-            self, text="Wonders (fantastical landmarks beyond Earth's extremes)",
-            variable=self.wonders,
-        )
-        self.wonders_input.pack(anchor="w", pady=(0, 8))
-        seed_row = ttk.Frame(self, style="Panel.TFrame")
-        seed_row.pack(fill="x", pady=(0, 8))
+        self.preset_input.pack(fill="x")
+        seed_row = ttk.Frame(mesh, style="Panel.TFrame")
+        seed_row.pack(fill="x", pady=(GAP, 0))
         ttk.Label(seed_row, text="Seed", style="Body.TLabel").pack(side="left")
         self.seed_input = ttk.Entry(seed_row, textvariable=self.seed, width=14)
-        self.seed_input.pack(side="left", padx=8)
-        ttk.Label(self, textvariable=self.geology_label, style="Body.TLabel", wraplength=340).pack(
-            anchor="w", pady=(4, 4)
+        self.seed_input.pack(side="left", padx=GAP)
+        features = section(self, "Features")
+        self.climate_input = ttk.Checkbutton(
+            features, text="Climate, lakes and biomes", variable=self.climate
         )
-        geology_row = ttk.Frame(self, style="Panel.TFrame")
-        geology_row.pack(fill="x", pady=(0, 12))
+        self.climate_input.pack(anchor="w")
+        self.islands_input = ttk.Checkbutton(
+            features, text="Volcanic islands (adds land beyond your coastline)",
+            variable=self.islands,
+        )
+        self.islands_input.pack(anchor="w", pady=(GAP // 2, 0))
+        self.wonders_input = ttk.Checkbutton(
+            features, text="Wonders (fantastical landmarks beyond Earth's extremes)",
+            variable=self.wonders,
+        )
+        self.wonders_input.pack(anchor="w", pady=(GAP // 2, 0))
+        geology = section(self, "Geology")
+        WrappingLabel(geology, textvariable=self.geology_label, style="Body.TLabel").pack(
+            fill="x"
+        )
+        geology_row = ttk.Frame(geology, style="Panel.TFrame")
+        geology_row.pack(fill="x", pady=(GAP // 2, 0))
         self.geology_button = ttk.Button(
-            geology_row, text="Choose geology recipe…", command=self.choose_geology
+            geology_row, text="Choose recipe…", style="Quiet.TButton", command=self.choose_geology
         )
         self.geology_button.pack(side="left")
         self.clear_geology_button = ttk.Button(
-            geology_row, text="Clear", command=lambda: self.set_geology(None)
+            geology_row, text="Clear", style="Quiet.TButton",
+            command=lambda: self.set_geology(None),
         )
-        self.clear_geology_button.pack(side="left", padx=6)
+        self.clear_geology_button.pack(side="left", padx=GAP)
+        actions = ttk.Frame(self, style="Panel.TFrame")
+        actions.pack(fill="x", pady=(2 * GAP, 0))
         self.generate_button = ttk.Button(
-            self, text="Generate planet", style="Accent.TButton", command=self.request_generate
+            actions, text="Generate planet", style="Accent.TButton", command=self.request_generate
         )
         self.generate_button.pack(fill="x")
-        self.cancel_button = ttk.Button(
-            self, text="Cancel planet job", style="Quiet.TButton", command=cancel,
-            state="disabled",
-        )
-        self.cancel_button.pack(fill="x", pady=6)
         self.export_button = ttk.Button(
-            self, text="Export planet…", style="Quiet.TButton", command=self.choose_export,
-            state="disabled",
+            actions, text="Export planet build…", style="Quiet.TButton",
+            command=self.choose_export, state="disabled",
         )
-        self.export_button.pack(fill="x")
-        self.zoom_button = ttk.Button(
-            self, text="Zoom detail at map centre", style="Quiet.TButton",
-            command=zoom if zoom is not None else (lambda: None), state="disabled",
-        )
-        self.zoom_button.pack(fill="x", pady=(6, 0))
-        self.globe_button = ttk.Button(
-            self, text="Globe and polar views…", style="Quiet.TButton",
-            command=self.open_globe, state="disabled",
-        )
-        self.globe_button.pack(fill="x", pady=(6, 0))
-        ttk.Separator(self).pack(fill="x", pady=12)
-        ttk.Label(self, textvariable=self.detail, style="Muted.TLabel", wraplength=340).pack(
-            anchor="w"
-        )
+        self.export_button.pack(fill="x", pady=(GAP, 0))
+        ttk.Separator(self).pack(fill="x", pady=2 * GAP)
+        WrappingLabel(self, textvariable=self.detail, style="Muted.TLabel").pack(fill="x")
         self.set_busy(False)
 
     def settings(self) -> PlanetSettings:
@@ -205,38 +138,23 @@ class PlanetPanel(ttk.Frame):
             return
         self._generate(settings, self.geology_path)
 
-    def set_busy(self, busy: bool, cancellable: bool = False) -> None:
+    def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"
         self.preset_input.configure(state="disabled" if busy else "readonly")
         for widget in (self.climate_input, self.islands_input, self.wonders_input,
-                       self.seed_input, self.geology_button,
-                       self.generate_button):
+                       self.seed_input, self.geology_button, self.generate_button):
             widget.configure(state=state)
         self.clear_geology_button.configure(
             state="normal" if self.geology_path is not None and not busy else "disabled"
         )
-        self.cancel_button.configure(state="normal" if busy and cancellable else "disabled")
         self.export_button.configure(
             state="normal" if self.run is not None and not busy else "disabled"
         )
-        self.zoom_button.configure(
-            state="normal" if self.run is not None and not busy else "disabled"
-        )
-        self.globe_button.configure(
-            state="normal" if self.run is not None and self.run.previews and not busy
-            else "disabled"
-        )
-
-    def open_globe(self) -> GlobeViewer | None:
-        if self.run is None or not self.run.previews:
-            return None
-        frame = self.run.result.world.project.frame
-        return GlobeViewer(self, self.run.previews, frame.central_meridian_deg)
 
     def set_geology(self, path: Path | None) -> None:
         self.geology_path = path
         self.geology_label.set(
-            f"Geology recipe: {path.name}" if path else "Automatic ranges · no geology recipe"
+            f"Recipe: {path.name}" if path else "Automatic ranges · no geology recipe"
         )
         self.set_busy(False)
 
@@ -282,7 +200,11 @@ class PlanetPanel(ttk.Frame):
                 worst = max(abs(r.measured_m - r.target_m) / r.target_m for r in final
                             if r.measured_m is not None and r.target_m is not None)
                 lines.append(f"Geology targets met within {worst:.0%}")
-        lines.append("Choose a Planet layer above the map. Export writes the GeoTIFF, "
-                     "rivers, lakes and the mesh archive.")
+        shown = sum(theme.label in run.previews for theme in THEMES)
+        lines.append(
+            f"{shown} of {len(THEMES)} maps ready. Choose Planet above the map, then a map "
+            "and a projection; Zoom to region builds regional detail. Export writes the "
+            "GeoTIFF, rivers, lakes and the mesh archive."
+        )
         self.detail.set("\n".join(lines))
         self.set_busy(False)

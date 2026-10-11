@@ -53,7 +53,7 @@ def test_create_button_opens_saved_project_with_fixed_world_scale(
 ) -> None:
     view = app.world_workspace
     panel = view.terrain_panel
-    view.show_terrain()
+    view.pages.select(panel)
     assert view.pages.select() == str(panel)
     panel.continent.set("Southmere")
     target = tmp_path / "terrain"

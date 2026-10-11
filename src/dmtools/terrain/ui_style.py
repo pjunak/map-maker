@@ -83,7 +83,8 @@ def configure_styles(root: tk.Misc) -> None:
         background=[("selected", ACCENT), ("disabled", PANEL), ("active", ACCENT_SOFT)],
         foreground=[("selected", "#ffffff"), ("disabled", DISABLED)],
     )
-    style.configure("Segment.TCheckbutton", background=PANEL, foreground=INK, padding=(10, 3))
+    style.configure("Segment.TCheckbutton", background=PANEL, foreground=INK, padding=(10, 3),
+                    relief="raised", borderwidth=1)
     style.layout("Segment.TCheckbutton", style.layout("Toolbutton"))
     style.map(
         "Segment.TCheckbutton",
@@ -104,7 +105,7 @@ def configure_styles(root: tk.Misc) -> None:
     style.configure("Stages.TNotebook", tabposition="wn", background=PAPER, borderwidth=0)
     style.configure(
         "Stages.TNotebook.Tab", background=PAPER, foreground=MUTED, padding=(12, 8),
-        width=12, font=FONT_BOLD,
+        width=14, font=FONT_BOLD,
     )
     style.map(
         "Stages.TNotebook.Tab",

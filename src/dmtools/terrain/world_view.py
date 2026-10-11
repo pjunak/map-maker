@@ -1,0 +1,830 @@
+# pyright: reportUnknownMemberType=false
+"""The World workspace's map: source, context and planet maps in one view.
+
+Planet maps come from the theme registry (``map_views.THEMES``) and show in any
+projection (``map_projection.PROJECTIONS``); neither list needs code here.
+Regional detail opens in the same view as a deeper level, with a breadcrumb back
+to the world. The view only presents results; the workspace owns the data and
+the jobs that make it.
+"""
+
+from __future__ import annotations
+
+import tkinter as tk
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from math import asin, atan2, cos, degrees, pi, radians, sin
+from pathlib import Path
+from tkinter import filedialog, ttk
+from typing import Literal, cast
+from uuid import uuid4
+
+from PIL import Image
+
+from dmtools.terrain.adapters.map_projection import PROJECTION_LABELS, PROJECTIONS
+from dmtools.terrain.adapters.map_views import THEME_BY_ID, THEME_BY_LABEL, THEMES, MapTheme
+from dmtools.terrain.adapters.world_context_render import (
+    CONTEXT_LAYERS,
+    ContextLayer,
+    render_world_context,
+)
+from dmtools.terrain.adapters.world_render import OCEAN, render_world_source
+from dmtools.terrain.application.planet import PlanetRun
+from dmtools.terrain.application.planet_region import RegionRun
+from dmtools.terrain.application.region_views import region_themes, render_region_theme
+from dmtools.terrain.application.world_context import WorldContextRun
+from dmtools.terrain.domain.world import WorldAssignment, WorldFrame, WorldSource
+from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
+from dmtools.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, Rect
+from dmtools.terrain.map_probes import (
+    PlanetProbe,
+    context_readout,
+    lonlat_text,
+    region_readout,
+)
+from dmtools.terrain.pipeline.control import CancellationToken
+from dmtools.terrain.ui_components import SegmentedChoice, WrappingLabel
+from dmtools.terrain.ui_jobs import JobRunner, LatestWorker, Report
+from dmtools.terrain.ui_style import (
+    FONT_MAP_LABEL,
+    GAP,
+    MAP_BACKGROUND,
+    MAP_FRAME,
+    MAP_GRID,
+    MAP_HIGHLIGHT,
+    MAP_TEXT,
+)
+from dmtools.terrain.viewport import MapViewport
+
+SOURCE, CONTEXT, PLANET = "Source", "Context", "Planet"
+EXPOSURE_LAYERS = ("Water exposure", "Exposure support")
+FLAT = "equirectangular"
+GRATICULE_STEP_DEG = 30
+AUTO_RADIUS = "Auto"
+REGION_RADII = (AUTO_RADIUS, "150 km", "300 km", "600 km", "1,200 km")
+AUTO_RADIUS_KM = (150.0, 1200.0)
+SAVE_PIXELS = 2048
+INFO_HEIGHT = 92
+
+SOURCE_LEGEND = (
+    "Your source geography: continent colours show assignments. Generate context or a "
+    "planet in the sidebar to see more maps."
+)
+CONTEXT_LEGENDS: dict[str, str] = {
+    "Land coverage": "Green = land; blue = water. Mixed colours retain fractional "
+    "coverage of unresolved shores, islands and straits.",
+    "Connected water": "Different colours identify connected water regions. "
+    "Each cell displays its largest water region.",
+    "Resolution support": "Orange = land missed by centre sampling; cyan = water "
+    "missed by centre sampling; violet = disconnected water in one cell.",
+    "Water openings": "Blue = full edge; orange = partial; dark = closed. Width is "
+    "the longest continuous wet edge, not channel depth or transport capacity.",
+    "Water connectivity": "Blue = one water piece; gold = several separate pieces; "
+    "green = land; pink = unresolved water-region connectivity. "
+    "Hover for piece identities and shared intervals. "
+    "Outlines show the source coast. Connections do not yet model currents.",
+    "Shore distance": "Cream = 0 km; purple = 3,000+ km. Distance is measured at "
+    "cell centres and includes inland shores. Grey = no shoreline exists.",
+    "Water exposure": "Tan = 0% water; blue = 100%. Choose the look direction "
+    "beside the layer. Nearer water has more weight. This is not rainfall. "
+    "Outlines show source geography.",
+    "Exposure support": "Dark = 0%; gold = 100% of exposure weight falls in mixed "
+    "coastal cells. This flags unresolved geography; it is not an error bound.",
+}
+HINTS = {
+    "flat": "Drag to pan · wheel to zoom · F fits the map",
+    "globe": "Drag to turn the globe",
+    "polar": "Drag to turn · wheel to zoom",
+    "pick": "Click the map to build regional detail there · Esc cancels",
+    "region": "Drag to pan · wheel to zoom · World (above) returns to the whole planet",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SourceScene:
+    """What the Source map draws, as the workspace currently has it."""
+
+    source: WorldSource
+    bounds: tuple[float, float, float, float]
+    assignments: tuple[WorldAssignment, ...]
+    selection: frozenset[str]
+    frame: WorldFrame | None  # None while the World frame inputs are incomplete
+    central_meridian_deg: float
+
+
+@dataclass(slots=True)
+class RegionLevel:
+    """One regional detail window below the world map, with its rendered themes."""
+
+    run: RegionRun
+    themes: tuple[MapTheme, ...]
+    theme_id: str
+    images: dict[str, ImagePyramid] = field(default_factory=dict[str, ImagePyramid])
+    viewport: MapViewport = field(default_factory=MapViewport)
+
+    @property
+    def title(self) -> str:
+        lon, lat = self.run.window.centre
+        return f"Region {lonlat_text(lon, lat)} · {self.run.window.radius_m / 1000:,.0f} km"
+
+
+def map_label(
+    canvas: tk.Canvas, x: float, y: float, text: str, *, anchor: Literal["nw", "w"] = "nw"
+) -> None:
+    """Text over a map, on a dark backdrop so it reads on light and dark maps."""
+    item = canvas.create_text(x, y, anchor=anchor, text=text, fill=MAP_TEXT,
+                              font=FONT_MAP_LABEL)
+    box = canvas.bbox(item)
+    if box:
+        backdrop = canvas.create_rectangle(box[0] - 5, box[1] - 3, box[2] + 5, box[3] + 3,
+                                           fill=MAP_BACKGROUND, outline="")
+        canvas.tag_lower(backdrop, item)
+
+
+class WorldMapView(ttk.Frame):
+    """Map area: layer, theme and projection choice, legend, hover and drill-down."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        worker: LatestWorker,
+        jobs: JobRunner,
+        *,
+        pick_shape: Callable[[tuple[float, float], bool], None],
+        request_region: Callable[[float, float, float], None],
+        export_region: Callable[[RegionRun, Path], None],
+        status: Callable[[str], None],
+    ) -> None:
+        super().__init__(parent, style="Panel.TFrame")
+        self._worker = worker
+        self._jobs = jobs
+        self._pick_shape = pick_shape
+        self._request_region = request_region
+        self._export_region = export_region
+        self._status = status
+        self.scene: SourceScene | None = None
+        self.context_run: WorldContextRun | None = None
+        self.planet_run: PlanetRun | None = None
+        self.probe: PlanetProbe | None = None
+        self._pyramids: dict[str, ImagePyramid] = {}
+        self.levels: list[RegionLevel] = []
+        self.level = 0  # 0 is the world; n shows levels[n - 1]
+        self._world_viewport = MapViewport()
+        self._remembered = {SOURCE: SOURCE, CONTEXT: CONTEXT_LAYERS[0], PLANET: ""}
+        self._pick_at: tuple[float, float] | None = None
+        self._busy = False
+        self._world_layer = SOURCE
+        self.display_layer = tk.StringVar(self, value=SOURCE)
+        self.group = tk.StringVar(self, value=SOURCE)
+        self.projection = tk.StringVar(self, value=FLAT)
+        self.graticule = tk.BooleanVar(self, value=True)
+        self.show_excluded = tk.BooleanVar(self, value=True)
+        self.exposure_bearing = tk.StringVar(self, value=EXPOSURE_BEARINGS[0])
+        self.picking = tk.BooleanVar(self, value=False)
+        self.region_radius = tk.StringVar(self, value=AUTO_RADIUS)
+        self.legend = tk.StringVar(self, value=SOURCE_LEGEND)
+        self.inspection = tk.StringVar(self, value=HINTS["flat"])
+        self._build()
+        self._sync_controls()
+
+    # Layout
+
+    def _build(self) -> None:
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(2, weight=1)
+        navigation = ttk.Frame(self, style="Toolbar.TFrame", padding=(GAP, GAP, GAP, 0))
+        navigation.grid(row=0, column=0, sticky="ew")
+        self.crumbs = ttk.Frame(navigation, style="Toolbar.TFrame")
+        self.crumbs.pack(side="left")
+        tools = ttk.Frame(navigation, style="Toolbar.TFrame")
+        tools.pack(side="right")
+        self.export_region_button = ttk.Button(
+            tools, text="Export region…", style="Small.TButton", command=self.choose_region_export
+        )
+        self.save_button = ttk.Button(
+            tools, text="Save image…", style="Small.TButton", command=self.choose_save_image
+        )
+        self.save_button.pack(side="right", padx=(GAP // 2, 0))
+        self.radius_input = ttk.Combobox(
+            tools, textvariable=self.region_radius, values=REGION_RADII, state="readonly",
+            width=8,
+        )
+        self.radius_input.pack(side="right", padx=(GAP // 2, 0))
+        self.pick_button = ttk.Checkbutton(
+            tools, text="Zoom to region", variable=self.picking, style="Segment.TCheckbutton",
+            command=self._picking_changed, takefocus=False,
+        )
+        self.pick_button.pack(side="right", padx=(GAP, 0))
+        ttk.Button(tools, text="Fit", style="Small.TButton", command=self.fit).pack(side="right")
+
+        layers = ttk.Frame(self, style="Toolbar.TFrame", padding=GAP)
+        layers.grid(row=1, column=0, sticky="ew")
+        self.group_choice = SegmentedChoice(
+            layers, self.group, [(g, g) for g in (SOURCE, CONTEXT, PLANET)], self._group_changed
+        )
+        self.group_choice.pack(side="left")
+        self.layer_input = ttk.Combobox(
+            layers, textvariable=self.display_layer, state="readonly", width=24
+        )
+        self.layer_input.pack(side="left", padx=(GAP, 0))
+        self.layer_input.bind("<<ComboboxSelected>>", lambda _e: self.set_layer())
+        self.bearing_input = ttk.Combobox(
+            layers, textvariable=self.exposure_bearing, values=EXPOSURE_BEARINGS,
+            state="readonly", width=4,
+        )
+        self.bearing_input.bind("<<ComboboxSelected>>", lambda _e: self.set_layer())
+        self.excluded_toggle = ttk.Checkbutton(
+            layers, text="Excluded shapes", variable=self.show_excluded, command=self.refresh
+        )
+        self.grid_toggle = ttk.Checkbutton(
+            layers, text="Grid", variable=self.graticule, command=self.refresh
+        )
+        self.grid_toggle.pack(side="right", padx=(GAP, 0))
+        self.projection_choice = SegmentedChoice(
+            layers, self.projection, [(kind, PROJECTION_LABELS[kind]) for kind in PROJECTIONS],
+            self.refresh,
+        )
+        self.projection_choice.pack(side="right")
+        self._layer_bar = layers
+
+        stage = ttk.Frame(self, style="Panel.TFrame")
+        stage.grid(row=2, column=0, sticky="nsew")
+        stage.rowconfigure(0, weight=1)
+        stage.columnconfigure(0, weight=1)
+        self.flat = FlatMapCanvas(
+            stage, background=OCEAN, on_click=self._click_flat, on_hover=self._hover_flat,
+            on_view_changed=self._view_changed,
+        )
+        self.flat.placeholder = (
+            "Start with your world",
+            "Import an SVG or open a saved world.\n"
+            "Continents, islands and the world frame stay connected.",
+        )
+        self.flat.grid(row=0, column=0, sticky="nsew")
+        self.globe = GlobeCanvas(
+            stage, self._worker, on_click=self._click_globe,
+            on_hover=self._hover_globe, on_view_changed=self._view_changed,
+        )
+        for canvas in (self.flat, self.globe):
+            canvas.bind("<Escape>", lambda _e: self.escape())
+
+        # Fixed height, so a longer readout never resizes (and redraws) the map.
+        info = ttk.Frame(self, style="Panel.TFrame", padding=(GAP, GAP // 2, GAP, GAP),
+                         height=INFO_HEIGHT)
+        info.grid(row=3, column=0, sticky="ew")
+        info.grid_propagate(False)
+        info.columnconfigure(0, weight=3, uniform="info")
+        info.columnconfigure(1, weight=2, uniform="info")
+        ttk.Label(info, text="Legend", style="Section.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(info, text="Under the cursor", style="Section.TLabel").grid(
+            row=0, column=1, sticky="w", padx=(2 * GAP, 0)
+        )
+        WrappingLabel(info, textvariable=self.legend, style="Muted.TLabel").grid(
+            row=1, column=0, sticky="new"
+        )
+        WrappingLabel(info, textvariable=self.inspection, style="Readout.TLabel").grid(
+            row=1, column=1, sticky="new", padx=(2 * GAP, 0)
+        )
+        self._rebuild_crumbs()
+
+    # Data from the workspace
+
+    def show_source(self, scene: SourceScene | None) -> None:
+        self.scene = scene
+        if scene is None:
+            self._drop_levels()
+        self.refresh()
+
+    def set_context(self, run: WorldContextRun | None) -> None:
+        self.context_run = run
+        if run is None and self.group.get() == CONTEXT:
+            self.display_layer.set(SOURCE)
+        self.set_layer()
+
+    def set_planet(self, run: PlanetRun | None, probe: PlanetProbe | None) -> None:
+        self.planet_run, self.probe = run, probe
+        self._pyramids.clear()
+        self._drop_levels()
+        self.picking.set(False)
+        if run is None:
+            if self.group.get() == PLANET:
+                self.display_layer.set(SOURCE)
+        else:
+            labels = self.planet_layers()
+            self.display_layer.set(labels[0] if labels else SOURCE)
+        self.set_layer()
+
+    def add_region(self, run: RegionRun, image: Image.Image, theme_id: str) -> None:
+        """Show a new regional window below the world map."""
+        level = RegionLevel(run, region_themes(run.window), theme_id)
+        level.images[theme_id] = ImagePyramid(image)
+        self.levels = [level]  # deeper levels (province, local) will extend this path
+        self.picking.set(False)
+        self.go_to_level(1)
+
+    def _drop_levels(self) -> None:
+        if self.level:
+            self.flat.viewport = self._world_viewport
+        self.levels.clear()
+        self.level = 0
+        self._rebuild_crumbs()
+
+    # Layer choice
+
+    def planet_layers(self) -> tuple[str, ...]:
+        run = self.planet_run
+        return () if run is None else tuple(t.label for t in THEMES if t.label in run.previews)
+
+    def layers_for(self, group: str) -> tuple[str, ...]:
+        if self.level:
+            return tuple(t.label for t in self.levels[self.level - 1].themes)
+        if group == CONTEXT:
+            return CONTEXT_LAYERS if self.context_run is not None else ()
+        if group == PLANET:
+            return self.planet_layers()
+        return (SOURCE,)
+
+    def group_of(self, layer: str) -> str:
+        if layer in CONTEXT_LAYERS:
+            return CONTEXT
+        if layer in THEME_BY_LABEL:
+            return PLANET
+        return SOURCE
+
+    def set_layer(self, layer: str | None = None) -> None:
+        """Show ``layer`` (or the selector's current value) if it is available."""
+        if layer is not None:
+            self.display_layer.set(layer)
+        layer = self.display_layer.get()
+        if self.level:
+            current = self.levels[self.level - 1]
+            if layer not in self.layers_for(PLANET):
+                self.display_layer.set(THEME_BY_ID[current.theme_id].label)
+            else:
+                self._show_region_theme(current, THEME_BY_LABEL[layer].id)
+                return
+        else:
+            group = self.group_of(layer)
+            if layer not in self.layers_for(group):
+                self.display_layer.set(SOURCE)
+                if group == PLANET:
+                    self._status(
+                        "Generate the planet (with climate for the atlas, rainfall and "
+                        "temperature maps) before choosing its maps."
+                    )
+                elif group == CONTEXT:
+                    self._status("Generate context in the Context stage before choosing it.")
+            self.group.set(self.group_of(self.display_layer.get()))
+            self._remembered[self.group.get()] = self.display_layer.get()
+        self._sync_controls()
+        self.refresh()
+
+    def _group_changed(self) -> None:
+        group = self.group.get()
+        layers = self.layers_for(group)
+        remembered = self._remembered.get(group, "")
+        self.set_layer(remembered if remembered in layers else (layers[0] if layers else SOURCE))
+
+    # Levels
+
+    def go_to_level(self, index: int) -> None:
+        if not 0 <= index <= len(self.levels):
+            return
+        if self.level == 0:
+            self._world_viewport = self.flat.viewport
+            self._world_layer = self.display_layer.get()
+        self.level = index
+        if index == 0:
+            self.flat.viewport = self._world_viewport
+            self.set_layer(self._world_layer)
+        else:
+            level = self.levels[index - 1]
+            self.flat.viewport = level.viewport
+            self.group.set(PLANET)
+            self.display_layer.set(THEME_BY_ID[level.theme_id].label)
+            self._sync_controls()
+            self.refresh()
+        self._rebuild_crumbs()
+
+    def _rebuild_crumbs(self) -> None:
+        for child in self.crumbs.winfo_children():
+            child.destroy()
+        names = ["World", *(level.title for level in self.levels)]
+        for index, name in enumerate(names):
+            if index:
+                ttk.Label(self.crumbs, text="/", style="Muted.TLabel").pack(side="left")
+            ttk.Button(
+                self.crumbs, text=name, style="Crumb.TButton",
+                command=lambda index=index: self.go_to_level(index),
+                state="disabled" if index == self.level else "normal",
+            ).pack(side="left")
+
+    def _show_region_theme(self, level: RegionLevel, theme_id: str) -> None:
+        if theme_id in level.images:
+            level.theme_id = theme_id
+            self._sync_controls()
+            self.refresh()
+            return
+        self.legend.set(f"Rendering {THEME_BY_ID[theme_id].label}…")
+        window = level.run.window
+
+        def shown(image: Image.Image) -> None:
+            level.images[theme_id] = ImagePyramid(image)
+            if self.level and self.levels[self.level - 1] is level:
+                if THEME_BY_LABEL.get(self.display_layer.get()) is THEME_BY_ID[theme_id]:
+                    level.theme_id = theme_id
+                self._sync_controls()
+                self.refresh()
+
+        self._worker.submit(lambda: render_region_theme(window, theme_id), shown)
+
+    # Controls
+
+    def set_busy(self, busy: bool) -> None:
+        self._busy = busy
+        self._sync_controls()
+
+    def _uses_globe(self) -> bool:
+        return self.level == 0 and self.group.get() == PLANET and self.projection.get() != FLAT
+
+    def _sync_controls(self) -> None:
+        busy = self._busy
+        world = self.level == 0
+        for group in (SOURCE, CONTEXT, PLANET):
+            self.group_choice.set_enabled(
+                group, world and self.scene is not None and bool(self.layers_for(group))
+            )
+        layers = self.layers_for(self.group.get())
+        self.layer_input.configure(values=layers, state="readonly" if layers else "disabled")
+        planet_world = world and self.group.get() == PLANET
+        for kind in PROJECTIONS:
+            self.projection_choice.set_enabled(kind, planet_world)
+        if world:
+            self.grid_toggle.pack(side="right", padx=(GAP, 0))
+            self.projection_choice.pack(side="right")
+        else:
+            self.projection_choice.pack_forget()
+            self.grid_toggle.pack_forget()
+        layer = self.display_layer.get()
+        if world and layer in EXPOSURE_LAYERS and self.context_run is not None:
+            self.bearing_input.pack(side="left", padx=(GAP, 0))
+        else:
+            self.bearing_input.pack_forget()
+        if world and self.group.get() == SOURCE and self.scene is not None:
+            self.excluded_toggle.pack(side="left", padx=(GAP, 0))
+        else:
+            self.excluded_toggle.pack_forget()
+        can_pick = world and self.planet_run is not None and not busy
+        if not can_pick and self.picking.get():
+            self.picking.set(False)
+        self.pick_button.configure(state="normal" if can_pick else "disabled")
+        self.radius_input.configure(state="readonly" if can_pick else "disabled")
+        self.save_button.configure(
+            state="normal" if self.scene is not None and not busy else "disabled"
+        )
+        if self.level:
+            self.export_region_button.pack(side="right", padx=(GAP // 2, 0))
+            self.export_region_button.configure(state="disabled" if busy else "normal")
+        else:
+            self.export_region_button.pack_forget()
+        self._update_legend()
+        self.inspection.set(self._hint())
+
+    def _hint(self) -> str:
+        if self.picking.get():
+            return HINTS["pick"] + f" · radius {self.radius_km():,.0f} km"
+        if self.level:
+            return HINTS["region"]
+        if self._uses_globe():
+            return HINTS["globe" if self.projection.get() == "globe" else "polar"]
+        return HINTS["flat"]
+
+    def _update_legend(self) -> None:
+        layer = self.display_layer.get()
+        theme = THEME_BY_LABEL.get(layer)
+        if theme is not None:
+            text = theme.legend
+            if self.level == 0 and self.planet_run is not None:
+                missing = sum(t.label not in self.planet_run.previews for t in THEMES)
+                if missing:
+                    text += (f"\n{missing} more maps need climate (or volcanoes); turn on "
+                             "Climate in the Planet stage and generate again.")
+            self.legend.set(text)
+        elif layer in CONTEXT_LEGENDS:
+            self.legend.set(CONTEXT_LEGENDS[layer])
+        else:
+            self.legend.set(SOURCE_LEGEND)
+
+    def _picking_changed(self) -> None:
+        self._pick_at = None
+        cursor = "crosshair" if self.picking.get() else ""
+        self.flat.configure(cursor=cursor)
+        self.globe.configure(cursor=cursor)
+        self.inspection.set(self._hint())
+        self.flat.draw_overlay()
+
+    def escape(self) -> bool:
+        """Leave region picking; returns True if there was something to cancel."""
+        if self.picking.get():
+            self.picking.set(False)
+            self._picking_changed()
+            return True
+        return False
+
+    def fit(self) -> None:
+        if self._uses_globe():
+            self.globe.polar_span = 90.0
+            self.globe.request()
+        else:
+            self.flat.fit()
+
+    def radius_km(self) -> float:
+        choice = self.region_radius.get()
+        if choice != AUTO_RADIUS:
+            return float(choice.removesuffix(" km").replace(",", ""))
+        scene = self.scene
+        radius = scene.frame.radius_km if scene and scene.frame else 6371.0
+        zoom = 1.0 if self._uses_globe() else self.flat.viewport.zoom
+        # About half the visible width of the map.
+        return min(AUTO_RADIUS_KM[1], max(AUTO_RADIUS_KM[0], pi * radius / 2 / zoom))
+
+    # Drawing
+
+    @property
+    def photo(self) -> object:
+        """The image currently on screen (for tests and checks)."""
+        return self.globe.photo if self._uses_globe() else self.flat.photo
+
+    def refresh(self) -> None:
+        if self._uses_globe():
+            self.flat.grid_remove()
+            self.globe.grid(row=0, column=0, sticky="nsew")
+            run = self.planet_run
+            assert run is not None
+            self.globe.graticule = self.graticule.get()
+            self.globe.set_kind(self.projection.get())
+            self.globe.show(
+                run.previews[self.display_layer.get()],
+                run.result.world.project.frame.central_meridian_deg,
+            )
+        else:
+            self.globe.grid_remove()
+            self.globe.show(None, 0.0)
+            self.flat.grid(row=0, column=0, sticky="nsew")
+            renderer, size = self._flat_content()
+            self.flat.overlay = self._overlay
+            self.flat.show(renderer, size)
+        self.inspection.set(self._hint())
+
+    def draw_now(self) -> None:
+        if not self._uses_globe():
+            self.flat.draw_now()
+
+    def _flat_content(
+        self,
+    ) -> tuple[Callable[[MapViewport, tuple[int, int]], Image.Image] | None, tuple[float, float]]:
+        if self.level:
+            level = self.levels[self.level - 1]
+            return level.images[level.theme_id].renderer((1.0, 1.0), MAP_BACKGROUND), (1.0, 1.0)
+        scene = self.scene
+        if scene is None:
+            return None, (2.0, 1.0)
+        x0, y0, x1, y1 = scene.bounds
+        size = (x1 - x0, y1 - y0)
+        layer = self.display_layer.get()
+        run = self.planet_run
+        if self.group.get() == PLANET and run is not None and layer in run.previews:
+            if layer not in self._pyramids:
+                self._pyramids[layer] = ImagePyramid(run.previews[layer])
+            return self._pyramids[layer].renderer(size, OCEAN), size
+        context = self.context_run
+        if self.group.get() == CONTEXT and context is not None:
+            bearing = EXPOSURE_BEARINGS.index(self.exposure_bearing.get())
+            return self._guarded(
+                lambda viewport, canvas: render_world_context(
+                    context.context, viewport, canvas, cast(ContextLayer, layer), bearing
+                )
+            ), size
+        show_excluded = self.show_excluded.get()
+        return self._guarded(
+            lambda viewport, canvas: render_world_source(
+                scene.source, scene.bounds, scene.assignments, viewport, canvas,
+                scene.selection, show_excluded=show_excluded,
+            )
+        ), size
+
+    def _guarded(
+        self, render: Callable[[MapViewport, tuple[int, int]], Image.Image]
+    ) -> Callable[[MapViewport, tuple[int, int]], Image.Image]:
+        def safe(viewport: MapViewport, size: tuple[int, int]) -> Image.Image:
+            try:
+                return render(viewport, size)
+            except ValueError as error:
+                self._status(str(error))
+                return Image.new("RGB", size, OCEAN)
+
+        return safe
+
+    def _overlay(self, canvas: FlatMapCanvas, rect: Rect) -> None:
+        left, top, right, bottom = rect
+        scene = self.scene
+        if self.level == 0 and scene is not None:
+            if self.graticule.get():
+                self._draw_graticule(canvas, rect, scene.central_meridian_deg)
+            if scene.frame is not None:
+                for level in self.levels:
+                    lon, lat = level.run.window.centre
+                    self._draw_circle(canvas, scene, lon, lat, level.run.window.radius_m / 1000,
+                                      MAP_TEXT, width=2)
+                if self.picking.get() and self._pick_at is not None:
+                    self._draw_circle(canvas, scene, *self._pick_at, self.radius_km(),
+                                      MAP_HIGHLIGHT, width=2)
+        canvas.create_rectangle(left, top, right, bottom, outline=MAP_FRAME)
+        if self.level:
+            self._draw_scale(canvas, self.levels[self.level - 1])
+        map_label(canvas, 12, 12, f"{self.display_layer.get()}  ·  {canvas.viewport.zoom:.1f}x")
+
+    @staticmethod
+    def _draw_graticule(canvas: FlatMapCanvas, rect: Rect, meridian: float) -> None:
+        left, top, right, bottom = rect
+        for lon in range(-180, 180, GRATICULE_STEP_DEG):
+            u = ((lon - meridian + 180) % 360) / 360
+            x = left + u * (right - left)
+            canvas.create_line(x, top, x, bottom, fill=MAP_GRID, dash=(2, 6))
+        for lat in range(-90 + GRATICULE_STEP_DEG, 90, GRATICULE_STEP_DEG):
+            y = top + (90 - lat) / 180 * (bottom - top)
+            canvas.create_line(left, y, right, y, fill=MAP_GRID, dash=(2, 6))
+
+    @staticmethod
+    def _draw_circle(
+        canvas: FlatMapCanvas, scene: SourceScene, lon: float, lat: float, radius_km: float,
+        colour: str, *, width: int = 1,
+    ) -> None:
+        """A small circle on the sphere drawn on the flat map (split at the seam)."""
+        assert scene.frame is not None
+        angle = radius_km / scene.frame.radius_km
+        phi, lam = radians(lat), radians(lon)
+        points: list[tuple[float, float]] = []
+        for step in range(0, 361, 5):
+            bearing = radians(step)
+            phi2 = asin(sin(phi) * cos(angle) + cos(phi) * sin(angle) * cos(bearing))
+            lam2 = lam + atan2(sin(bearing) * sin(angle) * cos(phi),
+                               cos(angle) - sin(phi) * sin(phi2))
+            u = ((degrees(lam2) - scene.central_meridian_deg + 180) % 360) / 360
+            points.append((u, (90 - degrees(phi2)) / 180))
+        segment: list[float] = []
+        previous: float | None = None
+        for u, v in points:
+            if previous is not None and abs(u - previous) > 0.5:
+                if len(segment) >= 4:
+                    canvas.create_line(*segment, fill=colour, width=width)
+                segment = []
+            segment.extend(canvas.to_canvas(u, v))
+            previous = u
+        if len(segment) >= 4:
+            canvas.create_line(*segment, fill=colour, width=width)
+
+    @staticmethod
+    def _draw_scale(canvas: FlatMapCanvas, level: RegionLevel) -> None:
+        left, _, right, bottom = canvas.map_rect()
+        window = level.run.window
+        metres_per_px = 2 * window.radius_m / max(right - left, 1.0)
+        target = 140 * metres_per_px
+        nice = max((n * 10**p for p in range(0, 8) for n in (1, 2, 5) if n * 10**p <= target),
+                   default=target)
+        width_px = nice / metres_per_px
+        height = canvas.winfo_height()
+        x0, y0 = 16.0, min(bottom, float(height)) - 18
+        label = f"{nice / 1000:,.0f} km" if nice >= 1000 else f"{nice:,.0f} m"
+        map_label(canvas, x0 + width_px + 8, y0, label, anchor="w")
+        canvas.create_rectangle(x0 - 4, y0 - 5, x0 + width_px + 4, y0 + 5,
+                                fill=MAP_BACKGROUND, outline="")
+        canvas.create_line(x0, y0, x0 + width_px, y0, fill=MAP_TEXT, width=3)
+
+
+    def _view_changed(self) -> None:
+        if self.picking.get():
+            self.inspection.set(self._hint())
+
+    # Hover and clicks
+
+    def describe_at(self, u: float, v: float) -> str:
+        """The readout for normalized flat-map position (u across, v down)."""
+        if self.level:
+            return region_readout(self.levels[self.level - 1].run.window, u, v)
+        scene = self.scene
+        if scene is None:
+            return ""
+        x0, y0, x1, y1 = scene.bounds
+        position = (x0 + u * (x1 - x0), y0 + v * (y1 - y0))
+        if scene.frame is None:
+            return (f"Source x {position[0]:.2f}, y {position[1]:.2f} · Confirm the world "
+                    "frame and radius for geographic coordinates.")
+        lon, lat = scene.frame.source_to_lonlat(position)
+        return lonlat_text(lon, lat) + "  ·  " + self._detail(lon, lat, u, v)
+
+    def _detail(self, lon: float, lat: float, u: float, v: float) -> str:
+        group, layer = self.group.get(), self.display_layer.get()
+        if group == PLANET and self.probe is not None:
+            return self.probe.describe(lon, lat)
+        if group == CONTEXT and self.context_run is not None:
+            return context_readout(
+                self.context_run.context, layer, self.exposure_bearing.get(), u, v
+            )
+        return HINTS["flat"]
+
+    def _hover_flat(self, point: tuple[float, float] | None) -> None:
+        if point is None:
+            self.inspection.set(self._hint())
+            return
+        text = self.describe_at(*point)
+        if self.picking.get() and self.level == 0 and self.scene and self.scene.frame:
+            x0, y0, x1, y1 = self.scene.bounds
+            self._pick_at = self.scene.frame.source_to_lonlat(
+                (x0 + point[0] * (x1 - x0), y0 + point[1] * (y1 - y0))
+            )
+            self.flat.draw_overlay()
+            text = f"{text}\n{self._hint()}"
+        self.inspection.set(text)
+
+    def _hover_globe(self, lonlat: tuple[float, float] | None) -> None:
+        if lonlat is None or self.probe is None:
+            self.inspection.set(self._hint())
+            return
+        text = lonlat_text(*lonlat) + "  ·  " + self.probe.describe(*lonlat)
+        self.inspection.set(f"{text}\n{self._hint()}" if self.picking.get() else text)
+
+    def _click_flat(self, point: tuple[float, float], event: tk.Event[tk.Misc]) -> None:
+        scene = self.scene
+        if self.level or scene is None:
+            return
+        x0, y0, x1, y1 = scene.bounds
+        position = (x0 + point[0] * (x1 - x0), y0 + point[1] * (y1 - y0))
+        if self.picking.get() and scene.frame is not None:
+            self._pick(*scene.frame.source_to_lonlat(position))
+        elif self.group.get() == SOURCE:
+            self._pick_shape(position, bool(int(event.state) & 0x0004))
+
+    def _click_globe(self, lonlat: tuple[float, float], _event: tk.Event[tk.Misc]) -> None:
+        if self.picking.get():
+            self._pick(*lonlat)
+
+    def _pick(self, lon: float, lat: float) -> None:
+        radius = self.radius_km()
+        self.picking.set(False)
+        self._picking_changed()
+        self._request_region(lon, lat, radius)
+
+    # Saving
+
+    def current_image(self) -> Callable[[], Image.Image] | None:
+        """A function that renders what is shown, for saving (run it off the Tk thread)."""
+        if self.level:
+            level = self.levels[self.level - 1]
+            image = level.images[level.theme_id].image
+            return image.copy
+        if self._uses_globe():
+            globe = self.globe
+            return lambda: globe.render(SAVE_PIXELS)
+        run, layer = self.planet_run, self.display_layer.get()
+        if self.group.get() == PLANET and run is not None and layer in run.previews:
+            return run.previews[layer].copy
+        renderer, _ = self._flat_content()
+        if renderer is None:
+            return None
+        viewport = MapViewport(self.flat.viewport.centre, self.flat.viewport.zoom)
+        size = self.flat.size()
+        return lambda: renderer(viewport, size)
+
+    def choose_save_image(self) -> None:
+        render = self.current_image()
+        if render is None:
+            return
+        selected = filedialog.asksaveasfilename(
+            parent=self, title="Save this map as an image", defaultextension=".png",
+            initialfile=f"map-{uuid4().hex[:8]}.png", filetypes=[("PNG image", "*.png")],
+        )
+        if selected:
+            self.save_image(Path(selected), render)
+
+    def save_image(self, destination: Path, render: Callable[[], Image.Image]) -> None:
+        def work(_report: Report, _token: CancellationToken) -> Path:
+            with destination.open("wb") as stream:
+                render().save(stream, format="PNG")
+            return destination
+
+        self._jobs.start(
+            "Saving the map image…", work, lambda path: self._status(f"Saved {path.name}"),
+            cancellable=False,
+        )
+
+    def choose_region_export(self) -> None:
+        if not self.level:
+            return
+        selected = filedialog.asksaveasfilename(
+            parent=self, title="Create a new region folder",
+            initialfile="region-" + uuid4().hex[:8],
+        )
+        if selected:
+            self._export_region(self.levels[self.level - 1].run, Path(selected))
+

@@ -85,6 +85,8 @@ def generate_planet_run(
             raise ValueError("The geology recipe belongs to a different world; open its world.")
     world = prepare_world_map(project)
     result = generate_planet(world, settings, recipe, progress, cancellation=cancellation)
+    if progress is not None and preview_width:
+        progress(1.0, "Drawing the maps")
     previews = render_previews(result, preview_width, river_km2) if preview_width else {}
     if runtime_identity() != runtime:
         raise ValueError("Software changed during planet generation; generate again.")

@@ -22,9 +22,10 @@ class TkPump:
     """Runs callbacks posted from worker threads on the Tk thread."""
 
     def __init__(self, widget: tk.Misc) -> None:
-        self._widget = widget
+        # Schedule on the toplevel, which outlives the widget's own Tcl commands.
+        self._widget = widget.winfo_toplevel()
         self._queue: queue.SimpleQueue[Callable[[], None]] = queue.SimpleQueue()
-        self._after: str | None = widget.after(POLL_MS, self._poll)
+        self._after: str | None = self._widget.after(POLL_MS, self._poll)
         self.closed = False
 
     def post(self, callback: Callable[[], None]) -> None:

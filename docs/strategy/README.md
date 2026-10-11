@@ -45,7 +45,9 @@ not competing queues. [TODO](../../TODO.md) retains the complete feature backlog
   ([report](../research/2026-10-08-orogens-glaciers-and-speed.md)).
 - **Map views (experimental, 2026-10-10):** a theme registry rendered on the world
   frame, with globe and polar projections of any theme (`dmtools world view` and the
-  app's globe window, [ADR-0087](../adr/0087-map-themes-and-projections.md)).
+  app's map view, [ADR-0087](../adr/0087-map-themes-and-projections.md)). The World
+  map view shows every theme, projection and regional level in one place, with all
+  heavy work off the UI thread ([ADR-0088](../adr/0088-one-map-view-with-drill-down-levels.md)).
   Next: thematic, topographic and fantasy themes, then nested deterministic local
   maps (M6).
 - **Local terrain path (unchanged):** World → Terrain, the composed generator/editor,

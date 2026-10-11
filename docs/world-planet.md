@@ -21,50 +21,67 @@ evidence for [relief](research/2026-10-06-whole-planet-erosion-relief.md) and
 
 ## In the desktop app
 
-Open or import a world in the **World** tab, then choose **Planet…** (or the
-**Planet** page in the sidebar):
+Open or import a world in the **World** tab. The stages run down the left
+(Shapes, Frame, Context, Planet, Terrain); the map is on the right.
 
-1. **Choose the detail.**
+1. **Open the 4 Planet stage and choose the detail.**
    - Quick: 50k nodes, about 100 km apart.
    - Standard: 200k nodes, about 50 km.
    - Detailed: 800k nodes, about 25 km.
-2. **Set the options.** Keep **Climate, lakes and biomes** on for the atlas,
-   rainfall and temperature layers. Optionally choose a geology recipe; a
-   recipe saved from the Geology editor is picked up automatically.
-3. **Click Generate planet.** Progress shows below the map, and **Cancel planet
-   job** stops at the next checkpoint without installing a result.
-4. **Pick a layer** above the map: **Planet atlas**, **Planet relief**, **Planet climate zones**, **Planet volcanoes**, **Planet
-   rainfall** or **Planet temperature**. Hovering shows the ground height,
-   lake, river discharge, temperature, rainfall and Köppen climate zone under
-   the cursor, and the volcano when you hover over one.
-5. **Click Export planet…** to write the same build folder as the command line.
+   - Fine: 3.2M nodes, about 12 km.
+2. **Set the features.**
+   - Keep **Climate, lakes and biomes** on for the atlas, climate zone, rainfall
+     and temperature maps.
+   - **Volcanic islands** and **Wonders** are optional.
+   - Optionally choose a geology recipe. A recipe saved from the Geology editor is
+     picked up automatically.
+3. **Click Generate planet.** The status bar under the map shows progress.
+   **Cancel** stops at the next checkpoint without installing a result. The app
+   stays responsive while it works.
+4. **Choose what the map shows** with the bar above it:
+   - **Source · Context · Planet** picks the data.
+   - The list beside it picks the map: every theme the planet rendered, such as
+     atlas, relief, climate zones, plates, sea-floor age, drainage basins, geology
+     and topographic.
+   - **Flat world · Globe · North polar · South polar** picks the projection.
+     **Grid** draws latitude and longitude every 30°.
+
+   On a flat map, drag to pan, use the wheel to zoom and press F to fit. On a globe,
+   drag to turn it; on a polar view the wheel also zooms. Below the map:
+   - the legend explains the current map;
+   - **Under the cursor** reads out the ground height, lake, river discharge,
+     temperature, rainfall, Köppen zone and any volcano.
+5. **Save image…** writes what is shown as a PNG: a flat planet map at its full
+   width, or the current globe or polar view at 2,048 px.
+6. **Click Export planet build…** to write the same build folder as the command line.
 
 Editing the world (names, frame, assignments) discards the generated planet, so
 a stale planet is never shown as current.
 
 ### Zoom into regional detail
 
-With a planet shown, pan and zoom the map to the area you care about and click
-**Zoom detail at map centre** on the Planet page.
-- A window opens with that region at about 5 km detail: ridges, valley networks,
-  altitude zones and rivers.
-- Its radius follows how far you zoomed in, from 150 to 1,200 km.
-- Choose **Atlas**, **Relief** or **Topographic**. The topographic view stretches its
-  tints over the window's own height range and draws contours at true heights.
+With a planet shown, click **Zoom to region** above the map:
+1. Choose a radius, or keep **Auto**. Auto takes about half the visible width,
+   from 150 to 1,200 km.
+2. Click the map, flat or globe. A circle shows the area before you click; Esc
+   cancels.
+
+The region opens in the same view, at about 5 km detail: ridges, valley networks,
+altitude zones and rivers.
+- The breadcrumb above the map (**World / Region …**) returns to the whole planet,
+  where each region is outlined.
+- Choose **Planet atlas**, **Planet relief** or **Planet topographic**. Each renders
+  in the background and is kept. The topographic view stretches its tints over the
+  window's own height range and draws contours at true heights.
 - Volcanoes and impact craters are drawn sharply. Closed hollows deeper than 10 m
   (crater troughs, calderas) hold lakes where it is wet and dry playas where it is not.
+- A scale bar shows distance; hovering shows the offset from the centre and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
 
 The region is built from fixed, cached tiles. Zooming the same place again is
 quick and gives identical values, whichever window you choose.
 
-### Globe and polar views
-
-With a planet shown, click **Globe and polar views…** on the Planet page.
-- Choose any map theme (atlas, relief, climate zones and so on) and show it as a
-  globe, or as a north or south polar view.
-- Drag to turn the globe; **Grid** draws latitude and longitude every 30°.
-- **Save view…** writes the current view as a 2,048 px PNG.
+### Views of a saved build
 
 A saved build can be viewed the same way from the command line:
 

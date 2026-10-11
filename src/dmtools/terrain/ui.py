@@ -2389,6 +2389,7 @@ class TerrainApp:
 
     def _escape(self) -> str:
         if self._world_active():
+            self.world_workspace.escape()
             return "break"
         if self._generation_cancel is not None:
             self._cancel_generation()

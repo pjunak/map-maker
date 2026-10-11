@@ -12,7 +12,7 @@ from dmtools.terrain.domain.world import WorldContinent
 class WorldTerrainPanel(ttk.Frame):
     def __init__(
         self, parent: tk.Misc, create: Callable[[str, Path, Path | None], None],
-        open_project: Callable[[WorldTerrainCreated], None], cancel: Callable[[], None],
+        open_project: Callable[[WorldTerrainCreated], None],
     ) -> None:
         super().__init__(parent, style="Panel.TFrame", padding=12)
         self._create = create
@@ -55,9 +55,6 @@ class WorldTerrainPanel(ttk.Frame):
         self.create_button = ttk.Button(self, text="Create terrain project…",
                                        style="Accent.TButton", command=self.choose_folder)
         self.create_button.pack(fill="x")
-        self.cancel_button = ttk.Button(self, text="Cancel preparation", command=cancel,
-                                       state="disabled", style="Quiet.TButton")
-        self.cancel_button.pack(fill="x", pady=6)
         ttk.Separator(self).pack(fill="x", pady=12)
         ttk.Label(self, textvariable=self.detail, wraplength=340,
                   style="Muted.TLabel").pack(anchor="w")
@@ -75,7 +72,7 @@ class WorldTerrainPanel(ttk.Frame):
             self.continent.set(names[0] if names else "")
         self.set_busy(False)
 
-    def set_busy(self, busy: bool, cancellable: bool = False) -> None:
+    def set_busy(self, busy: bool) -> None:
         self.selection.configure(state="disabled" if busy else "readonly")
         self.geology_button.configure(state="disabled" if busy else "normal")
         self.clear_geology_button.configure(
@@ -83,7 +80,6 @@ class WorldTerrainPanel(ttk.Frame):
         )
         self.create_button.configure(state="normal" if self._continents and not busy
                                      else "disabled")
-        self.cancel_button.configure(state="normal" if busy and cancellable else "disabled")
         self.open_button.configure(state="normal" if self.created and not busy else "disabled")
 
     def set_geology(self, path: Path | None) -> None:
