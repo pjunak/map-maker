@@ -997,7 +997,7 @@ class GeologyEditor(tk.Toplevel):
                             fill=MAP_HIGHLIGHT,
                             width=2,
                         )
-        # Landmarks to scale: a titan as a triangle, a tepui as a block, other
+        # Landmarks to scale: volcanoes as cones, a tepui as a block, other
         # round wonders as rings, a chasm as a broad line and a cliff as an
         # escarpment symbol, across the seam where that is shorter.
         px_per_km = (right - left) / (2 * math.pi * frame.radius_km)
@@ -1021,11 +1021,15 @@ class GeologyEditor(tk.Toplevel):
                     canvas.create_line(x, y, ex, ey, fill=colour, width=2)
                 # Label a line wonder beyond its right-hand end, clear of the line.
                 x, y = max((x, y), (ex, ey))
-            elif m.kind == "titan":
+            elif m.kind in ("titan", "shattered", "active"):
+                # Volcanoes: a cone, dashed where it blew apart, with a vent if erupting.
                 canvas.create_polygon(
                     x, y - r, x - r, y + r * 0.7, x + r, y + r * 0.7,
                     outline=colour, fill="", width=2,
+                    dash=(4, 3) if m.kind == "shattered" else (),
                 )
+                if m.kind == "active":
+                    canvas.create_oval(x - 3, y - r - 3, x + 3, y - r + 3, fill=colour, outline="")
             elif m.kind == "tepui":
                 canvas.create_rectangle(x - r, y - 0.7 * r, x + r, y + 0.7 * r, outline=colour,
                                         width=2)

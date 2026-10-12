@@ -711,7 +711,7 @@ def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
     ground = np.where(land, 300.0, -4000.0)
     plain = place_volcanoes(mesh, land, coast, plates, 4, ground)
     assert not (plain.setting == TITAN).any()
-    volcanoes = place_volcanoes(mesh, land, coast, plates, 4, ground, titan=True)
+    volcanoes = place_volcanoes(mesh, land, coast, plates, 4, ground, wonders=("titan",))
     titan = volcanoes.subset(volcanoes.setting == TITAN)
     assert len(titan) == 1 and titan.height_m[0] > MAX_SUMMIT_M
     site = int(np.argmax(mesh.xyz @ titan.xyz[0]))
@@ -982,11 +982,79 @@ def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
     assert gap.min() > 600e3
 
 
+def test_a_shattered_volcano_opens_towards_its_breach_over_a_debris_field() -> None:
+    from dmtools.terrain.pipeline.planet_volcanism import (
+        breach_azimuth,
+        edifice_height,
+        shattered_volcano,
+    )
+    from dmtools.terrain.pipeline.wonder_geometry import destination
+
+    site = np.array([1.0, 0.0, 0.0])
+    volcano = shattered_volcano(site, 35e3, np.random.default_rng(4))
+    breach = float(breach_azimuth(site[None])[0])
+
+    def at(azimuth: float, radii: float) -> float:
+        point = destination(site, azimuth, radii * 35e3 / RADIUS)
+        return float(edifice_height(point[None], RADIUS, volcano)[0])
+
+    # The amphitheatre: the flank towards the breach is far lower than opposite.
+    assert at(breach, 0.5) < 0.6 * at(breach + np.pi, 0.5)
+    # A debris field beyond the base towards the breach, nothing on the far side.
+    assert at(breach, 1.6) > 50.0
+    assert at(breach + np.pi, 1.6) == 0.0
+
+
+def test_the_giant_active_volcano_erupts_lava_ash_and_a_glowing_vent() -> None:
+    from dmtools.terrain.pipeline.planet_eruptions import erupt, eruption_cover
+    from dmtools.terrain.pipeline.planet_volcanism import fire_mountain
+    from dmtools.terrain.pipeline.wonder_geometry import destination
+
+    site = np.array([1.0, 0.0, 0.0])
+    volcano = fire_mountain(site, None, np.random.default_rng(4))
+    assert 6500.0 <= volcano.height_m[0] <= 8500.0 and volcano.active[0]
+    radius = float(volcano.radius_m[0])
+    # The wind blows towards the east.
+    eruptions = erupt(volcano.xyz, volcano.radius_m, np.ones(1), np.zeros(1), RADIUS,
+                      np.random.default_rng(4))
+    assert len(eruptions.flows) >= 5
+    downwind = destination(site, np.pi / 2, 1.2 * radius / RADIUS)
+    upwind = destination(site, -np.pi / 2, 1.2 * radius / RADIUS)
+    middles = np.stack([flow[len(flow) // 2] for flow in eruptions.flows])
+    lava, ash, glow = eruption_cover(
+        np.vstack([site, downwind, upwind, middles]), RADIUS, eruptions
+    )
+    assert glow[0] == pytest.approx(1.0)
+    assert ash[1] > 0.5 and ash[2] == 0.0
+    assert np.median(lava[3:]) > 0.4
+
+
+def test_wonder_overlays_paint_lava_black_and_vents_glowing() -> None:
+    from dmtools.terrain.adapters.planet_natural import PixelClimate, land_colour
+    from dmtools.terrain.pipeline.planet_wonders import WonderCover
+
+    shape = (1, 3)
+    points = np.tile([1.0, 0.0, 0.0], (3, 1))
+
+    def fill(value: float) -> np.ndarray:
+        return np.full(shape, value)
+
+    climate = PixelClimate(fill(15.0), fill(22.0), fill(900.0), fill(800.0), None)
+    overlay = WonderCover(
+        np.array([[0.0, 1.0, 0.0]]), np.zeros(shape), np.array([[0.0, 0.0, 1.0]])
+    )
+    rgb = land_colour(points, RADIUS, climate, fill(200.0), fill(0.0), fill(1.0),
+                      overlay=overlay)[0]
+    plain, lava, vent = rgb
+    assert lava.sum() < 0.5 * plain.sum()  # fresh lava is black
+    assert vent[0] > 200 and vent[0] > 2 * vent[2]  # the vent glows orange
+
+
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     from dataclasses import replace as replace_recipe
 
     from dmtools.terrain.domain.world_geology import GeologyLandmark
-    from dmtools.terrain.pipeline.planet_volcanism import TITAN
+    from dmtools.terrain.pipeline.planet_volcanism import SHATTERED, STRATO, TITAN, WONDER
 
     world = open_world(world_path)
     recipe = sample_recipe(world_path)
@@ -1016,6 +1084,7 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     # A cliff and a tepui near the crater; hand-placed wonders may overlap.
     scarp_end = next(int(k) for k in inland if 300e3 < reach[k] < 700e3)
     mesa = next(int(k) for k in inland if 200e3 < reach[k] < 600e3 and k != scarp_end)
+    blast = next(int(k) for k in inland if 700e3 < reach[k] < 1100e3)
     placed = replace_recipe(
         recipe,
         landmarks=(
@@ -1028,6 +1097,8 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
                 "landmark-wall", "The Wall", "cliff", source(far), 1.5, source(scarp_end)
             ),
             GeologyLandmark("landmark-mesa", "High Table", "tepui", source(mesa), 80.0),
+            GeologyLandmark("landmark-blast", "The Ruin", "shattered", source(blast), 60.0),
+            GeologyLandmark("landmark-fire", "Firemount", "active", source(rift_end), 120.0),
         ),
     )
     result = generate_planet(world, replace(FAST, climate_passes=0), placed)
@@ -1048,6 +1119,11 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     assert len(cliffs) == 1 and cliffs.height_m[0] == pytest.approx(1500.0)
     assert cliffs.paths[0][0] @ plain.mesh.xyz[far] > near
     assert len(tepuis) == 1 and tepuis.radius_m[0] == pytest.approx(40e3)
+    wonder = result.volcanoes.subset(result.volcanoes.setting == WONDER)
+    assert sorted(wonder.kind.tolist()) == [STRATO, SHATTERED]
+    assert wonder.radius_m[wonder.kind == SHATTERED][0] == pytest.approx(30e3)
+    assert wonder.active[wonder.kind == STRATO].all()
+    assert len(result.wonders.eruptions) == 1 and len(result.wonders.eruptions.flows) >= 5
     assert np.any(result.wonder_m != 0)
     # A landmark in the sea is reported, not moved.
     sea = int(np.argmax(np.where(plain.land, -1.0, -plain.elevation_m)))
@@ -1057,6 +1133,7 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
         GeologyLandmark("landmark-wet", "Wet", "chasm", source(rift), None, source(shore)),
         GeologyLandmark("landmark-wet", "Wet", "cliff", source(rift), None, source(shore)),
         GeologyLandmark("landmark-wet", "Wet", "tepui", source(sea)),
+        GeologyLandmark("landmark-wet", "Wet", "active", source(sea)),
     ):
         with pytest.raises(ValueError, match=r"Wet.*sea"):
             generate_planet(

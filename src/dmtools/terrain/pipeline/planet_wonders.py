@@ -20,6 +20,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
+from dmtools.terrain.pipeline.planet_eruptions import Eruptions, eruption_cover, lava_relief
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_scarps import (
@@ -184,13 +185,46 @@ class Wonders:
     chasms: Chasms
     cliffs: Cliffs
     tepuis: Tepuis
+    eruptions: Eruptions  # of the giant active volcano, which is in the volcano list
 
     def __len__(self) -> int:
-        return len(self.craters) + len(self.chasms) + len(self.cliffs) + len(self.tepuis)
+        return (
+            len(self.craters) + len(self.chasms) + len(self.cliffs) + len(self.tepuis)
+            + len(self.eruptions)
+        )
 
     @staticmethod
     def empty() -> Wonders:
-        return Wonders(Craters.empty(), Chasms.empty(), Cliffs.empty(), Tepuis.empty())
+        return Wonders(
+            Craters.empty(), Chasms.empty(), Cliffs.empty(), Tepuis.empty(), Eruptions.empty()
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WonderCover:
+    """What wonders lay on the land at each point, 0..1 each, for map colours."""
+
+    lava: F64  # fresh, bare lava
+    ash: F64  # an ash blanket
+    glow: F64  # molten rock in an erupting vent
+
+    def reshape(self, shape: tuple[int, ...]) -> WonderCover:
+        return WonderCover(*(field.reshape(shape) for field in self.fields()))
+
+    def crop(self, rows: slice) -> WonderCover:
+        return WonderCover(*(field[rows, rows] for field in self.fields()))
+
+    def fields(self) -> tuple[F64, F64, F64]:
+        return self.lava, self.ash, self.glow
+
+
+def wonder_cover(
+    points: F64, planet_radius_m: float, wonders: Wonders, detail_m: float | None = None
+) -> WonderCover | None:
+    """The wonders' cover at unit vectors ``points``, or None where there is none."""
+    if not len(wonders.eruptions):
+        return None
+    return WonderCover(*eruption_cover(points, planet_radius_m, wonders.eruptions, detail_m))
 
 
 @dataclass(frozen=True, slots=True)
@@ -267,7 +301,7 @@ def place_wonders(
         )
     elif "tepui" in kinds:
         tepuis = tepui_group(mesh, land, coast_m, stream(9393), blocked)
-    return Wonders(craters, chasms, cliffs, tepuis)
+    return Wonders(craters, chasms, cliffs, tepuis, Eruptions.empty())
 
 
 def wonder_relief(
@@ -283,6 +317,7 @@ def wonder_relief(
         + chasm_relief(points, planet_radius_m, wonders.chasms, detail_m)
         + cliff_relief(points, planet_radius_m, wonders.cliffs, detail_m)
         + tepui_relief(points, planet_radius_m, wonders.tepuis, detail_m)
+        + lava_relief(points, planet_radius_m, wonders.eruptions, detail_m)
     )
 
 

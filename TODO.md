@@ -14,8 +14,8 @@ small synthetic terrain before choosing one.
 
 See the [plan](docs/strategy/README.md) for states and evidence.
 
-- [ ] **Wonders:** volcano wonders (shattered, giant active), water wonders (oasis,
-  splitting river), an aging tool, and waterfalls where rivers leave cliffs.
+- [ ] **Wonders:** water wonders (oasis, splitting river), an aging tool, and
+  waterfalls where rivers leave cliffs.
 - [ ] **M2 planet relief:**
   - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).

@@ -6,7 +6,7 @@ weights erosion by relative runoff. Every random stream comes from a named stage
 seed, so results do not depend on stage order.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from numpy.typing import NDArray
@@ -34,6 +34,7 @@ from dmtools.terrain.pipeline.planet_climate import (
     snowline_m,
     with_islands,
 )
+from dmtools.terrain.pipeline.planet_eruptions import erupt
 from dmtools.terrain.pipeline.planet_evolution import (
     CalibratedRelief,
     FlowState,
@@ -59,12 +60,14 @@ from dmtools.terrain.pipeline.planet_metrics import relief_metrics
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_volcanism import (
     TITAN,
+    VOLCANO_WONDERS,
+    WONDER,
     Volcanoes,
     edifice_height,
     emerge,
     place_volcanoes,
     sea_floor_with_volcanoes,
-    with_titans,
+    with_placed,
 )
 from dmtools.terrain.pipeline.planet_wonders import (
     PlacedWonder,
@@ -326,28 +329,33 @@ def generate_planet(
     plates = result.forcing.tectonics
     # Hand-placed wonders from the geology recipe replace random ones of their kind.
     landmarks = () if geology is None else geology.landmarks
-    titans = tuple(m for m in landmarks if m.kind == "titan")
     frame = world.project.frame
 
     def unit(position: tuple[float, float]) -> F64:
         lon, lat = np.radians(frame.source_to_lonlat(position))
         return np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
 
+    # Wonder volcanoes placed by hand replace random ones of their kind.
+    by_hand = {m.kind for m in landmarks}
     volcanoes = (
         Volcanoes.empty()
         if plates is None
         else place_volcanoes(
             mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved,
-            settings.volcanic_islands, "titan" in settings.wonders and not titans,
+            settings.volcanic_islands,
+            tuple(k for k in VOLCANO_WONDERS if k in settings.wonders and k not in by_hand),
         )
     )
-    if titans:
-        sites = np.array([unit(m.position) for m in titans])
-        for site, landmark in zip(sites, titans, strict=True):
+    for kind in VOLCANO_WONDERS:
+        items = tuple(m for m in landmarks if m.kind == kind)
+        if not items:
+            continue
+        sites = np.array([unit(m.position) for m in items])
+        for site, landmark in zip(sites, items, strict=True):
             if not land[int(np.argmax(mesh.xyz @ site))]:
-                raise ValueError(f"{landmark.name} lies at sea; place a titan on land.")
-        volcanoes = with_titans(
-            volcanoes, sites, np.array([m.effective_size_km * 500.0 for m in titans]),
+                raise ValueError(f"{landmark.name} lies at sea; place it on land.")
+        volcanoes = with_placed(
+            volcanoes, kind, sites, np.array([m.effective_size_km * 500.0 for m in items]),
             seeds[PLANET_VOLCANISM_STAGE_ID],
         )
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
@@ -355,7 +363,7 @@ def generate_planet(
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
     evolved = np.where(land, evolved + cones, evolved)
     # Wonders are young too; lakes may then fill them.
-    titan = volcanoes.subset(volcanoes.setting == TITAN)
+    giants = volcanoes.subset(volcanoes.setting >= TITAN)
     wonders = place_wonders(
         mesh, land, coast, evolved, settings.wonders,
         tuple(
@@ -363,10 +371,24 @@ def generate_planet(
                 m.kind, unit(m.position), None if m.end is None else unit(m.end),
                 m.effective_size_km * 1e3, m.name,
             )
-            for m in landmarks if m.kind != "titan"
+            for m in landmarks if m.kind not in VOLCANO_WONDERS
         ),
-        footprint(mesh, titan.xyz, 2.0 * titan.radius_m), seeds[PLANET_VOLCANISM_STAGE_ID],
+        footprint(mesh, giants.xyz, 2.0 * giants.radius_m), seeds[PLANET_VOLCANISM_STAGE_ID],
     )
+    # The giant active volcano erupts: lava flows and ash downwind of its vent.
+    fire = giants.subset((giants.setting == WONDER) & giants.active)
+    if len(fire):
+        vents = np.array([int(np.argmax(mesh.xyz @ vent)) for vent in fire.xyz])
+        if climate is not None:
+            east, north = climate.wind_east[vents], climate.wind_north[vents]
+        else:
+            # Trade winds blow from the east in the tropics, westerlies beyond.
+            east = np.where(np.abs(fire.xyz[:, 2]) < 0.5, -1.0, 1.0)
+            north = np.zeros(len(fire))
+        wonders = replace(wonders, eruptions=erupt(
+            fire.xyz, fire.radius_m, east, north, mesh.radius_m,
+            np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 7373]),
+        ))
     craters, chasms = wonders.craters, wonders.chasms
     wonder_m = np.zeros(mesh.size)
     if len(wonders):

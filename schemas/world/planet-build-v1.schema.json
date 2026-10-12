@@ -36,7 +36,7 @@
       "additionalProperties": false,
       "required": ["relief", "climate"],
       "properties": {
-        "relief": { "const": "sphere-mesh-stream-power-v21" },
+        "relief": { "const": "sphere-mesh-stream-power-v22" },
         "climate": { "enum": ["planet-climate-v6", null] }
       }
     },
@@ -63,7 +63,9 @@
           "description": "Wonder kinds placed at random.",
           "type": "array",
           "uniqueItems": true,
-          "items": { "enum": ["titan", "crater", "chasm", "cliff", "tepui"] }
+          "items": {
+            "enum": ["titan", "shattered", "active", "crater", "chasm", "cliff", "tepui"]
+          }
         }
       }
     },

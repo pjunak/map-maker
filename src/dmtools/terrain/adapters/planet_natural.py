@@ -41,7 +41,7 @@ from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, neighbour_mix
 from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, SEAMOUNT, edifice_height
-from dmtools.terrain.pipeline.planet_wonders import wonder_relief
+from dmtools.terrain.pipeline.planet_wonders import WonderCover, wonder_cover, wonder_relief
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -84,6 +84,9 @@ BARE_DRYLAND: RGB = (124, 102, 80)
 SNOW: RGB = (242, 244, 247)
 VOLCANIC_ROCK: RGB = (82, 74, 70)
 BASALT_SOIL: RGB = (96, 86, 72)
+FRESH_LAVA: RGB = (34, 31, 30)
+ASH: RGB = (138, 132, 124)
+LAVA_GLOW: RGB = (246, 104, 32)
 LAKE: RGB = (62, 106, 146)
 SALT_FLAT: RGB = (214, 210, 196)
 RIVER: RGB = (62, 104, 150)
@@ -403,6 +406,7 @@ def land_colour(
     volcanic: F64 | None = None,
     slope_scale: float = 1.0,
     basalt: F64 | None = None,
+    overlay: WonderCover | None = None,
 ) -> F64:
     """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
 
@@ -468,9 +472,18 @@ def land_colour(
     shed = np.clip(0.85 * _smooth(slope, 0.3, 0.7) + exposed, 0.0, 0.9)
     snow = _smooth(cold, -0.8, 1.0) * (1 - shed)
     colour = _mix(colour, SNOW, snow)
+    if overlay is not None:
+        # Fresh lava is bare black rock in any climate; ash greys the ground and
+        # thins the vegetation under it.
+        colour = _mix(colour, ASH, 0.75 * overlay.ash * (1 - 0.4 * forest))
+        colour = _mix(colour, FRESH_LAVA, 0.9 * overlay.lava)
     texture = eroded_fbm(points, zeros, 23, 4, radius_m / 25e3, 0.6, 0.0).reshape(shape)
     colour *= (1 + 0.045 * texture + 0.05 * patch)[..., None]
-    return colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+    shaded = colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+    if overlay is not None:
+        # Molten rock glows by its own light.
+        shaded = _mix(shaded, LAVA_GLOW, overlay.glow)
+    return shaded
 
 
 def erg_cover(
@@ -570,6 +583,14 @@ def natural_colour(
             None
             if result.forcing.flood_basalt is None
             else raster.interpolate(mesh, result.forcing.flood_basalt)
+        ),
+        overlay=(
+            None
+            if (found := wonder_cover(
+                raster.queries, mesh.radius_m, result.wonders,
+                2 * np.pi * mesh.radius_m / raster.shape[1],
+            )) is None
+            else found.reshape(raster.shape)
         ),
     )
 

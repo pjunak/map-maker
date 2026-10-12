@@ -254,9 +254,34 @@ Great cliffs and tepuis (`planet_scarps.py`) are raised rather than cut.
   round pancakes. At random two to five tepuis stand in a group a few of their
   widths apart, as on the Gran Sabana.
 
-The wonder kinds are placed in a fixed order (titan, craters, chasm, cliff,
-tepuis), each from its own random stream, and each keeps clear of the wonders
-placed before it.
+Two more volcano wonders live with the other volcanoes (setting `wonder`):
+
+- **Shattered volcano.** A stratovolcano 3.5–5 km high that blew itself apart,
+  like Mount St Helens in 1980 or Bezymianny in 1956, at a giant scale. Its
+  flank slid away in a landslide and the summit blew out: a horseshoe
+  amphitheatre with a rounded head at the summit caldera widens to its mouth at
+  the base, with a floor ramping down to the plain. A hummocky debris lobe
+  (20–300 m of hummocks, like Socompa's 600 km² field) starts on the lower flanks
+  inside the mouth and ends in a lobed front about 2.6 radii out. The breach
+  direction is fixed by the volcano's position, and the shape is domain-warped
+  so its edges are organic. A first version cut a straight-sided box and a
+  trapezoid of debris.
+- **Giant active volcano.** An erupting stratovolcano 6.5–8.5 km high, taller than
+  any on Earth (Ojos del Salado reaches 6.9 km above sea level), with flanks of
+  0.10–0.13. Its eruptions (`planet_eruptions.py`) are:
+  - five to nine lava flows straight down the flanks, bending gently, each
+    widening into a broad toe, with up to two branches split off where lava
+    spilled over levees; older flows are weathered grey, fresh ones black, and
+    the tongues stand 30 m proud. A first version wandered like worms and then
+    looked like a starfish;
+  - an ash blanket 2.5–5 volcano radii long downwind of the vent, from the
+    annual wind at the vent (trade winds or westerlies without a climate),
+    widening downwind and patchy, that greys the ground and thins vegetation;
+  - a lava lake in the vent, a small irregular patch that glows orange on maps.
+
+The wonder kinds are placed in a fixed order (titan, shattered and active
+volcanoes, craters, chasm, cliff, tepuis), each from its own random stream, and
+each keeps clear of the wonders placed before it.
 
 Wonders are placed by rejection sampling of continuous positions on the sphere
 (`draw_site`), from their own random streams, with yes/no eligibility tests.

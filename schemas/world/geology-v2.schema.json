@@ -133,6 +133,8 @@
             "description": "A wonder kind from the catalog (domain.wonders).",
             "enum": [
               "titan",
+              "shattered",
+              "active",
               "crater",
               "chasm",
               "cliff",

@@ -50,7 +50,12 @@ from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_tria
 from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
-from dmtools.terrain.pipeline.planet_wonders import wonder_relief, wonder_zones
+from dmtools.terrain.pipeline.planet_wonders import (
+    WonderCover,
+    wonder_cover,
+    wonder_relief,
+    wonder_zones,
+)
 
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
@@ -172,6 +177,7 @@ class RegionWindow:
     playa: B  # dry closed basins of the regional relief (ephemeral lakes)
     detail_spacing_m: float = 5000.0  # node spacing of the detail level shown
     seed: int = 0  # planet master seed: display detail belongs to the world
+    cover: WonderCover | None = None  # lava, ash and glow of the wonders
 
     @property
     def pixel_m(self) -> float:
@@ -255,6 +261,7 @@ def crop_window(window: RegionWindow, extra: int, pixels: int) -> RegionWindow:
         cut(window.playa) & circle,
         window.detail_spacing_m,
         window.seed,
+        None if window.cover is None else window.cover.crop(rows),
     )
 
 
@@ -343,6 +350,12 @@ def _compose(
     lakes = lakes | (ponds & ~dry)
     salt = salt | (ponds & ~dry)
     coverage = np.where(land & ~lakes, coverage, 0.0)
+    cover = (
+        None
+        if wonders is None
+        or (found := wonder_cover(points, planet_m, wonders, finest)) is None
+        else found.reshape((pixels, pixels))
+    )
     return RegionWindow(
         centre,
         radius_m,
@@ -374,6 +387,7 @@ def _compose(
         playa,
         spacing_m,
         parent.settings.seed,
+        cover,
     )
 
 
@@ -634,6 +648,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             window.volcanic,
             REGION_SLOPE_SCALE,
             window.basalt,
+            window.cover,
         )
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]

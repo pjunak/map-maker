@@ -18,6 +18,8 @@ Lakes form in them where the climate is wet and salt pans where it is dry.
 | Kind | `--wonders` name | What it is | Size when placed by hand |
 |---|---|---|---|
 | Titan volcano | `titan` | An ice-capped shield volcano about 10 km high, with a cliff around its base and radial valleys. | Diameter 200–1,200 km, usually 560 km. |
+| Shattered volcano | `shattered` | A volcano 3.5–5 km high that blew itself apart: a horseshoe amphitheatre with a rounded head at the summit caldera opens to one side, and a hummocky debris lobe runs out to 2.6 times its radius beyond the breach. | Diameter 20–200 km, usually 70 km. |
+| Giant active volcano | `active` | An erupting stratovolcano 6.5–8.5 km high with a glowing lava lake in its vent, branching lava flows (older ones weathered grey) and an ash blanket downwind. | Diameter 30–250 km, usually 130 km. |
 | Impact crater | `crater` | A fresh crater 180–300 km across with a central plateau and a ring trough that may hold a lake. One to three at random. | Diameter 20–600 km, usually 240 km. |
 | Great chasm | `chasm` | A rift canyon system 900–2,200 km long and up to 3 km deep, with parallel troughs, side canyons and uplifted shoulders. | Width 10–200 km, usually 60 km; placed by its two ends, 100–4,000 km apart. |
 | Great cliff | `cliff` | A fault scarp 1.5–3.5 km high and 300–1,200 km long. Its raised block tilts gently back from a steep, buttressed face; talus lies below it and a trough along its foot. At random it rises on the side that already stands higher. | Height 0.5–6 km, usually 2.5 km; placed by its two ends, 50–3,000 km apart, with the high side to the left going from the first end to the second. |

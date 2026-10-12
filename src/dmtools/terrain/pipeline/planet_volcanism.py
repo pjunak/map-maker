@@ -28,18 +28,20 @@ from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
-from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.planet_noise import fbm3, value_noise3
 from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plume_track
-from dmtools.terrain.pipeline.wonder_geometry import draw_site
+from dmtools.terrain.pipeline.wonder_geometry import draw_site, warp
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]
 type B = NDArray[np.bool_]
 
-KINDS = ("stratovolcano", "shield volcano", "caldera", "seamount")
-SETTINGS = ("subduction arc", "hotspot", "continental rift", "intraplate", "titan")
-STRATO, SHIELD, CALDERA, SEAMOUNT = range(4)
-ARC, HOTSPOT, RIFT, INTRAPLATE, TITAN = range(5)
+KINDS = ("stratovolcano", "shield volcano", "caldera", "seamount", "shattered volcano")
+SETTINGS = ("subduction arc", "hotspot", "continental rift", "intraplate", "titan", "wonder")
+STRATO, SHIELD, CALDERA, SEAMOUNT, SHATTERED = range(5)
+ARC, HOTSPOT, RIFT, INTRAPLATE, TITAN, WONDER = range(6)
+# Wonder kinds (domain.wonders) that are volcanoes, placed with the others.
+VOLCANO_WONDERS = ("titan", "shattered", "active")
 
 # Opt-in fantastical landmark: one giant shield, an Earth-sized Olympus Mons
 # (Mars: 22 km high, 600 km across, 5 deg flanks, a basal cliff up to 8 km).
@@ -51,6 +53,19 @@ TITAN_SCARP = 0.88  # share of the basal radius where the flank breaks into the 
 TITAN_MIN_COAST_M = 350e3
 TITAN_VALLEYS = 32  # radial valleys around the flanks
 TITAN_VALLEY_DEPTH = 0.12  # share of the summit height at mid-flank
+
+# A shattered volcano: a stratovolcano that blew itself apart. Its flank slid
+# away in a giant landslide and the summit blew out (Mount St Helens 1980,
+# Bezymianny 1956, Socompa's 600 km^2 debris field), leaving a horseshoe
+# amphitheatre open on one side and a hummocky debris field beyond it.
+SHATTERED_HEIGHT_M = (3500.0, 5000.0)
+SHATTERED_RADIUS_M = (25e3, 45e3)
+SHATTERED_COAST_M = 120e3
+# A giant active stratovolcano, taller than any on Earth (Ojos del Salado 6.9 km
+# above sea level, Kilimanjaro 4.9 km above its base), erupting.
+FIRE_HEIGHT_M = (6500.0, 8500.0)
+FIRE_ASPECT = (0.1, 0.13)
+FIRE_COAST_M = 200e3
 
 ARC_SPACING_M = 70e3
 ARC_FRONT_M = 130e3  # typical distance of the volcanic front inland of the coast
@@ -110,13 +125,14 @@ def place_volcanoes(
     seed: int,
     ground_m: F64,
     islands: bool = False,
-    titan: bool = False,
+    wonders: tuple[str, ...] = (),
 ) -> Volcanoes:
     """Volcanoes for this world; ``ground_m`` is the eroded land surface they stand on.
 
     With ``islands``, young hotspot volcanoes at sea are planned to break the
     surface and island arcs rise behind ocean-ocean trenches (see ``emerge``).
-    With ``titan``, one giant shield (a fantastical landmark) rises deep inland.
+    ``wonders`` adds fantastical volcanoes at random deep inland: a ``titan``
+    shield, a ``shattered`` volcano and an ``active`` giant.
     """
     rng = np.random.default_rng([seed, 5150])
     radius = mesh.radius_m
@@ -185,10 +201,28 @@ def place_volcanoes(
         volcanoes.caldera_depth_m * scale,
         volcanoes.summit_m, volcanoes.emergent,
     )
-    if titan:
-        # Its own random stream: earlier placements vary with mesh resolution.
-        wonders = np.random.default_rng([seed, 7070])
-        volcanoes = _concat([volcanoes, _titan(mesh, land, coast_m, wonders)])
+    # Each wonder has its own random stream: earlier placements vary with mesh
+    # resolution, and so would anything drawn after them.
+    if "titan" in wonders:
+        volcanoes = _concat(
+            [volcanoes, _titan(mesh, land, coast_m, np.random.default_rng([seed, 7070]))]
+        )
+    for kind, code, coast, build in (
+        ("shattered", 7171, SHATTERED_COAST_M, shattered_volcano),
+        ("active", 7272, FIRE_COAST_M, fire_mountain),
+    ):
+        if kind not in wonders:
+            continue
+        rng = np.random.default_rng([seed, code])
+        taken = np.zeros(mesh.size, dtype=bool)
+        for xyz, reach in zip(volcanoes.xyz[volcanoes.setting >= TITAN],
+                              volcanoes.radius_m[volcanoes.setting >= TITAN], strict=True):
+            taken |= mesh.xyz @ xyz > np.cos(2 * reach / mesh.radius_m)
+        site = draw_site(
+            mesh, (land & (coast_m >= coast) & ~taken).astype(np.float64), 1.0, rng
+        )
+        if site is not None:
+            volcanoes = _concat([volcanoes, build(site, None, rng)])
     return volcanoes
 
 
@@ -200,11 +234,68 @@ def _titan(mesh: SphereMesh, land: B, coast_m: F64, rng: np.random.Generator) ->
     return titan_volcano(site, TITAN_RADIUS_M * rng.uniform(0.9, 1.1), rng)
 
 
-def with_titans(volcanoes: Volcanoes, sites: F64, radii_m: F64, seed: int) -> Volcanoes:
-    """``volcanoes`` plus hand-placed titans at unit vectors ``sites``."""
-    rng = np.random.default_rng([seed, 7071])
-    titans = [titan_volcano(site, float(r), rng) for site, r in zip(sites, radii_m, strict=True)]
-    return _concat([volcanoes, *titans])
+def with_placed(
+    volcanoes: Volcanoes, kind: str, sites: F64, radii_m: F64, seed: int
+) -> Volcanoes:
+    """``volcanoes`` plus hand-placed wonder volcanoes of ``kind`` at unit vectors ``sites``."""
+    code, build = {
+        "titan": (7071, _titan_at),
+        "shattered": (7172, shattered_volcano),
+        "active": (7273, fire_mountain),
+    }[kind]
+    rng = np.random.default_rng([seed, code])
+    placed = [build(site, float(r), rng) for site, r in zip(sites, radii_m, strict=True)]
+    return _concat([volcanoes, *placed])
+
+
+def _titan_at(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
+    return titan_volcano(site, TITAN_RADIUS_M if radius_m is None else radius_m, rng)
+
+
+def shattered_volcano(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
+    """A blown-apart stratovolcano at ``site``; None draws its size."""
+    if radius_m is None:
+        radius = float(rng.uniform(*SHATTERED_RADIUS_M))
+        height = float(rng.uniform(*SHATTERED_HEIGHT_M))
+    else:
+        radius = radius_m
+        height = float(np.clip(0.12 * radius, 2500.0, 6000.0)) * rng.uniform(0.9, 1.1)
+    return _wonder_volcano(site, height, radius, SHATTERED, False, 0.25 * radius, 0.18 * height)
+
+
+def fire_mountain(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
+    """A giant active stratovolcano at ``site``; None draws its size."""
+    aspect = float(rng.uniform(*FIRE_ASPECT))
+    if radius_m is None:
+        height = float(rng.uniform(*FIRE_HEIGHT_M))
+        radius = height / aspect
+    else:
+        radius = radius_m
+        height = float(np.clip(radius * aspect, 3000.0, 9000.0))
+    return _wonder_volcano(site, height, radius, STRATO, True, 0.06 * radius, 400.0)
+
+
+def _wonder_volcano(
+    site: F64, height: float, radius: float, kind: int, active: bool, crater: float, deep: float
+) -> Volcanoes:
+    return Volcanoes(
+        (site / np.linalg.norm(site))[None, :],
+        np.array([height]),
+        np.array([radius]),
+        np.array([kind]),
+        np.array([WONDER]),
+        np.array([active]),
+        np.array([0.0]),
+        np.array([crater]),
+        np.array([deep]),
+        np.array([np.nan]),
+        np.array([False]),
+    )
+
+
+def breach_azimuth(xyz: F64) -> F64:
+    """The direction a shattered volcano's amphitheatre opens, fixed by its position."""
+    return np.pi * (1 + value_noise3(1e3 * np.atleast_2d(xyz), 9601))
 
 
 def titan_volcano(site: F64, radius_m: float, rng: np.random.Generator) -> Volcanoes:
@@ -457,6 +548,51 @@ def _poisson(xyz: F64, weight: F64, spacing: float, rng: np.random.Generator) ->
     return np.array(accepted, dtype=np.int64)
 
 
+def _shattered(
+    p: F64, centre: F64, reached: F64, intact: F64, height: F64, planet_radius_m: float
+) -> F64:
+    """A shattered volcano's surface: its intact cone breached by a horseshoe
+    amphitheatre, and a hummocky debris lobe beyond the breach.
+
+    In the frame of the breach (``x`` towards it, ``y`` across, both in basal
+    radii, after a domain warp that makes every edge organic) the amphitheatre
+    has a rounded head at the summit crater and widens to its mouth at the
+    base; its floor ramps down to the plain. The debris lobe starts on the lower
+    flanks inside the mouth and ends in a lobed front about 2.6 radii out.
+    """
+    arc = np.arccos(np.clip(np.einsum("ij,ij->i", p, centre), -1, 1))
+    per_radius = np.where(arc > 1e-12, reached / np.maximum(arc, 1e-12), 0.0)
+    scale = float(np.median(per_radius[arc > 1e-12])) if (arc > 1e-12).any() else 1.0
+    span = 1.0 / scale  # radians per basal radius
+    q = warp(p, 9604, 0.08 * span, 1 / (0.35 * span), 4)
+    east = np.cross([0.0, 0.0, 1.0], centre)
+    east /= np.maximum(np.linalg.norm(east, axis=1), 1e-12)[:, None]
+    north = np.cross(centre, east)
+    azimuth = breach_azimuth(centre)
+    ahead = np.cos(azimuth)[:, None] * north + np.sin(azimuth)[:, None] * east
+    aside = np.cross(centre, ahead)
+    x = np.einsum("ij,ij->i", q - centre, ahead) * scale
+    y = np.einsum("ij,ij->i", q - centre, aside) * scale
+    # A rounded head at x = -0.05, widening to the mouth at the base.
+    along = np.clip(x, -0.05, 1.1)
+    half = 0.17 + 0.2 * np.clip((along + 0.05) / 1.15, 0, 1)
+    gap = np.hypot(x - along, y)  # distance from the amphitheatre's axis
+    inside = 1 - _smooth(gap, half, half + 0.08)
+    floor = 0.42 * height * (1 - np.clip((x + 0.2) / 1.3, 0, 1)) ** 1.3
+    cone = np.where(reached <= 1, intact * (1 - inside) + np.minimum(intact, floor) * inside, 0.0)
+    # Debris: an elliptical lobe beyond the mouth with a lobed front and hummocks.
+    lobe = np.hypot((x - 1.45) / 1.15, y / (0.75 + 0.25 * np.clip(x - 0.5, 0, 1)))
+    sheet = _smooth(x, 0.45, 0.75) * (1 - _smooth(lobe, 0.75, 1.0))
+    hummocks = np.clip(0.35 + fbm3(p, 9602, 4, planet_radius_m / 4e3), 0.0, None)
+    debris = height * sheet * (0.015 + 0.05 * hummocks)
+    return np.maximum(cone, debris)
+
+
+def _smooth(x: F64, a: F64 | float, b: F64 | float) -> F64:
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
 def edifice_height(
     points: F64, planet_radius_m: float, volcanoes: Volcanoes, minimum_radius_m: float = 0.0
 ) -> F64:
@@ -482,7 +618,9 @@ def edifice_height(
         if irregular.any()
         else np.zeros(len(points))
     )
-    reach = float(radius.max()) * (1 + 1.5 * LOBE_AMPLITUDE) / planet_radius_m
+    # A shattered volcano's debris field runs out to 2.6 radii beyond its centre.
+    spread = np.where(volcanoes.kind == SHATTERED, 2.6, 1 + 1.5 * LOBE_AMPLITUDE)
+    reach = float((radius * spread).max()) / planet_radius_m
     tree = KDTree(volcanoes.xyz)
     found_distance, found_index = tree.query(
         points, k=min(4, len(volcanoes)), distance_upper_bound=2 * np.sin(reach / 2),
@@ -497,7 +635,8 @@ def edifice_height(
         v = index[hit, column]
         r = 2 * np.arcsin(np.clip(distance[hit, column] / 2, 0, 1)) * planet_radius_m
         stretch = np.where(irregular[v], 1 + lobes[hit], 1.0)
-        s = np.clip(r / (radius[v] * stretch), 0, 1)
+        reached = r / (radius[v] * stretch)
+        s = np.clip(reached, 0, 1)
         kind = volcanoes.kind[v]
         # Concave stratovolcano and seamount flanks; broad convex shields.
         profile = np.where(kind == SHIELD, (1 - s**2) ** 0.7, (1 - s) ** 1.8)
@@ -524,6 +663,10 @@ def edifice_height(
             cut = TITAN_VALLEY_DEPTH * depth * (1 - ridges) ** 3 * 4 * s * (1 - s)
             profile = np.where(titan & (r > volcanoes.caldera_radius_m[v]), profile - cut, profile)
         h = height[v] * profile
+        shattered = kind == SHATTERED
+        if shattered.any():
+            h = np.where(shattered, _shattered(points[hit], volcanoes.xyz[v], reached, h,
+                                               height[v], planet_radius_m), h)
         # Calderas: the summit collapsed into a flat-floored basin below its rim.
         rim = volcanoes.caldera_radius_m[v]
         inside = r < rim
