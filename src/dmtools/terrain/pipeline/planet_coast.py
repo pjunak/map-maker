@@ -82,6 +82,35 @@ def _rotation(seed: int) -> F64:
     ])
 
 
+def noise_octaves(top_m: float, amplitude_m: float, finest_m: float) -> list[tuple[float, float]]:
+    """(wavelength, amplitude) in metres, coarsest first, from ``top_m`` down to ``finest_m``.
+
+    Amplitude follows a power law of wavelength from ``amplitude_m`` at the top,
+    capped at STEEPNESS x wavelength. Octaves depend only on the top, so a finer
+    ``finest_m`` only adds octaves.
+    """
+    out: list[tuple[float, float]] = []
+    wavelength = top_m
+    while wavelength >= finest_m:
+        out.append(
+            (wavelength, min(amplitude_m * (wavelength / top_m) ** HURST, STEEPNESS * wavelength))
+        )
+        wavelength /= 2
+    return out
+
+
+def displace(xyz: F64, radius_m: float, octaves: list[tuple[float, float]], seed: int) -> F64:
+    """Unit vectors moved along the sphere by rotated noise ``octaves`` (a domain warp)."""
+    offset = np.zeros_like(xyz)
+    for k, (wavelength, amplitude) in enumerate(octaves):
+        p = np.ascontiguousarray((xyz @ _rotation(seed + k)) * (radius_m / wavelength))
+        for axis in range(3):
+            offset[:, axis] += amplitude * value_noise3(p, seed + 97 * k + axis)
+    offset -= np.sum(offset * xyz, axis=1, keepdims=True) * xyz
+    moved = xyz + offset / radius_m
+    return moved / np.linalg.norm(moved, axis=1, keepdims=True)
+
+
 @dataclass(frozen=True, eq=False)
 class Coastline:
     """A world's land, smoothed once, ready for refined inside tests."""
@@ -92,27 +121,13 @@ class Coastline:
 
     def octaves(self, finest_m: float) -> list[tuple[float, float]]:
         """(wavelength, amplitude) in metres, coarsest first, down to ``finest_m``."""
-        top = TOP_WAVELENGTH_UNITS * self.unit_m
-        amplitude = TOP_AMPLITUDE_UNITS * self.unit_m
-        out: list[tuple[float, float]] = []
-        wavelength = top
-        while wavelength >= finest_m:
-            out.append(
-                (wavelength, min(amplitude * (wavelength / top) ** HURST, STEEPNESS * wavelength))
-            )
-            wavelength /= 2
-        return out
+        return noise_octaves(
+            TOP_WAVELENGTH_UNITS * self.unit_m, TOP_AMPLITUDE_UNITS * self.unit_m, finest_m
+        )
 
     def displaced(self, xyz: F64, finest_m: float, seed: int) -> F64:
         radius_m = self.world.project.frame.radius_km * 1e3
-        offset = np.zeros_like(xyz)
-        for k, (wavelength, amplitude) in enumerate(self.octaves(finest_m)):
-            p = np.ascontiguousarray((xyz @ _rotation(seed + k)) * (radius_m / wavelength))
-            for axis in range(3):
-                offset[:, axis] += amplitude * value_noise3(p, seed + 97 * k + axis)
-        offset -= np.sum(offset * xyz, axis=1, keepdims=True) * xyz
-        moved = xyz + offset / radius_m
-        return moved / np.linalg.norm(moved, axis=1, keepdims=True)
+        return displace(xyz, radius_m, self.octaves(finest_m), seed)
 
     def contains(self, xyz: F64, finest_m: float, master_seed: int) -> B:
         """Land at unit vectors ``xyz`` with coast detail down to ``finest_m`` metres."""

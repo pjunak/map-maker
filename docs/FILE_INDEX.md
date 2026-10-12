@@ -1,6 +1,6 @@
 # Complete documentation file inventory
 
-Updated 2026-10-11. Scope: every version-controlled Markdown document in DM Tools,
+Updated 2026-10-12. Scope: every version-controlled Markdown document in DM Tools,
 plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (89)
+## Architecture decision records (90)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -194,14 +194,16 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0088-nested-regional-detail-levels.md](adr/0088-nested-regional-detail-levels.md) | Nested regional detail levels (region 5 km, province 1 km, local 200 m), each enriched from a level parent built from the coarser level's tiles. |
 | [docs/adr/0089-one-map-view-with-drill-down-levels.md](adr/0089-one-map-view-with-drill-down-levels.md) | One World map view: registry themes in any projection, drill-down levels with a breadcrumb, background jobs and shared UI styles. |
 | [docs/adr/0090-regional-coast-detail-below-drawing-precision.md](adr/0090-regional-coast-detail-below-drawing-precision.md) | Regional levels use the drawn coast smoothed at its precision plus nested fractal detail; the planet keeps the exact coast. |
+| [docs/adr/0092-regional-lakes-fill-the-regional-relief.md](adr/0092-regional-lakes-fill-the-regional-relief.md) | Regional lakes fill the window relief from the parent lake's core, closed lakes are sinks, tiles hold lakes without young relief, and lake outlines get nested detail. |
 
-## Dated research reports (93)
+## Dated research reports (94)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-12-regional-lake-shores.md](research/2026-10-12-regional-lake-shores.md) | Straight regional lake shores: causes, the relief flood, crater lakes held in the tiles' frame, refined outlines and Aethelara measurements. |
 | [docs/research/2026-10-11-regional-coast-detail.md](research/2026-10-11-regional-coast-detail.md) | Regional coast detail below the drawing's precision: method trials, chosen parameters and Aethelara before/after. |
 | [docs/research/2026-10-08-volcanism.md](research/2026-10-08-volcanism.md) | Arc, hotspot, rift and intraplate volcanoes: placement, shapes, rendering, export and limits. |
 | [docs/research/2026-10-08-plate-tectonics-and-sediment.md](research/2026-10-08-plate-tectonics-and-sediment.md) | Plate-driven collision belts, rifts, leading-edge margins and trenches; old orogens; results and limits. |

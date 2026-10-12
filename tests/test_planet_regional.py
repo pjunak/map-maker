@@ -271,13 +271,25 @@ def test_grid_carving_matches_the_mesh_kernels_and_wraps_longitude() -> None:
 def test_regional_parent_reports_lake_cover_and_level(parent: PlanetResult) -> None:
     regional = RegionalParent.from_result(parent)
     lakes = parent.lakes
-    cover, level, closed = regional.lakes_at(parent.mesh.xyz)
     on_lake = lakes.lake >= 0
-    if on_lake.any():
-        assert np.all(cover[on_lake] > 0.99)
-        assert np.allclose(level[on_lake], lakes.level_m[lakes.lake[on_lake]])
-        assert np.array_equal(closed[on_lake], lakes.endorheic[lakes.lake[on_lake]])
+    assert on_lake.any()
+    # Without outline detail the cover is the parent's triangle-linear one.
+    cover, level, closed = regional.lakes_at(parent.mesh.xyz, np.inf)
+    assert np.all(cover[on_lake] > 0.99)
+    assert np.allclose(level[on_lake], lakes.level_m[lakes.lake[on_lake]])
+    assert np.array_equal(closed[on_lake], lakes.endorheic[lakes.lake[on_lake]])
     assert np.all(cover[~on_lake & parent.land] < 1.0 + 1e-9)
+    # Outline detail moves shores by a fraction of the spacing, and finer detail
+    # only adds smaller moves, so each level refines the outline of the one above.
+    node = parent.mesh.xyz[np.flatnonzero(on_lake)[0]]
+    lon, lat = np.degrees(np.arctan2(node[1], node[0])), np.degrees(np.arcsin(node[2]))
+    x, y = np.meshgrid(*(np.linspace(-1.5, 1.5, 61) * parent.mesh.spacing_m,) * 2)
+    points = inverse_aeqd(x.ravel(), y.ravel(), float(lon), float(lat), parent.mesh.radius_m)
+    exact = regional.lakes_at(points, np.inf)[0] > 0.5
+    coarse = regional.lakes_at(points, 0.5 * parent.mesh.spacing_m)[0] > 0.5
+    fine = regional.lakes_at(points, 0.05 * parent.mesh.spacing_m)[0] > 0.5
+    assert 0 < np.mean(coarse != exact) < 0.25
+    assert np.mean(fine != coarse) < np.mean(coarse != exact)
 
 
 def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
@@ -373,8 +385,11 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
     land = patch.land
     assert land.any()
     coarse = blend(grid, tiles, patch.mesh.xyz)
-    assert np.allclose(patch.surface_m[land], np.maximum(coarse[land], 1.0))
-    assert np.all(patch.young_m() == 0.0)
+    # Tiles leave out young landforms; the patch carries them on top, as the planet
+    # does, so its relief without them is the coarser level's.
+    young = np.where(land, planet.sample(patch.mesh.xyz, planet.young_m()), 0.0)
+    assert np.allclose(patch.young_m(), young)
+    assert np.allclose(patch.surface_m - young, np.where(land, np.maximum(coarse, 1.0), 0.0))
     # Every land node drains except the rim ring, which is the patch's outlet.
     descending = patch.receiver[land] >= 0
     assert descending.mean() > 0.75
@@ -476,3 +491,114 @@ def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path
     assert check.sum() > 20
     near_a = binary_dilation(a.rivers > 0.5, iterations=2)
     assert near_a[row[check], column[check]].mean() > 0.94
+
+
+def _shore(lakes: np.ndarray, dry: np.ndarray) -> np.ndarray:
+    """Lake pixels next to dry land (not the edge of the map)."""
+    from scipy.ndimage import binary_dilation
+
+    return lakes & np.asarray(binary_dilation(dry), dtype=bool)
+
+
+def _longest_straight_run(shore: np.ndarray, band: float = 1.5, gap: float = 2.0) -> float:
+    """Length (pixels) of the longest run of ``shore`` pixels along one straight line.
+
+    Pixels are binned into bands ``band`` pixels wide across each direction; a
+    run continues along a band while consecutive pixels are at most ``gap`` apart.
+    """
+    rows, columns = np.nonzero(shore)
+    best = 0.0
+    for angle in np.radians(np.arange(0.0, 180.0, 1.0)):
+        across = columns * np.cos(angle) + rows * np.sin(angle)
+        along = rows * np.cos(angle) - columns * np.sin(angle)
+        for offset in (0.0, band / 2):
+            bands = np.floor((across + offset) / band).astype(np.int64)
+            order = np.lexsort((along, bands))
+            b, a = bands[order], along[order]
+            breaks = np.flatnonzero((np.diff(b) != 0) | (np.diff(a) > gap)) + 1
+            starts, ends = np.r_[0, breaks], np.r_[breaks, len(a)] - 1
+            best = max(best, float(np.max(a[ends] - a[starts])))
+    return best
+
+
+def test_lake_shores_follow_the_fine_relief_not_the_parent_mesh() -> None:
+    from scipy.ndimage import binary_dilation, gaussian_filter
+
+    from dmtools.terrain.adapters.planet_region import LAKE_SHORE_M, lake_water
+    from dmtools.terrain.pipeline.planet_detail import grid_flow
+
+    n, edge, level = 200, 50.0, 500.0
+    rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
+    # One parent lake node on a regular triangular parent mesh of ``edge`` pixels:
+    # its triangle-linear cover is a hexagonal pyramid with straight contours.
+    v = rows / (edge * np.sqrt(3) / 2)
+    u = columns / edge - v / 2
+    cover = np.clip(1 - np.maximum.reduce([np.abs(u), np.abs(v), np.abs(u + v)]), 0, 1)
+    # A basin whose level contour, roughened by sub-parent relief, lies just
+    # beyond the parent lake's 0.15 cover contour (0.74-0.85 edges out).
+    rough = gaussian_filter(np.random.default_rng(3).normal(size=(n, n)), 4.0)
+    z = level + 4.0 * (np.hypot(rows, columns) - 0.92 * edge) + 25.0 * rough / rough.std()
+    outlet = np.zeros((n, n), dtype=bool)
+    outlet[[0, -1], :] = outlet[:, [0, -1]] = True
+    _, _, filled = grid_flow(z, outlet, 500.0, np.zeros((n, n)))
+    lakes = lake_water(z, ~outlet, filled, cover > 0.5, np.full((n, n), level))
+    # Gating the lake by the parent's cover cut it along straight triangle edges
+    # (0.85 edges long); the relief's own contour bends within a few pixels.
+    gated = (cover > 0.15) & (z <= level + LAKE_SHORE_M)
+    assert _longest_straight_run(_shore(gated, ~gated)) > 0.75 * edge
+    assert _longest_straight_run(_shore(lakes, ~lakes)) < 0.55 * edge
+    # The shore is the relief's own level contour: water stops where ground rises.
+    assert lakes.sum() > gated.sum()
+    assert np.all(z[lakes] <= level + LAKE_SHORE_M)
+    beyond = np.asarray(binary_dilation(lakes), dtype=bool) & ~lakes
+    assert np.all(z[beyond] > level + LAKE_SHORE_M)
+
+
+def test_open_lake_water_stops_at_its_outlet() -> None:
+    from dmtools.terrain.adapters.planet_region import lake_water
+    from dmtools.terrain.pipeline.planet_detail import grid_flow
+
+    n, level = 120, 300.0
+    rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
+    r = np.hypot(rows, columns)
+    # A lake flat at its level in rising ground, a hollow beside it below the
+    # level, and an outlet valley falling from the lake to the map's edge.
+    z = level + 3.0 * np.maximum(r - 25.0, 0.0)
+    hollow = np.hypot(rows + 26.0, columns) < 6.0
+    z[hollow] = level - 15.0
+    valley = (np.abs(rows) < 2) & (columns > 25)
+    z[valley] = level - 2.0 * (columns[valley] - 25)
+    outlet = np.zeros((n, n), dtype=bool)
+    outlet[:, -1] = True
+    _, _, filled = grid_flow(z, outlet, 500.0, np.zeros((n, n)))
+    lakes = lake_water(z, ~outlet, filled, r < 10.0, np.full((n, n), level))
+    assert np.all(lakes[r < 25.0])
+    assert np.all(lakes[hollow])  # low ground beside the lake fills to its level
+    assert not np.any(lakes[valley & (columns > 28)])  # water does not run downstream
+
+
+def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult) -> None:
+    from dataclasses import replace
+
+    from dmtools.terrain.pipeline.planet_coast import level_finest_m
+    from dmtools.terrain.pipeline.planet_regional import LAKE_CORE_COVER
+
+    lakes = parent.lakes
+    ids, counts = np.unique(lakes.lake[lakes.lake >= 0], return_counts=True)
+    nodes = np.flatnonzero(lakes.lake == ids[np.argmax(counts)])
+    centre = parent.mesh.xyz[nodes].mean(axis=0)
+    lon = float(np.degrees(np.arctan2(centre[1], centre[0])))
+    lat = float(np.degrees(np.arcsin(centre[2] / np.linalg.norm(centre))))
+    # A young hollow 400 m deep under the whole land, as a crater is under its
+    # lake: windows draw it back on top of the tiles.
+    planet = RegionalParent.from_result(parent)
+    hollow = replace(planet, wonder_m=np.where(parent.land, -400.0, 0.0))
+    region = regional_mesh(lon, lat, 400, 40, parent.mesh.radius_m, 1)
+    result = enrich(hollow, region, process_area_km2=3_000, iterations=0, seed=1)
+    cover, level, _ = hollow.lakes_at(region.mesh.xyz, level_finest_m(region.spacing_m))
+    held = result.land & (cover > LAKE_CORE_COVER)
+    assert held.sum() > 10
+    young = hollow.sample(region.mesh.xyz, hollow.young_m())
+    # With the hollow added back, the lake stands at its level, not 400 m below it.
+    assert np.allclose(result.elevation_m[held] + young[held], level[held])
+    assert np.median(young[held]) < -390.0

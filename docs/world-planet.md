@@ -89,6 +89,12 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   the map's own scale. Closed hollows deeper than 10 m (crater troughs, chasm
   floors, calderas) fill with lakes where it is wet. Where it is dry, a playa lies
   only in the lowest part.
+- Planet lakes fill the zoomed relief up to their level, so shores follow its
+  hills and valleys, including a crater's sharp trough. Their outlines also gain
+  detail below the planet's mesh spacing, as coasts do, so a lake can sit a few
+  kilometres from where the world map shows it. Rivers and closed hollows in a
+  closed lake's basin drain into it
+  ([ADR-0092](adr/0092-regional-lakes-fill-the-regional-relief.md)).
 - A scale bar shows distance. Hovering shows the place, the offset from the centre
   and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.

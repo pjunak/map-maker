@@ -14,6 +14,8 @@ location, so it can be rebuilt whenever it is needed.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
@@ -60,14 +62,7 @@ def level_parent(
         mesh, relief, ~land | region.boundary, runoff, parent_inflows(planet, region)
     )
     nearest = np.asarray(KDTree(planet.mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
-    lake = None
-    if planet.lake is not None:
-        cover, _, _ = planet.lakes_at(xyz)
-        lake = np.where(land & (cover > 0.5), planet.lake[nearest], -1)
-    # Coarser tiles already leave out volcanoes and wonders; windows redraw them
-    # sharply from the planet's lists. Sea-floor volcanoes stay on the sea floor.
-    volcanic = sample(planet.volcanic_m)
-    return RegionalParent(
+    patch = RegionalParent(
         world=planet.world,
         settings=planet.settings,
         mesh=mesh,
@@ -86,15 +81,21 @@ def level_parent(
         coast_m=sample(planet.coast_m),
         sea_floor_m=sample(planet.sea_floor_m),
         basin_depth_m=sample(planet.basin_depth_m),
-        volcanic_m=None if volcanic is None else np.where(land, 0.0, volcanic),
+        volcanic_m=sample(planet.volcanic_m),
         volcanoes=planet.volcanoes,
         precip_warm_mm=sample(planet.precip_warm_mm),
-        lake=lake,
+        # Lakes stay on the planet mesh, so every level refines the same outlines.
+        lake=planet.lake,
         lake_level_m=planet.lake_level_m,
         lake_endorheic=planet.lake_endorheic,
         flood_basalt=sample(planet.flood_basalt),
         wind_east=sample(planet.wind_east),
         wind_north=sample(planet.wind_north),
-        wonder_m=np.zeros(mesh.size),
+        wonder_m=sample(planet.wonder_m),
         wonders=planet.wonders,
+        lake_mesh=planet.mesh if planet.lake_mesh is None else planet.lake_mesh,
     )
+    # Coarser tiles leave out volcanoes and wonders, which windows redraw sharply
+    # from the planet's lists. The patch carries them as young relief on top of
+    # that surface, as the planet does, so its lake levels match its surface.
+    return replace(patch, surface_m=relief + patch.young_m())

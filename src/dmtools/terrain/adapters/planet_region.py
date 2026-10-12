@@ -46,18 +46,21 @@ from dmtools.terrain.adapters.planet_natural import (
 )
 from dmtools.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
 from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
-from dmtools.terrain.pipeline.planet_coast import coastline, window_finest_m
+from dmtools.terrain.pipeline.planet_coast import coastline, level_finest_m, window_finest_m
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
 from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
 from dmtools.terrain.pipeline.planet_patch import inverse_aeqd
-from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult
+from dmtools.terrain.pipeline.planet_regional import (
+    LAKE_CORE_COVER,
+    RegionalParent,
+    RegionalResult,
+)
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
 from dmtools.terrain.pipeline.planet_wonders import (
     WonderCover,
     wonder_cover,
     wonder_relief,
-    wonder_zones,
 )
 
 type F64 = NDArray[np.float64]
@@ -319,28 +322,24 @@ def _compose(
         )
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
     elevation = np.where(islands, sea, elevation)
-    # Lakes fill the regional relief up to the parent lake level, so shores
-    # follow the fine terrain instead of the coarse parent mesh.
-    cover, level, closed = parent.lakes_at(points)
-    cover = cover.reshape(pixels, pixels)
-    if wonders is not None and len(wonders):
-        # A crater or chasm lake fills the sharp relief to its level (a ring around
-        # a central plateau, a ribbon along a chasm floor) that the parent mesh
-        # cannot resolve.
-        zone = wonder_zones(points, planet_m, wonders).reshape(pixels, pixels)
-        cover = np.where(zone & (cover > 0.01), 1.0, cover)
-    lakes = (
-        land
-        & inside
-        & (cover > 0.15)
-        & (elevation <= level.reshape(pixels, pixels) + LAKE_SHORE_M)
-    )
-    salt = lakes & closed.reshape(pixels, pixels)
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
-    coverage, ponds, depth = window_rivers(
-        parent, points, elevation, land, lakes, inside, river_km2, 2 * radius_m / pixels
+    pixel_m = 2 * radius_m / pixels
+    flow = window_flow(parent, points, elevation, land, inside, pixel_m)
+    # Lakes fill the regional relief up to the parent lake level, so shores
+    # follow the fine terrain (and a crater's sharp trough) instead of the
+    # coarse parent mesh.
+    cover, level, closed = parent.lakes_at(points, level_finest_m(spacing_m))
+    lakes = lake_water(
+        flow.z, land & inside, flow.filled,
+        cover.reshape(pixels, pixels) > LAKE_CORE_COVER, level.reshape(pixels, pixels),
     )
+    salt = lakes & closed.reshape(pixels, pixels)
+    if salt.any():
+        # A closed lake is where its basin's water ends: the basin drains into it
+        # instead of filling up to its rim, and holds no playa above the lake.
+        flow = window_flow(parent, points, elevation, land & ~salt, inside, pixel_m)
+    coverage, ponds, depth = window_rivers(flow, land, lakes, inside, river_km2, pixel_m)
     # Ponds are closed basins: lakes where it is wet enough, playas where it is dry.
     dry = np.zeros_like(ponds)
     if climate is not None:
@@ -410,24 +409,25 @@ def playa_beds(ponds: B, depth: F64) -> B:
     return ponds & (depth >= deepest[labels] - bed[labels])
 
 
-def window_rivers(
-    parent: RegionalParent,
-    points: F64,
-    elevation: F64,
-    land: B,
-    lakes: B,
-    inside: B,
-    river_km2: float,
-    pixel_m: float,
-) -> tuple[F64, B, F64]:
-    """River coverage routed on the window's blended relief, closed ponds and their depth.
+@dataclass(frozen=True)
+class WindowFlow:
+    """Drainage routed on a window's blended relief."""
 
-    One drainage network over the whole window follows the drawn valleys and
-    has no seams between tiles. Rivers entering from outside the window carry
-    the parent's upstream area, spread over the rim pixels the parent river
-    crosses. Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
-    calderas) hold water or a playa: rivers end there instead of crossing a
-    filled flat.
+    z: F64  # routed relief: elevation inside the window, 0 outside
+    outlet: B  # sea and the area outside the window
+    receiver: NDArray[np.int64]  # flat indices, -1 at outlets
+    area_m2: F64  # drainage area, with the water entering from beyond the window
+    filled: F64  # relief with closed depressions filled to their spill level
+    links: tuple[tuple[int, int], ...]  # splitting rivers: (split pixel, branch pixel)
+
+
+def window_flow(
+    parent: RegionalParent, points: F64, elevation: F64, land: B, inside: B, pixel_m: float
+) -> WindowFlow:
+    """One drainage network over the whole window, with no seams between tiles.
+
+    Rivers entering from outside the window carry the parent's upstream area,
+    spread over the rim pixels the parent river crosses.
     """
     pixels = elevation.shape[0]
     z = np.where(inside, np.nan_to_num(elevation, nan=0.0), 0.0)
@@ -447,11 +447,43 @@ def window_rivers(
                 inflow.ravel()[ends[1]] += carried
                 links.append((ends[0], ends[1]))
     receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow)
+    return WindowFlow(z, outlet, receiver, area, filled, tuple(links))
+
+
+def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
+    """Parent lakes as water standing on the regional relief at the lake level.
+
+    Water covers ground up to ``level`` (plus LAKE_SHORE_M) that is connected to
+    a lake's ``core`` (where the tiles hold the parent lake) and lies in a basin
+    that spills no lower than the level, so it does not run out down the outlet
+    valley. Shores are contours of the fine relief, not of the parent's lake
+    cover, which is linear, so straight, inside each parent triangle.
+    """
+    wet = land & (z <= level + LAKE_SHORE_M) & (filled >= level - LAKE_SHORE_M)
+    found = cast(tuple[NDArray[np.int32], int], label(wet))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    keep = np.zeros(count + 1, dtype=bool)
+    keep[labels[wet & core]] = True
+    keep[0] = False
+    return keep[labels]
+
+
+def window_rivers(
+    flow: WindowFlow, land: B, lakes: B, inside: B, river_km2: float, pixel_m: float
+) -> tuple[F64, B, F64]:
+    """River coverage on the window's drainage, closed ponds and their depth.
+
+    Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
+    calderas) hold water or a playa: rivers end there instead of crossing a
+    filled flat.
+    """
+    z, filled, receiver, area = flow.z, flow.filled, flow.receiver, flow.area_m2
+    pixels = z.shape[0]
     ponds = land & inside & ~lakes & (filled - z > POND_DEPTH_M)
     flat = np.arange(pixels * pixels)
     x = (flat % pixels + 0.5).astype(np.float64)
     y = (flat // pixels + 0.5).astype(np.float64)
-    stop = (outlet | lakes | ponds).ravel()
+    stop = (flow.outlet | lakes | ponds).ravel()
     major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
     # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
     # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
@@ -463,7 +495,7 @@ def window_rivers(
     gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
     coverage = river_coverage(
         x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
-        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=tuple(links),
+        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=flow.links,
     )
     return coverage, ponds, np.where(ponds, filled - z, 0.0)
 

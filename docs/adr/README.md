@@ -120,3 +120,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0089: Show every world map in one view with drill-down levels](0089-one-map-view-with-drill-down-levels.md)
 - [ADR-0090: Add coast detail below the drawing's precision at regional levels](0090-regional-coast-detail-below-drawing-precision.md)
 - [ADR-0091: Age wonders by eroding each on its own patch](0091-age-wonders-on-their-own-patches.md)
+- [ADR-0092: Fill regional lakes on the regional relief, with refined outlines](0092-regional-lakes-fill-the-regional-relief.md)

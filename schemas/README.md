@@ -33,7 +33,7 @@ Only the current formats are supported:
   mesh is authoritative; world-frame GeoTIFF/images are derived. Not a world parent.
 
 - [Planet region v1](world/planet-region-v1.schema.json): experimental regional detail
-  window (`planet-blended-tiles-v6`) from cached tiles of a planet build; local
+  window (`planet-blended-tiles-v7`) from cached tiles of a planet build; local
   azimuthal-equidistant GeoTIFF and previews.
 
 - [Terrain context v1](terrain/context-v1.schema.json): bounded geographic support

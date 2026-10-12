@@ -34,6 +34,9 @@ backlog, and [status](../research/status.md) records what works now.
    - Regional coasts are refined below the drawing's precision, so local maps
      show bays and headlands instead of smooth traced curves (ADR-0090, tile
      algorithm `planet-blended-tiles-v6`).
+   - Regional lakes fill the regional relief from the parent lake, with outlines
+     refined below the parent spacing, so shores lose the parent mesh's straight
+     edges; crater lakes are no longer pits (ADR-0092, `planet-blended-tiles-v7`).
 2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
    settings for random placement or placed by hand. Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a

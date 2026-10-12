@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Regional lake shores — 2026-10-12](2026-10-12-regional-lake-shores.md) draws regional
+  lakes as water filling the regional relief, holds crater lakes in the tiles' own frame
+  and refines lake outlines below the parent spacing, so shores lose the parent mesh's
+  straight edges.
+
 - [Regional coast detail — 2026-10-11](2026-10-11-regional-coast-detail.md) smooths the
   traced coast at its drawing precision and adds nested fractal detail at regional levels,
   so province and local maps show rugged shores instead of straight traced runs.

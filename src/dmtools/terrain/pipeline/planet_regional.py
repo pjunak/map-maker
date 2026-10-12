@@ -22,9 +22,15 @@ from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
 from dmtools.terrain.domain.planet import PlanetSettings
+from dmtools.terrain.domain.seeds import stage_seed
 from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
 from dmtools.terrain.pipeline.planet import PlanetResult
-from dmtools.terrain.pipeline.planet_coast import coastline, level_finest_m
+from dmtools.terrain.pipeline.planet_coast import (
+    coastline,
+    displace,
+    level_finest_m,
+    noise_octaves,
+)
 from dmtools.terrain.pipeline.planet_evolution import EvolutionRun, evolve
 from dmtools.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, sample_field
@@ -40,6 +46,13 @@ type B = NDArray[np.bool_]
 
 FINE_TEXTURE = 0.5
 BASIN_FULL_M = 200.0  # basin depth at which a node counts as fully depositional
+LAKE_CORE_COVER = 0.5  # parent lake cover above which regional ground is lake water
+# Lake outlines are refined below the lake mesh spacing like coasts (ADR-0090):
+# noise octaves from LAKE_TOP_SPACINGS spacings down to a level's finest scale,
+# LAKE_AMPLITUDE_SPACINGS spacings at the top.
+LAKE_OUTLINE_STAGE = "planet.lake-outline"
+LAKE_TOP_SPACINGS = 4.0
+LAKE_AMPLITUDE_SPACINGS = 0.25
 # Rock texture at every level: its wavelength follows the mesh spacing (40 km at
 # 5 km). A fixed wavelength left fine tiles uniform, so water cut straight,
 # parallel gullies down every slope instead of branching networks.
@@ -72,7 +85,7 @@ class RegionalParent:
     volcanic_m: F64 | None = None  # edifice height the mesh carries from volcanoes
     volcanoes: Volcanoes | None = None
     precip_warm_mm: F64 | None = None  # warm-half-year precipitation rate
-    lake: I64 | None = None  # lake id per parent node, -1 if none
+    lake: I64 | None = None  # lake id per node of the lake mesh, -1 if none
     lake_level_m: F64 | None = None  # surface per lake id
     lake_endorheic: B | None = None  # closed lake per lake id
     flood_basalt: F64 | None = None  # 0..1 trap cover
@@ -80,6 +93,7 @@ class RegionalParent:
     wind_north: F64 | None = None
     wonder_m: F64 | None = None  # height change the mesh carries from craters and chasms
     wonders: Wonders | None = None
+    lake_mesh: SphereMesh | None = None  # the mesh `lake` is on, if not `mesh` (the planet's)
 
     def young_m(self) -> F64:
         """Height that volcanoes and wonders added on land after erosion and climate."""
@@ -122,14 +136,27 @@ class RegionalParent:
             result.wonders,
         )
 
-    def lakes_at(self, xyz: F64) -> tuple[F64, F64, B]:
-        """Lake cover (0..1), the nearest lake's level and whether it is closed."""
+    def lakes_at(self, xyz: F64, detail_m: float) -> tuple[F64, F64, B]:
+        """Lake cover (0..1), the nearest lake's level and whether it is closed.
+
+        The cover is linear inside each lake-mesh triangle, so its contours are
+        straight; it is sampled at points displaced by noise down to ``detail_m``,
+        which refines lake outlines below the mesh spacing as coasts are. Every
+        level samples the planet's lakes, so finer levels only add detail.
+        """
         if self.lake is None or self.lake_level_m is None or not np.any(self.lake >= 0):
             n = len(xyz)
             return np.zeros(n), np.full(n, -np.inf), np.zeros(n, dtype=bool)
-        cover = self.sample(xyz, (self.lake >= 0).astype(np.float64))
+        mesh = self.mesh if self.lake_mesh is None else self.lake_mesh
+        spacing = mesh.spacing_m
+        moved = displace(
+            xyz, mesh.radius_m,
+            noise_octaves(LAKE_TOP_SPACINGS * spacing, LAKE_AMPLITUDE_SPACINGS * spacing, detail_m),
+            stage_seed(self.settings.seed, LAKE_OUTLINE_STAGE),
+        )
+        cover = sample_field(mesh, moved, (self.lake >= 0).astype(np.float64))
         nodes = np.flatnonzero(self.lake >= 0)
-        nearest = np.asarray(KDTree(self.mesh.xyz[nodes]).query(xyz, workers=-1)[1])
+        nearest = np.asarray(KDTree(mesh.xyz[nodes]).query(moved, workers=-1)[1])
         ids = self.lake[nodes[nearest]]
         closed = (
             np.zeros(len(xyz), dtype=bool)
@@ -189,13 +216,18 @@ def enrich(
     water = ~land
     # Volcanoes and craters are drawn on top of the regional relief, not eroded
     # from uplift (erosion would fill a crater).
-    surface = parent.surface_m - parent.young_m()
-    target = np.maximum(parent.sample(mesh.xyz, surface), 0.0)
+    young = parent.young_m()
+    target = np.maximum(parent.sample(mesh.xyz, parent.surface_m - young), 0.0)
     # Parent lakes are fixed water at their level: regional rivers end in them.
-    lake_cover, lake_level, _ = parent.lakes_at(mesh.xyz)
-    lake = land & (lake_cover > 0.5)
+    # The level is held on the same surface without young landforms: windows add
+    # a crater back on top, so a crater lake held at its full level would end up
+    # a crater's depth below its own surface.
+    lake_cover, lake_level, _ = parent.lakes_at(mesh.xyz, level_finest_m(region.spacing_m))
+    lake = land & (lake_cover > LAKE_CORE_COVER)
     fixed = water | (region.boundary & land) | lake
-    level = np.where(water, 0.0, np.where(lake, lake_level, target))
+    level = np.where(
+        water, 0.0, np.where(lake, lake_level - parent.sample(mesh.xyz, young), target)
+    )
     steady = parent.sample(mesh.xyz, parent.steady_uplift)
     pulse = parent.sample(mesh.xyz, parent.pulse_uplift)
     erodibility = parent.sample(mesh.xyz, parent.erodibility) * np.exp(

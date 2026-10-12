@@ -32,6 +32,9 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Check drainage realism at fine levels: rock texture now follows each level's
     spacing and level-3 tiles branch; compare against reference terrain.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
+  - [ ] Open lakes whose window basin spills above their level show a playa ring
+    along the shore; measure ponds with every lake as a sink
+    ([lake shores report](docs/research/2026-10-12-regional-lake-shores.md)).
 - [ ] **Map views (ADR-0087):** political and civilization views from authored
   overlays.
 
