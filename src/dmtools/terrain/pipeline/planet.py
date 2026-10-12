@@ -69,6 +69,13 @@ from dmtools.terrain.pipeline.planet_volcanism import (
     sea_floor_with_volcanoes,
     with_placed,
 )
+from dmtools.terrain.pipeline.planet_waters import (
+    FORK_SHARE,
+    Forks,
+    deserts,
+    find_fork,
+    split_river,
+)
 from dmtools.terrain.pipeline.planet_wonders import (
     PlacedWonder,
     Wonders,
@@ -374,6 +381,8 @@ def generate_planet(
             for m in landmarks if m.kind not in VOLCANO_WONDERS
         ),
         footprint(mesh, giants.xyz, 2.0 * giants.radius_m), seeds[PLANET_VOLCANISM_STAGE_ID],
+        None if climate is None
+        else deserts(land, climate.precipitation_mm, climate.pet_mm, climate.temperature_c),
     )
     # The giant active volcano erupts: lava flows and ash downwind of its vent.
     fire = giants.subset((giants.setting == WONDER) & giants.active)
@@ -405,6 +414,28 @@ def generate_planet(
         None if climate is None else climate.runoff_mm,
         None if climate is None else climate.pet_mm,
     )
+    # A splitting river divides on a low divide once the rivers are known.
+    fork_rng = np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9595])
+    forking = [m for m in landmarks if m.kind == "fork"]
+    sites = [(m.name, unit(m.position)) for m in forking] or (
+        [("", None)] if "fork" in settings.wonders else []
+    )
+    for name, near in sites:
+        found = find_fork(mesh, land, evolved, lakes, fork_rng, near)
+        if found is None:
+            if near is not None:
+                raise ValueError(
+                    f"{name}: no large river near it crosses a low divide; place it on a "
+                    "large river where another basin is close."
+                )
+            break
+        lakes, fork = split_river(mesh, lakes, *found, float(fork_rng.uniform(*FORK_SHARE)))
+        wonders = replace(wonders, forks=Forks(
+            np.vstack([wonders.forks.split_xyz, fork.split_xyz]),
+            np.vstack([wonders.forks.branch_xyz, fork.branch_xyz]),
+            np.concatenate([wonders.forks.discharge_m3_s, fork.discharge_m3_s]),
+            np.concatenate([wonders.forks.area_m2, fork.area_m2]),
+        ))
     say(0.97, "Measuring relief")
     bathymetry = ocean_floor(
         mesh, coast, water, seeds[PLANET_FORCING_STAGE_ID],

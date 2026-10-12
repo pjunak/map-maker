@@ -349,13 +349,17 @@ def _compose(
     playa = ponds & dry & playa_beds(ponds, depth)
     lakes = lakes | (ponds & ~dry)
     salt = salt | (ponds & ~dry)
-    coverage = np.where(land & ~lakes, coverage, 0.0)
     cover = (
         None
         if wonders is None
         or (found := wonder_cover(points, planet_m, wonders, finest)) is None
         else found.reshape((pixels, pixels))
     )
+    if cover is not None:
+        # An erupting vent holds molten rock, never water.
+        molten = cover.glow > 0.2
+        lakes, salt, playa = lakes & ~molten, salt & ~molten, playa & ~molten
+    coverage = np.where(land & ~lakes, coverage, 0.0)
     return RegionWindow(
         centre,
         radius_m,
@@ -429,6 +433,16 @@ def window_rivers(
     rim = inside & ~np.asarray(binary_erosion(inside), dtype=bool)
     upstream = parent.sample(points, parent.area_m2).reshape(pixels, pixels)
     inflow = np.where(rim & land, upstream * pixel_m / parent.mesh.spacing_m, 0.0)
+    # A splitting river's branch starts with its share of the river's water.
+    links: list[tuple[int, int]] = []
+    forks = None if parent.wonders is None else parent.wonders.forks
+    if forks is not None and len(forks):
+        for a, b, carried in zip(forks.split_xyz, forks.branch_xyz, forks.area_m2, strict=True):
+            ends = [int(np.argmax(points @ end)) for end in (a, b)]
+            if all(points[k] @ end > np.cos(pixel_m / parent.mesh.radius_m)
+                   for k, end in zip(ends, (a, b), strict=True)):
+                inflow.ravel()[ends[1]] += carried
+                links.append((ends[0], ends[1]))
     receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow)
     ponds = land & inside & ~lakes & (filled - z > POND_DEPTH_M)
     flat = np.arange(pixels * pixels)
@@ -446,7 +460,7 @@ def window_rivers(
     gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
     coverage = river_coverage(
         x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
-        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0),
+        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=tuple(links),
     )
     return coverage, ponds, np.where(ponds, filled - z, 0.0)
 

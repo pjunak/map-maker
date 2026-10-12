@@ -138,7 +138,9 @@
               "crater",
               "chasm",
               "cliff",
-              "tepui"
+              "tepui",
+              "oasis",
+              "fork"
             ]
           },
           "position": {
@@ -150,7 +152,7 @@
             }
           },
           "size_km": {
-            "description": "What the kind's size measures (diameter, width or height); null uses the usual size.",
+            "description": "What the kind's size measures (diameter, width or height); null uses the usual size and is the only value for kinds without a size.",
             "type": [
               "number",
               "null"

@@ -279,9 +279,29 @@ Two more volcano wonders live with the other volcanoes (setting `wonder`):
     widening downwind and patchy, that greys the ground and thins vegetation;
   - a lava lake in the vent, a small irregular patch that glows orange on maps.
 
+Two water wonders follow (`planet_waters.py`):
+
+- **Oasis.** A spring pond in a 25 m hollow, ringed by palms and gardens, fed by
+  groundwater rather than rain (Siwa, Ubari, Huacachina). Maps green a lobed,
+  patchy ring of its radius and paint the pond as water. Random oases lie in hot
+  deserts: precipitation under 15 % of potential evapotranspiration and a mean
+  temperature above 14 °C, at least 60 km from the coast and 300 km apart.
+- **Splitting river.** A river bifurcation like the Casiquiare, whose upper
+  Orinoco loses part of its water across a swampy divide to the Amazon. Once
+  lakes and rivers are known, candidates are nodes on rivers carrying at least
+  2 % of the largest discharge (not at their mouths), with a neighbour across a
+  divide at most 300 m higher that drains to the sea by another outlet. The best
+  candidates favour large rivers and low divides; a random one is drawn from
+  the best five, and a hand-placed one takes the best within 300 km. A quarter
+  to nearly half of the water and drainage area moves from the main stem's
+  course to the branch's, so the atlas draws a thinner main stem and the
+  branch, and regional maps route the branch's share from where it crosses.
+  Both maps draw the short link across the divide.
+
 The wonder kinds are placed in a fixed order (titan, shattered and active
-volcanoes, craters, chasm, cliff, tepuis), each from its own random stream, and
-each keeps clear of the wonders placed before it.
+volcanoes, craters, chasm, cliff, tepuis, oases, and the splitting river once
+rivers are known), each from its own random stream, and each keeps clear of the
+wonders placed before it.
 
 Wonders are placed by rejection sampling of continuous positions on the sphere
 (`draw_site`), from their own random streams, with yes/no eligibility tests.

@@ -1041,13 +1041,57 @@ def test_wonder_overlays_paint_lava_black_and_vents_glowing() -> None:
 
     climate = PixelClimate(fill(15.0), fill(22.0), fill(900.0), fill(800.0), None)
     overlay = WonderCover(
-        np.array([[0.0, 1.0, 0.0]]), np.zeros(shape), np.array([[0.0, 0.0, 1.0]])
+        np.array([[0.0, 1.0, 0.0]]), np.zeros(shape), np.array([[0.0, 0.0, 1.0]]),
+        np.zeros(shape), np.zeros(shape),
     )
     rgb = land_colour(points, RADIUS, climate, fill(200.0), fill(0.0), fill(1.0),
                       overlay=overlay)[0]
     plain, lava, vent = rgb
     assert lava.sum() < 0.5 * plain.sum()  # fresh lava is black
     assert vent[0] > 200 and vent[0] > 2 * vent[2]  # the vent glows orange
+
+
+def test_an_oasis_greens_the_desert_around_a_spring_pond() -> None:
+    from dmtools.terrain.pipeline.planet_waters import Oases, oasis_cover, oasis_relief
+    from dmtools.terrain.pipeline.wonder_geometry import destination
+
+    centre = np.array([1.0, 0.0, 0.0])
+    oases = Oases(centre[None], np.array([10e3]))
+    points = np.stack([destination(centre, 0.3, d / RADIUS) for d in (0.0, 5e3, 30e3)])
+    green, pond = oasis_cover(points, RADIUS, oases)
+    relief = oasis_relief(points, RADIUS, oases)
+    assert pond[0] == pytest.approx(1.0) and green[0] > 0.6
+    assert green[2] == 0.0 and pond[2] == 0.0 and relief[2] == 0.0
+    assert relief[0] < -10.0  # the spring pond lies in a hollow
+
+
+def test_a_river_splits_across_a_low_divide_and_reaches_the_sea_twice(
+    world_path: Path,
+) -> None:
+    from dmtools.terrain.pipeline.planet_waters import find_fork, split_river
+
+    result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
+    lakes = result.lakes
+    found = find_fork(
+        result.mesh, result.land, result.elevation_m, lakes, np.random.default_rng(1)
+    )
+    assert found is not None
+    split, branch = found
+    receiver = lakes.flow.receiver
+    after, forks = split_river(result.mesh, lakes, split, branch, 0.4)
+    moved = float(forks.discharge_m3_s[0])
+    assert moved == pytest.approx(0.4 * lakes.discharge_m3_s[split])
+    below = int(receiver[split])
+    assert after.discharge_m3_s[below] == pytest.approx(lakes.discharge_m3_s[below] - moved)
+    assert after.discharge_m3_s[branch] == pytest.approx(lakes.discharge_m3_s[branch] + moved)
+    assert after.flow.area_m2[branch] > lakes.flow.area_m2[branch]
+    # The two courses end in different places.
+    def mouth(node: int) -> int:
+        while receiver[node] >= 0:
+            node = int(receiver[node])
+        return node
+
+    assert mouth(below) != mouth(branch)
 
 
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
@@ -1134,11 +1178,18 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
         GeologyLandmark("landmark-wet", "Wet", "cliff", source(rift), None, source(shore)),
         GeologyLandmark("landmark-wet", "Wet", "tepui", source(sea)),
         GeologyLandmark("landmark-wet", "Wet", "active", source(sea)),
+        GeologyLandmark("landmark-wet", "Wet", "oasis", source(sea)),
     ):
         with pytest.raises(ValueError, match=r"Wet.*sea"):
             generate_planet(
                 world, replace(FAST, climate_passes=0), replace_recipe(recipe, landmarks=(wet,))
             )
+    # A splitting river must be placed near a large river.
+    dry = replace_recipe(
+        recipe, landmarks=(GeologyLandmark("landmark-dry", "Dry", "fork", source(sea)),)
+    )
+    with pytest.raises(ValueError, match=r"Dry: no large river"):
+        generate_planet(world, replace(FAST, climate_passes=0), dry)
 
 
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:

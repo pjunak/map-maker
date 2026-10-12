@@ -192,8 +192,8 @@ def _lava(
     )
     if not len(near):
         return out
-    octaves = 4 if detail_m is None else int(np.clip(np.log2(widest / detail_m), 2, 9))
-    p_all = warp(points[near], 9502, 0.25 * widest / radius, radius / (2 * widest), octaves)
+    octaves = 4 if detail_m is None else int(np.clip(np.log2(4 * widest / detail_m), 3, 10))
+    p_all = warp(points[near], 9502, 0.3 * widest / radius, radius / (2 * widest), octaves)
     cover = np.zeros(len(near))
     for flow, width, fresh in zip(
         eruptions.flows, eruptions.flow_width_m, eruptions.flow_fresh, strict=True
@@ -207,8 +207,14 @@ def _lava(
             continue
         r = 2 * np.arcsin(np.clip(np.asarray(found[0])[hit] / 2, 0, 1)) * radius
         t = index[hit] / max(len(flow) - 1, 1)
-        # Narrow near the source, widening downslope into a broad toe.
-        half = 0.5 * width * (0.6 + 1.1 * t)
-        cover[hit] = np.maximum(cover[hit], fresh * (1 - smoothstep(r, 0.7 * half, half)))
+        # Narrow near the source, widening downslope into a broad toe whose
+        # margins and front break into lobes, as pahoehoe and aa flows do.
+        lobes = 1 + 0.35 * fbm3(p_all[hit], 9504, octaves, radius / (0.6 * width), 0.6)
+        half = 0.5 * width * (0.6 + 1.1 * t) * lobes
+        front = 1 - smoothstep(t, 0.9, 1.0) * smoothstep(fbm3(p_all[hit], 9505, 3,
+                                                              radius / width), -0.2, 0.3)
+        cover[hit] = np.maximum(
+            cover[hit], fresh * front * (1 - smoothstep(r, 0.7 * half, half))
+        )
     out[near] = cover
     return out

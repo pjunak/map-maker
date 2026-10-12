@@ -22,6 +22,7 @@ from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
 from dmtools.terrain.pipeline.planet_scarps import Cliffs, Tepuis
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
+from dmtools.terrain.pipeline.planet_waters import Forks, Oases
 from dmtools.terrain.pipeline.planet_wonders import Chasms, Craters, Wonders
 from dmtools.terrain.pipeline.world import prepare_world_map
 
@@ -149,6 +150,16 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
                     data["vent_radius_m"].astype(np.float64),
                     data["plume_azimuth"].astype(np.float64),
                     data["plume_length_m"].astype(np.float64),
+                ),
+                Oases(
+                    data["oasis_xyz"].astype(np.float64).reshape(-1, 3),
+                    data["oasis_radius_m"].astype(np.float64),
+                ),
+                Forks(
+                    data["fork_split_xyz"].astype(np.float64).reshape(-1, 3),
+                    data["fork_branch_xyz"].astype(np.float64).reshape(-1, 3),
+                    data["fork_discharge_m3_s"].astype(np.float64),
+                    data["fork_area_m2"].astype(np.float64),
                 ),
             ),
             volcanoes=Volcanoes(

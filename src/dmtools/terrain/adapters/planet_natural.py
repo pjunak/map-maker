@@ -25,6 +25,7 @@ import numpy as np
 from numpy.typing import NDArray
 from PIL import Image, ImageDraw
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
+from scipy.spatial import KDTree
 
 from dmtools.terrain.adapters.map_parchment import ParchmentInputs, parchment_image
 from dmtools.terrain.adapters.map_thematic import thematic_images
@@ -87,6 +88,7 @@ BASALT_SOIL: RGB = (96, 86, 72)
 FRESH_LAVA: RGB = (34, 31, 30)
 ASH: RGB = (138, 132, 124)
 LAVA_GLOW: RGB = (246, 104, 32)
+OASIS_GREEN: RGB = (58, 108, 46)
 LAKE: RGB = (62, 106, 146)
 SALT_FLAT: RGB = (214, 210, 196)
 RIVER: RGB = (62, 104, 150)
@@ -477,12 +479,15 @@ def land_colour(
         # thins the vegetation under it.
         colour = _mix(colour, ASH, 0.75 * overlay.ash * (1 - 0.4 * forest))
         colour = _mix(colour, FRESH_LAVA, 0.9 * overlay.lava)
+        # An oasis: date palms and gardens around its spring.
+        colour = _mix(colour, OASIS_GREEN, 0.9 * overlay.green)
     texture = eroded_fbm(points, zeros, 23, 4, radius_m / 25e3, 0.6, 0.0).reshape(shape)
     colour *= (1 + 0.045 * texture + 0.05 * patch)[..., None]
     shaded = colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
     if overlay is not None:
-        # Molten rock glows by its own light.
+        # Molten rock glows by its own light; spring ponds are flat water.
         shaded = _mix(shaded, LAVA_GLOW, overlay.glow)
+        shaded = _mix(shaded, LAKE, overlay.pond)
     return shaded
 
 
@@ -647,8 +652,15 @@ def river_layer(
     lat = np.degrees(np.arcsin(np.clip(mesh.xyz[:, 2], -1, 1)))
     x = ((lon - frame.central_meridian_deg + 180) % 360) / 360 * columns
     y = (90 - lat) / 180 * rows
+    tree = KDTree(mesh.xyz)
+    links = tuple(
+        (int(tree.query(a)[1]), int(tree.query(b)[1]))
+        for a, b in zip(result.wonders.forks.split_xyz, result.wonders.forks.branch_xyz,
+                        strict=True)
+    )
     return river_coverage(
-        x, y, flow.receiver, discharge, major, stop, (rows, columns), columns / 4800, supersample
+        x, y, flow.receiver, discharge, major, stop, (rows, columns), columns / 4800, supersample,
+        links=links,
     )
 
 
@@ -707,11 +719,13 @@ def river_coverage(
     width_scale: float,
     supersample: int = 2,
     meander_px: F64 | None = None,
+    links: tuple[tuple[int, int], ...] = (),
 ) -> F64:
     """Tapered, Chaikin-smoothed, anti-aliased river lines for nodes at pixel (x, y).
 
     ``meander_px`` (per node, pixels; 0 for straight reaches) adds meanders of
-    that wavelength, as alluvial rivers wind on gentle ground.
+    that wavelength, as alluvial rivers wind on gentle ground. ``links`` join
+    node pairs that no receiver joins, such as a splitting river's branch.
     """
     rows, columns = shape
     if not major.any():
@@ -764,6 +778,15 @@ def river_coverage(
                 fill=255,
                 width=max(1, round(float(width[k]))),
             )
+    for a, b in links:
+        if abs(float(x[a] - x[b])) > columns / 2:
+            continue
+        width = (0.4 + 1.6 * (float(discharge[b]) / peak) ** 0.5) * width_scale * supersample
+        draw.line(
+            ((float(x[a]) * supersample, float(y[a]) * supersample),
+             (float(x[b]) * supersample, float(y[b]) * supersample)),
+            fill=255, width=max(1, round(width)),
+        )
     mask = mask.resize((columns, rows), Image.Resampling.LANCZOS)
     return np.asarray(mask, dtype=np.float64) / 255.0
 

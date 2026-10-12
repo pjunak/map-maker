@@ -339,11 +339,14 @@ class GeologyEditor(tk.Toplevel):
 
     def _describe_landmark(self, *_args: str) -> None:
         spec = WONDERS[self._landmark_kind()]
-        low, high, usual = spec.size_km
+        if spec.size_km is None:
+            size = " Leave the size blank."
+        else:
+            low, high, usual = spec.size_km
+            size = f" Size is its {spec.size}, {low:g}-{high:g} km; blank uses {usual:g} km."
         clicks = " Place it with two clicks, one per end." if spec.line else ""
         self.landmark_help.set(
-            f"{spec.summary} Size is its {spec.size}, {low:g}-{high:g} km; blank uses "
-            f"{usual:g} km.{clicks} Placed wonders replace random ones of their kind."
+            f"{spec.summary}{size}{clicks} Placed wonders replace random ones of their kind."
         )
 
     def _build_map(self, main: ttk.Frame) -> None:
@@ -403,7 +406,8 @@ class GeologyEditor(tk.Toplevel):
         for m in sorted(self.recipe.landmarks, key=lambda m: m.name):
             self.tree.insert(
                 "landmarks", "end", iid=m.id,
-                text=f"{m.name} · {WONDERS[m.kind].label} {m.effective_size_km:,.4g} km",
+                text=f"{m.name} · {WONDERS[m.kind].label}"
+                + ("" if WONDERS[m.kind].size_km is None else f" {m.effective_size_km:,.4g} km"),
             )
         if self._landmark_selected and self.tree.exists(self._landmark_selected):
             self.tree.selection_set(self._landmark_selected)
@@ -1030,6 +1034,15 @@ class GeologyEditor(tk.Toplevel):
                 )
                 if m.kind == "active":
                     canvas.create_oval(x - 3, y - r - 3, x + 3, y - r + 3, fill=colour, outline="")
+            elif m.kind == "oasis":
+                canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
+                canvas.create_oval(x - 3, y - 3, x + 3, y + 3, fill=colour, outline="")
+            elif m.kind == "fork":
+                # A river dividing in two.
+                r = 7.0
+                canvas.create_line(x, y + r, x, y, fill=colour, width=3)
+                canvas.create_line(x, y, x - r, y - r, fill=colour, width=3)
+                canvas.create_line(x, y, x + r, y - r, fill=colour, width=3)
             elif m.kind == "tepui":
                 canvas.create_rectangle(x - r, y - 0.7 * r, x + r, y + 0.7 * r, outline=colour,
                                         width=2)

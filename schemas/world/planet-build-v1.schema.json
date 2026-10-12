@@ -36,7 +36,7 @@
       "additionalProperties": false,
       "required": ["relief", "climate"],
       "properties": {
-        "relief": { "const": "sphere-mesh-stream-power-v22" },
+        "relief": { "const": "sphere-mesh-stream-power-v23" },
         "climate": { "enum": ["planet-climate-v6", null] }
       }
     },
@@ -64,7 +64,10 @@
           "type": "array",
           "uniqueItems": true,
           "items": {
-            "enum": ["titan", "shattered", "active", "crater", "chasm", "cliff", "tepui"]
+            "enum": [
+              "titan", "shattered", "active", "crater", "chasm", "cliff", "tepui", "oasis",
+              "fork"
+            ]
           }
         }
       }

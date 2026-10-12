@@ -34,6 +34,14 @@ from dmtools.terrain.pipeline.planet_scarps import (
     tepui_group,
     tepui_relief,
 )
+from dmtools.terrain.pipeline.planet_waters import (
+    Forks,
+    Oases,
+    authored_oases,
+    oasis_cover,
+    oasis_relief,
+    place_oases,
+)
 from dmtools.terrain.pipeline.wonder_geometry import (
     destination,
     draw_site,
@@ -186,17 +194,20 @@ class Wonders:
     cliffs: Cliffs
     tepuis: Tepuis
     eruptions: Eruptions  # of the giant active volcano, which is in the volcano list
+    oases: Oases
+    forks: Forks
 
     def __len__(self) -> int:
         return (
             len(self.craters) + len(self.chasms) + len(self.cliffs) + len(self.tepuis)
-            + len(self.eruptions)
+            + len(self.eruptions) + len(self.oases) + len(self.forks)
         )
 
     @staticmethod
     def empty() -> Wonders:
         return Wonders(
-            Craters.empty(), Chasms.empty(), Cliffs.empty(), Tepuis.empty(), Eruptions.empty()
+            Craters.empty(), Chasms.empty(), Cliffs.empty(), Tepuis.empty(), Eruptions.empty(),
+            Oases.empty(), Forks.empty(),
         )
 
 
@@ -207,6 +218,8 @@ class WonderCover:
     lava: F64  # fresh, bare lava
     ash: F64  # an ash blanket
     glow: F64  # molten rock in an erupting vent
+    green: F64  # an oasis's palms and gardens
+    pond: F64  # an oasis's spring pond
 
     def reshape(self, shape: tuple[int, ...]) -> WonderCover:
         return WonderCover(*(field.reshape(shape) for field in self.fields()))
@@ -214,17 +227,20 @@ class WonderCover:
     def crop(self, rows: slice) -> WonderCover:
         return WonderCover(*(field[rows, rows] for field in self.fields()))
 
-    def fields(self) -> tuple[F64, F64, F64]:
-        return self.lava, self.ash, self.glow
+    def fields(self) -> tuple[F64, F64, F64, F64, F64]:
+        return self.lava, self.ash, self.glow, self.green, self.pond
 
 
 def wonder_cover(
     points: F64, planet_radius_m: float, wonders: Wonders, detail_m: float | None = None
 ) -> WonderCover | None:
     """The wonders' cover at unit vectors ``points``, or None where there is none."""
-    if not len(wonders.eruptions):
+    if not len(wonders.eruptions) and not len(wonders.oases):
         return None
-    return WonderCover(*eruption_cover(points, planet_radius_m, wonders.eruptions, detail_m))
+    return WonderCover(
+        *eruption_cover(points, planet_radius_m, wonders.eruptions, detail_m),
+        *oasis_cover(points, planet_radius_m, wonders.oases, detail_m),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -247,6 +263,7 @@ def place_wonders(
     placed: tuple[PlacedWonder, ...],
     blocked: B,
     seed: int,
+    desert: B | None = None,
 ) -> Wonders:
     """Hand-placed wonders, and random ones of ``kinds`` where none is placed by hand.
 
@@ -301,7 +318,17 @@ def place_wonders(
         )
     elif "tepui" in kinds:
         tepuis = tepui_group(mesh, land, coast_m, stream(9393), blocked)
-    return Wonders(craters, chasms, cliffs, tepuis, Eruptions.empty())
+    for xyz, radius in zip(tepuis.xyz, tepuis.radius_m, strict=True):
+        blocked |= footprint(mesh, xyz[None], np.array([2.0 * radius]))
+    oases = Oases.empty()
+    if items := mine("oasis"):
+        oases = authored_oases(
+            mesh, land, np.array([p.xyz for p in items]),
+            np.array([p.size_m / 2 for p in items]), tuple(p.name for p in items),
+        )
+    elif "oasis" in kinds and desert is not None:
+        oases = place_oases(mesh, desert & (coast_m > 60e3) & ~blocked, stream(9494))
+    return Wonders(craters, chasms, cliffs, tepuis, Eruptions.empty(), oases, Forks.empty())
 
 
 def wonder_relief(
@@ -318,6 +345,7 @@ def wonder_relief(
         + cliff_relief(points, planet_radius_m, wonders.cliffs, detail_m)
         + tepui_relief(points, planet_radius_m, wonders.tepuis, detail_m)
         + lava_relief(points, planet_radius_m, wonders.eruptions, detail_m)
+        + oasis_relief(points, planet_radius_m, wonders.oases, detail_m)
     )
 
 

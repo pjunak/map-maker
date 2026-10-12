@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 type WonderKind = Literal[
-    "titan", "shattered", "active", "crater", "chasm", "cliff", "tepui"
+    "titan", "shattered", "active", "crater", "chasm", "cliff", "tepui", "oasis", "fork"
 ]
 
 
@@ -17,8 +17,8 @@ type WonderKind = Literal[
 class WonderSpec:
     label: str  # its name in the app
     summary: str  # what it is, in a sentence
-    size: str  # what a hand-placed wonder's size measures
-    size_km: tuple[float, float, float]  # allowed range and the usual size
+    size: str | None  # what a hand-placed wonder's size measures; None if it has none
+    size_km: tuple[float, float, float] | None  # allowed range and the usual size
     length_km: tuple[float, float] | None = None  # set for wonders placed by two ends
 
     @property
@@ -64,6 +64,18 @@ WONDERS: dict[WonderKind, WonderSpec] = {
         "Tepui",
         "A table mountain walled by sheer cliffs on every side; random ones come in groups.",
         "diameter", (10.0, 300.0, 70.0),
+    ),
+    "oasis": WonderSpec(
+        "Oasis",
+        "A spring-fed pond ringed by palms and gardens in a hot desert; random ones are "
+        "scattered across the deserts.",
+        "diameter", (2.0, 60.0, 15.0),
+    ),
+    "fork": WonderSpec(
+        "Splitting river",
+        "A large river that divides on a low divide and reaches the sea two ways. Place it "
+        "near a large river; it splits where the divide is lowest.",
+        None, None,
     ),
 }
 WONDER_KINDS: tuple[WonderKind, ...] = tuple(WONDERS)

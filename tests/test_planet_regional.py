@@ -181,6 +181,11 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
     assert len(reloaded.eruptions.flows) == len(wonders.eruptions.flows)
     assert np.allclose(reloaded.eruptions.vent_xyz, wonders.eruptions.vent_xyz)
     assert np.allclose(reloaded.eruptions.flow_fresh, wonders.eruptions.flow_fresh)
+    assert len(reloaded.oases) == len(wonders.oases)
+    assert np.allclose(reloaded.oases.xyz, wonders.oases.xyz)
+    assert len(wonders.forks) == 1
+    assert np.allclose(reloaded.forks.branch_xyz, wonders.forks.branch_xyz)
+    assert np.allclose(reloaded.forks.area_m2, wonders.forks.area_m2)
     assert np.allclose(loaded.parent.young_m(), young, atol=0.1)
 
 

@@ -120,6 +120,8 @@ class GeologyLandmark:
         spec = WONDERS[self.kind]
         label = spec.label.lower()
         if self.size_km is not None:
+            if spec.size_km is None:
+                raise ValueError(f"A {label} has no size.")
             low, high, _ = spec.size_km
             if not _finite_number(self.size_km) or not low <= self.size_km <= high:
                 raise ValueError(f"A {label} needs a {spec.size} from {low:g} to {high:g} km.")
@@ -136,7 +138,10 @@ class GeologyLandmark:
     @property
     def effective_size_km(self) -> float:
         """The size in kilometres, defaulting to the kind's usual size."""
-        return WONDERS[self.kind].size_km[2] if self.size_km is None else self.size_km
+        if self.size_km is not None:
+            return self.size_km
+        usual = WONDERS[self.kind].size_km
+        return 0.0 if usual is None else usual[2]
 
 
 @dataclass(frozen=True, slots=True)

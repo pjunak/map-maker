@@ -36,9 +36,9 @@ backlog, and [status](../research/status.md) records what works now.
      algorithm `planet-blended-tiles-v6`).
 2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
    settings for random placement or placed by hand. Titans, shattered and
-   giant active volcanoes, craters, chasms, great cliffs and tepuis are done; next
-   are water wonders (oasis, splitting river), an aging tool that erodes each
-   wonder for its age, and waterfalls where rivers leave cliffs.
+   giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a
+   splitting river are done; next are an aging tool that erodes each wonder for
+   its age, and waterfalls where rivers leave cliffs.
 3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks

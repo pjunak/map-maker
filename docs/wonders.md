@@ -24,6 +24,8 @@ Lakes form in them where the climate is wet and salt pans where it is dry.
 | Great chasm | `chasm` | A rift canyon system 900–2,200 km long and up to 3 km deep, with parallel troughs, side canyons and uplifted shoulders. | Width 10–200 km, usually 60 km; placed by its two ends, 100–4,000 km apart. |
 | Great cliff | `cliff` | A fault scarp 1.5–3.5 km high and 300–1,200 km long. Its raised block tilts gently back from a steep, buttressed face; talus lies below it and a trough along its foot. At random it rises on the side that already stands higher. | Height 0.5–6 km, usually 2.5 km; placed by its two ends, 50–3,000 km apart, with the high side to the left going from the first end to the second. |
 | Tepui | `tepui` | A table mountain 1–2.8 km high, walled by sheer cliffs, with a lobed, elongated plan and detached outliers. At random two to five stand in a group. | Diameter 10–300 km, usually 70 km; larger ones stand higher. |
+| Oasis | `oasis` | A spring-fed pond in a hollow, ringed by palms and gardens. Random oases (two to five, at least 300 km apart) lie in hot deserts, where rain is under 15 % of the potential evaporation; they need a climate. | Diameter 2–60 km, usually 15 km. |
+| Splitting river | `fork` | A large river divides on a low divide (at most 300 m above it) and sends a quarter to nearly half of its water to the sea by another basin, like the Casiquiare joining the Orinoco to the Amazon. Every map draws the branch. | No size; place it near a large river and it splits where another basin is close and the divide lowest. |
 
 The science behind each shape, and what was tried before, is in the
 [volcanism and wonders report](research/2026-10-08-volcanism.md).
