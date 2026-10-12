@@ -159,6 +159,9 @@ def create_parser() -> argparse.ArgumentParser:
     planet.add_argument("--wonders", type=wonder_kinds, default=(), metavar="KINDS",
                         help="Fantastical landmarks placed at random: a comma-separated "
                              f"list of {', '.join(WONDER_KINDS)}, or all.")
+    planet.add_argument("--wonder-age", type=float, default=0.0, metavar="MYR",
+                        help="Age the wonders by eroding each for this many million years "
+                             "(0 keeps them fresh; landmarks may set their own).")
     planet.add_argument("--climate-passes", type=int, default=1,
                         help="Climate/erosion couplings; 0 disables climate and biomes.")
     planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")
@@ -263,6 +266,7 @@ def _run_world_planet(arguments: argparse.Namespace) -> int:
             climate_passes=arguments.climate_passes,
             volcanic_islands=arguments.volcanic_islands,
             wonders=arguments.wonders,
+            wonder_age_myr=arguments.wonder_age,
         )
         path = build_planet(
             arguments.project, arguments.output, arguments.geology, settings,

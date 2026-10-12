@@ -6,7 +6,12 @@ from re import fullmatch
 from typing import Literal
 
 from dmtools.terrain.domain.models import LandformSettings, Point2D
-from dmtools.terrain.domain.wonders import WONDER_KINDS, WONDERS, WonderKind
+from dmtools.terrain.domain.wonders import (
+    MAX_WONDER_AGE_MYR,
+    WONDER_KINDS,
+    WONDERS,
+    WonderKind,
+)
 from dmtools.terrain.domain.world import WorldProject
 
 type GeologicalSetting = Literal[
@@ -105,6 +110,7 @@ class GeologyLandmark:
     position: Point2D
     size_km: float | None = None
     end: Point2D | None = None
+    age_myr: float | None = None  # None uses the planet's wonder age
 
     def __post_init__(self) -> None:
         _name(self.id, "Landmark ID")
@@ -134,6 +140,11 @@ class GeologyLandmark:
                 raise ValueError(f"A {label}'s ends must differ.")
         elif self.end is not None:
             raise ValueError(f"A {label} has no end point.")
+        if self.age_myr is not None:
+            if not spec.ages:
+                raise ValueError(f"A {label} does not age.")
+            if not _finite_number(self.age_myr) or not 0 <= self.age_myr <= MAX_WONDER_AGE_MYR:
+                raise ValueError(f"A {label}'s age must be 0-{MAX_WONDER_AGE_MYR:g} Myr.")
 
     @property
     def effective_size_km(self) -> float:

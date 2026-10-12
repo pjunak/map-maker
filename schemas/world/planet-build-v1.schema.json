@@ -45,7 +45,7 @@
       "required": [
         "seed", "nodes", "duration_myr", "step_kyr", "erodibility", "area_exponent",
         "process_area_km2", "calibration_iterations", "climate_passes", "climate",
-        "volcanic_islands", "wonders"
+        "volcanic_islands", "wonders", "wonder_age_myr"
       ],
       "properties": {
         "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
@@ -59,6 +59,7 @@
         "climate_passes": { "type": "integer", "minimum": 0 },
         "climate": { "type": "object" },
         "volcanic_islands": { "type": "boolean" },
+        "wonder_age_myr": { "type": "number", "minimum": 0, "maximum": 500 },
         "wonders": {
           "description": "Wonder kinds placed at random.",
           "type": "array",

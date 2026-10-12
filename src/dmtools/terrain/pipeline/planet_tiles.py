@@ -20,11 +20,11 @@ from dmtools.terrain.domain.seeds import stage_seed
 from dmtools.terrain.pipeline.control import CancellationToken
 from dmtools.terrain.pipeline.planet_kernels import interpolate_to_lonlat
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, fibonacci_nodes, vertex_triangles
+from dmtools.terrain.pipeline.planet_patch import regional_mesh
 from dmtools.terrain.pipeline.planet_regional import (
     RegionalParent,
     RegionalResult,
     enrich,
-    regional_mesh,
 )
 
 type F64 = NDArray[np.float64]

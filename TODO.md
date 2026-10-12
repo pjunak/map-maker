@@ -14,7 +14,7 @@ small synthetic terrain before choosing one.
 
 See the [plan](docs/strategy/README.md) for states and evidence.
 
-- [ ] **Wonders:** an aging tool, and waterfalls where rivers leave cliffs.
+- [ ] **Wonders:** waterfalls where rivers leave cliffs.
 - [ ] **M2 planet relief:**
   - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).

@@ -119,3 +119,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0088: Nest regional detail levels, each enriched from the level above](0088-nested-regional-detail-levels.md)
 - [ADR-0089: Show every world map in one view with drill-down levels](0089-one-map-view-with-drill-down-levels.md)
 - [ADR-0090: Add coast detail below the drawing's precision at regional levels](0090-regional-coast-detail-below-drawing-precision.md)
+- [ADR-0091: Age wonders by eroding each on its own patch](0091-age-wonders-on-their-own-patches.md)

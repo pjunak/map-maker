@@ -11,7 +11,7 @@ that maps redraw sharply at any scale.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from typing import Any
@@ -20,6 +20,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
+from dmtools.terrain.pipeline.planet_aging import AgedPatch, Aging, AgingSetup, aging_change
 from dmtools.terrain.pipeline.planet_eruptions import Eruptions, eruption_cover, lava_relief
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
@@ -86,6 +87,10 @@ CHASM_PARALLEL = (1, 4)  # troughs alongside part of the chasm, like Valles Mari
 # to the axes is measured, so every outline is irregular without a pattern.
 CHASM_WARP = 0.45  # of the widest path's width, at the coarsest scale
 CHASM_TRIES = 120
+# Aging wears raised wonders slowly: tepuis keep a quartzite caprock for hundreds
+# of millions of years, and great scarps are held up by hard layers.
+TEPUI_RESISTANCE = 4.0
+CLIFF_RESISTANCE = 2.5
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +201,7 @@ class Wonders:
     eruptions: Eruptions  # of the giant active volcano, which is in the volcano list
     oases: Oases
     forks: Forks
+    aging: Aging  # what aging changed (ADR-0091)
 
     def __len__(self) -> int:
         return (
@@ -207,7 +213,7 @@ class Wonders:
     def empty() -> Wonders:
         return Wonders(
             Craters.empty(), Chasms.empty(), Cliffs.empty(), Tepuis.empty(), Eruptions.empty(),
-            Oases.empty(), Forks.empty(),
+            Oases.empty(), Forks.empty(), Aging.empty(),
         )
 
 
@@ -252,6 +258,7 @@ class PlacedWonder:
     end: F64 | None
     size_m: float
     name: str
+    age_myr: float | None = None  # None uses the planet's wonder age
 
 
 def place_wonders(
@@ -264,13 +271,32 @@ def place_wonders(
     blocked: B,
     seed: int,
     desert: B | None = None,
+    aging: AgingSetup | None = None,
 ) -> Wonders:
     """Hand-placed wonders, and random ones of ``kinds`` where none is placed by hand.
 
     Each kind has its own random stream, and each is kept clear of the wonders
-    placed before it (and of the ``blocked`` nodes, such as a titan).
+    placed before it (and of the ``blocked`` nodes, such as a titan). With
+    ``aging``, each wonder older than 0 is eroded for its age (ADR-0091).
     """
     blocked = blocked.copy()
+    patches: list[AgedPatch] = []
+    radius = mesh.radius_m
+
+    def grow(
+        centre: F64,
+        reach: float,
+        relief: Callable[[F64, float], F64],
+        item: PlacedWonder | None,
+        resistance: float = 1.0,
+    ) -> None:
+        if aging is None:
+            return
+        age = aging.default_age_myr if item is None or item.age_myr is None else item.age_myr
+        if age > 0:
+            patches.append(
+                aging.patch(centre, reach, radius, relief, age, len(patches), resistance)
+            )
 
     def mine(kind: str) -> tuple[PlacedWonder, ...]:
         return tuple(p for p in placed if p.kind == kind)
@@ -290,14 +316,44 @@ def place_wonders(
     elif "crater" in kinds:
         craters = place_craters(mesh, land, coast_m, ground_m, stream(9090), blocked)
     blocked |= footprint(mesh, craters.xyz, 2.0 * craters.radius_m)
-    chasms = Chasms.empty()
-    if items := mine("chasm"):
-        chasms = authored_chasms(
-            mesh, land, ground_m, ends(items), np.array([p.size_m for p in items]),
-            tuple(p.name for p in items), stream(9191),
+    placed_craters = mine("crater")
+    for k in range(len(craters)):
+        one = Craters(
+            craters.xyz[k : k + 1], craters.radius_m[k : k + 1], craters.depth_m[k : k + 1]
         )
+        grow(
+            craters.xyz[k], 2.6 * float(craters.radius_m[k]),
+            lambda p, _d, one=one: crater_relief(p, radius, one),
+            placed_craters[k] if placed_craters else None,
+        )
+    systems: list[tuple[Chasms, PlacedWonder | None]] = []
+    if items := mine("chasm"):
+        chasm_rng = stream(9191)
+        for item in items:
+            systems.append((
+                authored_chasms(
+                    mesh, land, ground_m, ends((item,)), np.array([item.size_m]), (item.name,),
+                    chasm_rng,
+                ),
+                item,
+            ))
     elif "chasm" in kinds:
-        chasms = place_chasm(mesh, land, coast_m, ground_m, stream(9191), blocked)
+        systems.append((place_chasm(mesh, land, coast_m, ground_m, stream(9191), blocked), None))
+    for system, item in systems:
+        if not len(system):
+            continue
+        middle = system.paths[0].mean(axis=0)
+        middle /= np.linalg.norm(middle)
+        span = float(np.arccos(np.clip(np.vstack(system.paths) @ middle, -1, 1)).max()) * radius
+        grow(
+            middle, span + 4 * float(system.width_m.max()),
+            lambda p, d, system=system: chasm_relief(p, radius, system, d), item,
+        )
+    chasms = Chasms(
+        tuple(path for system, _ in systems for path in system.paths),
+        np.concatenate([system.width_m for system, _ in systems] or [np.zeros(0)]),
+        tuple(depth for system, _ in systems for depth in system.depth_m),
+    )
     for path, width in zip(chasms.paths, chasms.width_m, strict=True):
         blocked |= footprint(mesh, path[::8], np.full(len(path[::8]), 1.5 * width))
     cliffs = Cliffs.empty()
@@ -308,8 +364,19 @@ def place_wonders(
         )
     elif "cliff" in kinds:
         cliffs = place_cliff(mesh, land, coast_m, ground_m, stream(9292), blocked)
-    for path, height in zip(cliffs.paths, cliffs.height_m, strict=True):
+    placed_cliffs = mine("cliff")
+    for k, (path, height) in enumerate(zip(cliffs.paths, cliffs.height_m, strict=True)):
         blocked |= footprint(mesh, path[::4], np.full(len(path[::4]), 0.5 * CLIFF_BACK * height))
+        one = Cliffs((path,), cliffs.height_m[k : k + 1], (cliffs.trough_m[k],))
+        middle = path.mean(axis=0)
+        middle /= np.linalg.norm(middle)
+        span = float(np.arccos(np.clip(path @ middle, -1, 1)).max()) * radius
+        grow(
+            middle, span + CLIFF_BACK * float(height) + 20e3,
+            lambda p, d, one=one: cliff_relief(p, radius, one, d),
+            placed_cliffs[k] if placed_cliffs else None,
+            CLIFF_RESISTANCE,
+        )
     tepuis = Tepuis.empty()
     if items := mine("tepui"):
         tepuis = authored_tepuis(
@@ -318,8 +385,18 @@ def place_wonders(
         )
     elif "tepui" in kinds:
         tepuis = tepui_group(mesh, land, coast_m, stream(9393), blocked)
-    for xyz, radius in zip(tepuis.xyz, tepuis.radius_m, strict=True):
-        blocked |= footprint(mesh, xyz[None], np.array([2.0 * radius]))
+    placed_tepuis = mine("tepui")
+    for k, (xyz, size) in enumerate(zip(tepuis.xyz, tepuis.radius_m, strict=True)):
+        blocked |= footprint(mesh, xyz[None], np.array([2.0 * size]))
+        one = Tepuis(*(field[k : k + 1] for field in (
+            tepuis.xyz, tepuis.radius_m, tepuis.height_m, tepuis.aspect, tepuis.azimuth
+        )))
+        grow(
+            xyz, 2.5 * float(size) * float(np.sqrt(tepuis.aspect[k])),
+            lambda p, d, one=one: tepui_relief(p, radius, one, d),
+            placed_tepuis[k] if placed_tepuis else None,
+            TEPUI_RESISTANCE,
+        )
     oases = Oases.empty()
     if items := mine("oasis"):
         oases = authored_oases(
@@ -328,7 +405,10 @@ def place_wonders(
         )
     elif "oasis" in kinds and desert is not None:
         oases = place_oases(mesh, desert & (coast_m > 60e3) & ~blocked, stream(9494))
-    return Wonders(craters, chasms, cliffs, tepuis, Eruptions.empty(), oases, Forks.empty())
+    return Wonders(
+        craters, chasms, cliffs, tepuis, Eruptions.empty(), oases, Forks.empty(),
+        Aging(tuple(patches)),
+    )
 
 
 def wonder_relief(
@@ -346,6 +426,7 @@ def wonder_relief(
         + tepui_relief(points, planet_radius_m, wonders.tepuis, detail_m)
         + lava_relief(points, planet_radius_m, wonders.eruptions, detail_m)
         + oasis_relief(points, planet_radius_m, wonders.oases, detail_m)
+        + aging_change(points, planet_radius_m, wonders.aging)
     )
 
 

@@ -346,7 +346,7 @@ def test_landmarks_round_trip_and_stay_optional() -> None:
             GeologyLandmark("landmark-eye", "The Eye", "crater", (x0 + 1, y0 + 1), 180.0),
             GeologyLandmark(
                 "landmark-rift", "The Rift", "chasm", centre, None,
-                (centre[0] + 0.1 * (x1 - x0), centre[1]),
+                (centre[0] + 0.1 * (x1 - x0), centre[1]), 20.0,
             ),
         ),
     )
@@ -366,6 +366,8 @@ def test_landmarks_round_trip_and_stay_optional() -> None:
         {"end": (x0 + 1, y0 + 1)},  # only a chasm has an end
         {"kind": "chasm"},  # without one
         {"kind": "chasm", "end": centre},
+        {"age_myr": -1.0},
+        {"kind": "titan", "age_myr": 5.0},  # volcanoes stay young
     ):
         with pytest.raises(ValueError):
             GeologyLandmark(**({"id": "landmark-a", "name": "A", "kind": "crater",

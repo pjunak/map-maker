@@ -7,6 +7,7 @@ seed, so results do not depend on stage order.
 """
 
 from dataclasses import dataclass, replace
+from functools import partial
 
 import numpy as np
 from numpy.typing import NDArray
@@ -27,6 +28,7 @@ from dmtools.terrain.pipeline.control import (
     cancellable_progress,
     check_cancelled,
 )
+from dmtools.terrain.pipeline.planet_aging import AgingSetup
 from dmtools.terrain.pipeline.planet_climate import (
     Climate,
     downscale_climate,
@@ -370,19 +372,30 @@ def generate_planet(
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
     evolved = np.where(land, evolved + cones, evolved)
     # Wonders are young too; lakes may then fill them.
+    if settings.wonders or landmarks:
+        say(0.94, "Placing wonders" + (" and aging them" if settings.wonder_age_myr > 0 else ""))
     giants = volcanoes.subset(volcanoes.setting >= TITAN)
     wonders = place_wonders(
         mesh, land, coast, evolved, settings.wonders,
         tuple(
             PlacedWonder(
                 m.kind, unit(m.position), None if m.end is None else unit(m.end),
-                m.effective_size_km * 1e3, m.name,
+                m.effective_size_km * 1e3, m.name, m.age_myr,
             )
             for m in landmarks if m.kind not in VOLCANO_WONDERS
         ),
         footprint(mesh, giants.xyz, 2.0 * giants.radius_m), seeds[PLANET_VOLCANISM_STAGE_ID],
         None if climate is None
         else deserts(land, climate.precipitation_mm, climate.pet_mm, climate.temperature_c),
+        AgingSetup(
+            settings.wonder_age_myr,
+            partial(sample_field, mesh, values=evolved),
+            partial(sample_field, mesh, values=result.forcing.erodibility),
+            None if runoff is None else partial(sample_field, mesh, values=runoff),
+            settings.area_exponent,
+            stage_seed(settings.seed, "planet.aging"),
+            cancellation,
+        ),
     )
     # The giant active volcano erupts: lava flows and ash downwind of its vent.
     fire = giants.subset((giants.setting == WONDER) & giants.active)

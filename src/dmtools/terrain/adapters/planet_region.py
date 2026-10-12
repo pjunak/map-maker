@@ -47,7 +47,8 @@ from dmtools.terrain.pipeline.planet_climate import potential_evapotranspiration
 from dmtools.terrain.pipeline.planet_coast import coastline, window_finest_m
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
 from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
-from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult, inverse_aeqd
+from dmtools.terrain.pipeline.planet_patch import inverse_aeqd
+from dmtools.terrain.pipeline.planet_regional import RegionalParent, RegionalResult
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface
 from dmtools.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
 from dmtools.terrain.pipeline.planet_wonders import (

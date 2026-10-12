@@ -15,7 +15,7 @@ from benchmarks.planet.synthetic_world import WorldSpec, build_world
 from dmtools.terrain.application.world import open_world
 from dmtools.terrain.pipeline.planet_coast import Coastline, coastline
 from dmtools.terrain.pipeline.planet_forcing import source_xy
-from dmtools.terrain.pipeline.planet_regional import inverse_aeqd
+from dmtools.terrain.pipeline.planet_patch import inverse_aeqd
 from dmtools.terrain.pipeline.world import WorldMap
 
 SEED = 20261006

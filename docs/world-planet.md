@@ -133,6 +133,7 @@ leaves no `manifest.json`, so it never looks complete.
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
+| `--wonder-age` | 0 | Erode the wonders for this many million years (0 keeps them fresh); see the [wonder guide](wonders.md#age). Also **Age** on the Planet page. |
 | `--wonders` | none | Wonder kinds placed at random: a comma-separated list such as `titan,chasm`, or `all`. See the [wonder guide](wonders.md). Also checkboxes on the Planet page. |
 | `--volcanic-islands` | off | Let young volcanoes at sea rise as islands: hotspot chains of shield islands and island arcs behind ocean trenches. **Adds land beyond your coastline.** Also a checkbox on the Planet page. |
 | `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |

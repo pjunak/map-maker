@@ -163,6 +163,8 @@ def test_settings_reject_unsupported_requests() -> None:
         {"wonders": ["crater"]},
         {"wonders": ("crater", "crater")},
         {"wonders": ("dragon",)},
+        {"wonder_age_myr": -1.0},
+        {"wonder_age_myr": 1e6},
     ):
         with pytest.raises(ValueError):
             PlanetSettings(**bad)  # type: ignore[arg-type]
@@ -1092,6 +1094,45 @@ def test_a_river_splits_across_a_low_divide_and_reaches_the_sea_twice(
         return node
 
     assert mouth(below) != mouth(branch)
+
+
+def test_aging_rounds_a_crater_fills_its_floor_and_cuts_gullies() -> None:
+    from dmtools.terrain.pipeline.planet_aging import Aging, age_wonder, aging_change
+    from dmtools.terrain.pipeline.planet_wonders import Craters, crater_relief
+    from dmtools.terrain.pipeline.wonder_geometry import destination
+
+    centre = np.array([1.0, 0.0, 0.0])
+    craters = Craters(centre[None], np.array([60e3]), np.array([900.0]))
+    patch = age_wonder(
+        centre, 160e3, RADIUS, lambda p, _d: crater_relief(p, RADIUS, craters),
+        lambda p: np.full(len(p), 1500.0), lambda p: np.full(len(p), 5e-6), None,
+        age_myr=20.0, area_exponent=0.45, seed=3,
+    )
+    aging = Aging((patch,))
+    ring = np.stack([destination(centre, a, 60e3 / RADIUS) for a in np.linspace(0, 6, 24)])
+    trough = np.stack([destination(centre, a, 28e3 / RADIUS) for a in np.linspace(0, 6, 24)])
+    far = np.stack([destination(centre, a, 158e3 / RADIUS) for a in np.linspace(0, 6, 24)])
+    assert np.median(aging_change(ring, RADIUS, aging)) < -10.0  # the rim wears down
+    assert np.median(aging_change(trough, RADIUS, aging)) > 0.0  # the trough fills
+    assert np.all(np.abs(aging_change(far, RADIUS, aging)) < 1.0)  # the patch edge holds
+    # Gullies: the outer flank is cut unevenly around the crater.
+    flank = np.stack([destination(centre, a, 80e3 / RADIUS) for a in np.linspace(0, 6.2, 200)])
+    assert np.std(aging_change(flank, RADIUS, aging)) > 2.0
+
+
+def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Path) -> None:
+    from dmtools.terrain.adapters.planet_load import read_planet_parent
+    from dmtools.terrain.application.planet import export_planet, generate_planet_run
+
+    settings = replace(FAST, climate_passes=0, wonders=("crater",), wonder_age_myr=15.0)
+    run = generate_planet_run(open_world(world_path).project, None, settings, preview_width=0)
+    aging = run.result.wonders.aging
+    assert len(aging) == len(run.result.wonders.craters) >= 1
+    assert all(patch.age_myr == 15.0 for patch in aging.patches)
+    loaded = read_planet_parent(export_planet(run, tmp_path / "planet", width=128).parent)
+    reloaded = loaded.parent.wonders
+    assert reloaded is not None and len(reloaded.aging) == len(aging)
+    assert np.allclose(reloaded.aging.patches[0].change_m, aging.patches[0].change_m, atol=0.01)
 
 
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:

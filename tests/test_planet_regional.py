@@ -13,12 +13,8 @@ from dmtools.terrain.application.world import open_world
 from dmtools.terrain.domain.planet import PlanetSettings, RegionalSettings
 from dmtools.terrain.pipeline.planet import PlanetResult, generate_planet
 from dmtools.terrain.pipeline.planet_metrics import non_descending_receivers
-from dmtools.terrain.pipeline.planet_regional import (
-    RegionalParent,
-    enrich,
-    inverse_aeqd,
-    regional_mesh,
-)
+from dmtools.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
+from dmtools.terrain.pipeline.planet_regional import RegionalParent, enrich
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend, generate_tile
 
 

@@ -20,11 +20,8 @@ from scipy.spatial import KDTree
 
 from dmtools.terrain.pipeline.planet_coast import coastline, level_finest_m
 from dmtools.terrain.pipeline.planet_evolution import route
-from dmtools.terrain.pipeline.planet_regional import (
-    RegionalParent,
-    parent_inflows,
-    regional_mesh,
-)
+from dmtools.terrain.pipeline.planet_patch import regional_mesh
+from dmtools.terrain.pipeline.planet_regional import RegionalParent, parent_inflows
 from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend
 
 type F64 = NDArray[np.float64]

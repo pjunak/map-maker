@@ -20,6 +20,7 @@ class WonderSpec:
     size: str | None  # what a hand-placed wonder's size measures; None if it has none
     size_km: tuple[float, float, float] | None  # allowed range and the usual size
     length_km: tuple[float, float] | None = None  # set for wonders placed by two ends
+    ages: bool = False  # the aging tool can erode it (ADR-0091)
 
     @property
     def line(self) -> bool:
@@ -47,23 +48,23 @@ WONDERS: dict[WonderKind, WonderSpec] = {
     "crater": WonderSpec(
         "Impact crater",
         "A fresh crater with a central plateau that may hold a ring lake.",
-        "diameter", (20.0, 600.0, 240.0),
+        "diameter", (20.0, 600.0, 240.0), ages=True,
     ),
     "chasm": WonderSpec(
         "Great chasm",
         "A rift canyon system up to 3 km deep with parallel troughs and side canyons.",
-        "width", (10.0, 200.0, 60.0), (100.0, 4000.0),
+        "width", (10.0, 200.0, 60.0), (100.0, 4000.0), ages=True,
     ),
     "cliff": WonderSpec(
         "Great cliff",
         "A fault scarp kilometres high whose raised block tilts gently back from its "
         "edge; the high side lies to the left going from the first end to the second.",
-        "height", (0.5, 6.0, 2.5), (50.0, 3000.0),
+        "height", (0.5, 6.0, 2.5), (50.0, 3000.0), ages=True,
     ),
     "tepui": WonderSpec(
         "Tepui",
         "A table mountain walled by sheer cliffs on every side; random ones come in groups.",
-        "diameter", (10.0, 300.0, 70.0),
+        "diameter", (10.0, 300.0, 70.0), ages=True,
     ),
     "oasis": WonderSpec(
         "Oasis",
@@ -79,6 +80,15 @@ WONDERS: dict[WonderKind, WonderSpec] = {
     ),
 }
 WONDER_KINDS: tuple[WonderKind, ...] = tuple(WONDERS)
+
+
+MAX_WONDER_AGE_MYR = 500.0
+AGE_PRESETS: dict[str, float] = {
+    "Fresh": 0.0,
+    "Weathered · 10 Myr": 10.0,
+    "Old · 30 Myr": 30.0,
+    "Ancient · 80 Myr": 80.0,
+}
 
 
 def wonder_kinds(text: str) -> tuple[WonderKind, ...]:

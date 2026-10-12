@@ -110,6 +110,7 @@ class GeologyEditor(tk.Toplevel):
             "name": tk.StringVar(self),
             "kind": tk.StringVar(self, value=WONDERS["crater"].label),
             "size": tk.StringVar(self),
+            "age": tk.StringVar(self),
         }
         self.landmark_help = tk.StringVar(self)
         self._landmark_selected: str | None = None
@@ -319,7 +320,14 @@ class GeologyEditor(tk.Toplevel):
         )
         size = ttk.Entry(box, textvariable=self.landmark["size"], width=7)
         size.grid(row=2, column=2, sticky="w", pady=2)
-        self._controls.extend(((name, "normal"), (kind, "readonly"), (size, "normal")))
+        ttk.Label(box, text="Age Myr", style="Body.TLabel").grid(
+            row=2, column=3, sticky="e", padx=(GAP, 4)
+        )
+        age = ttk.Entry(box, textvariable=self.landmark["age"], width=6)
+        age.grid(row=2, column=4, sticky="w", pady=2)
+        self._controls.extend(
+            ((name, "normal"), (kind, "readonly"), (size, "normal"), (age, "normal"))
+        )
         buttons = ttk.Frame(box, style="Panel.TFrame")
         buttons.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(2, 0))
         for text, action in (
@@ -345,8 +353,12 @@ class GeologyEditor(tk.Toplevel):
             low, high, usual = spec.size_km
             size = f" Size is its {spec.size}, {low:g}-{high:g} km; blank uses {usual:g} km."
         clicks = " Place it with two clicks, one per end." if spec.line else ""
+        age = (
+            " Age in Myr erodes it (blank uses the planet's)." if spec.ages
+            else " Leave the age blank."
+        )
         self.landmark_help.set(
-            f"{spec.summary}{size}{clicks} Placed wonders replace random ones of their kind."
+            f"{spec.summary}{size}{clicks}{age} Placed wonders replace random ones of their kind."
         )
 
     def _build_map(self, main: ttk.Frame) -> None:
@@ -479,6 +491,7 @@ class GeologyEditor(tk.Toplevel):
             self.landmark["name"].set(landmark.name)
             self.landmark["kind"].set(WONDERS[landmark.kind].label)
             self.landmark["size"].set("" if landmark.size_km is None else f"{landmark.size_km:g}")
+            self.landmark["age"].set("" if landmark.age_myr is None else f"{landmark.age_myr:g}")
             self.form_tabs.select(self.landmark_tab)
             self.canvas.redraw()
             return
@@ -618,6 +631,13 @@ class GeologyEditor(tk.Toplevel):
 
     # Landmarks
 
+    def _landmark_age(self) -> float | None:
+        text = self.landmark["age"].get().strip()
+        try:
+            return float(text) if text else None
+        except ValueError as error:
+            raise ValueError("Landmark age must be a number of Myr, or blank.") from error
+
     def _landmark_values(self, kind_default: int) -> tuple[str, WonderKind, float | None]:
         kind = self._landmark_kind()
         name = self.landmark["name"].get().strip()
@@ -680,7 +700,7 @@ class GeologyEditor(tk.Toplevel):
             landmark = GeologyLandmark(
                 "landmark-" + uuid4().hex, name, kind,
                 position if start is None else start, size,
-                None if start is None else position,
+                None if start is None else position, self._landmark_age(),
             )
         except ValueError as error:
             self.status.set(str(error))
@@ -699,7 +719,7 @@ class GeologyEditor(tk.Toplevel):
             name, kind, size = self._landmark_values(1)
             updated = GeologyLandmark(
                 current.id, name, kind, current.position, size,
-                current.end if WONDERS[kind].line else None,
+                current.end if WONDERS[kind].line else None, self._landmark_age(),
             )
         except ValueError as error:
             self.status.set(str(error))

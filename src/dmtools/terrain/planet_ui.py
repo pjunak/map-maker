@@ -11,7 +11,7 @@ import numpy as np
 from dmtools.terrain.adapters.map_views import THEMES
 from dmtools.terrain.application.planet import PlanetRun
 from dmtools.terrain.domain.planet import PlanetSettings
-from dmtools.terrain.domain.wonders import WONDER_KINDS, WONDERS
+from dmtools.terrain.domain.wonders import AGE_PRESETS, WONDER_KINDS, WONDERS
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.ui_components import WrappingLabel, section
 from dmtools.terrain.ui_style import GAP
@@ -52,6 +52,7 @@ class PlanetPanel(ttk.Frame):
         self.climate = tk.BooleanVar(self, value=True)
         self.islands = tk.BooleanVar(self, value=False)
         self.wonders = {kind: tk.BooleanVar(self, value=False) for kind in WONDER_KINDS}
+        self.wonder_age = tk.StringVar(self, value=next(iter(AGE_PRESETS)))
         self.seed = tk.StringVar(self, value=str(PlanetSettings().seed))
         self.geology_path: Path | None = None
         self.geology_label = tk.StringVar(self, value="Automatic ranges · no geology recipe")
@@ -97,6 +98,14 @@ class PlanetPanel(ttk.Frame):
             check = ttk.Checkbutton(grid, text=WONDERS[kind].label, variable=self.wonders[kind])
             check.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, GAP))
             self.wonder_inputs.append(check)
+        age_row = ttk.Frame(wonders, style="Panel.TFrame")
+        age_row.pack(fill="x", pady=(GAP // 2, 0))
+        ttk.Label(age_row, text="Age", style="Body.TLabel").pack(side="left")
+        self.wonder_age_input = ttk.Combobox(
+            age_row, textvariable=self.wonder_age, values=tuple(AGE_PRESETS), state="readonly",
+            width=20,
+        )
+        self.wonder_age_input.pack(side="left", padx=GAP)
         geology = section(self, "Geology")
         WrappingLabel(geology, textvariable=self.geology_label, style="Body.TLabel").pack(
             fill="x"
@@ -138,6 +147,7 @@ class PlanetPanel(ttk.Frame):
             climate_passes=1 if self.climate.get() else 0,
             volcanic_islands=bool(self.islands.get()),
             wonders=tuple(kind for kind in WONDER_KINDS if self.wonders[kind].get()),
+            wonder_age_myr=AGE_PRESETS[self.wonder_age.get()],
         )
 
     def request_generate(self) -> None:
@@ -151,6 +161,7 @@ class PlanetPanel(ttk.Frame):
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"
         self.preset_input.configure(state="disabled" if busy else "readonly")
+        self.wonder_age_input.configure(state="disabled" if busy else "readonly")
         for widget in (self.climate_input, self.islands_input, *self.wonder_inputs,
                        self.seed_input, self.geology_button, self.generate_button):
             widget.configure(state=state)

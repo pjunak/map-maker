@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 
 from dmtools.terrain.domain.seeds import validate_master_seed
-from dmtools.terrain.domain.wonders import WONDER_KINDS, WonderKind
+from dmtools.terrain.domain.wonders import MAX_WONDER_AGE_MYR, WONDER_KINDS, WonderKind
 
 PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v23"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v6"
@@ -76,6 +76,8 @@ class PlanetSettings:
     volcanic_islands: bool = False
     # Opt-in: the kinds of wonder (domain.wonders) placed at random.
     wonders: tuple[WonderKind, ...] = ()
+    # Age of the wonders (Myr) for the aging tool (ADR-0091); 0 keeps them fresh.
+    wonder_age_myr: float = 0.0
 
     def __post_init__(self) -> None:
         validate_master_seed(self.seed)
@@ -87,6 +89,7 @@ class PlanetSettings:
             or any(kind not in WONDER_KINDS for kind in self.wonders)
         ):
             raise ValueError(f"Wonders must be distinct kinds from: {', '.join(WONDER_KINDS)}.")
+        _finite(self.wonder_age_myr, "Wonder age (Myr)", 0, MAX_WONDER_AGE_MYR)
         if (
             type(self.nodes) is not int
             or not MIN_PLANET_NODES <= self.nodes <= MAX_PLANET_NODES

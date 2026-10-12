@@ -78,6 +78,7 @@ def geology_document(recipe: WorldGeologyRecipe) -> dict[str, object]:
                 "position": [float(m.position[0]), float(m.position[1])],
                 "size_km": None if m.size_km is None else float(m.size_km),
                 "end": None if m.end is None else [float(m.end[0]), float(m.end[1])],
+                "age_myr": None if m.age_myr is None else float(m.age_myr),
             }
             for m in sorted(recipe.landmarks, key=lambda m: m.id)
         ],
@@ -186,7 +187,8 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
         landmarks: list[GeologyLandmark] = []
         for item in _array(record.get("landmarks", [])):
             keys = {"id", "name", "kind", "position", "size_km"}
-            landmark = _record(item, keys | ({"end"} if "end" in _keys(item) else set()))
+            optional = {"end", "age_myr"} & _keys(item)
+            landmark = _record(item, keys | optional)
             position = tuple(_number(n) for n in _array(landmark["position"]))
             if len(position) != 2:
                 raise ValueError("Landmark positions need two coordinates.")
@@ -208,6 +210,7 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
                     (position[0], position[1]),
                     None if size is None else _number(size),
                     end,
+                    None if landmark.get("age_myr") is None else _number(landmark["age_myr"]),
                 )
             )
         return WorldGeologyRecipe(world, tuple(defaults), tuple(provinces), tuple(landmarks))

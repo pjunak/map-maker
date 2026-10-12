@@ -17,6 +17,7 @@ from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.planet_build import PLANET_BUILD_SCHEMA, PLANET_BUILD_VERSION
 from dmtools.terrain.adapters.world_project import read_world_project
 from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
+from dmtools.terrain.pipeline.planet_aging import AgedPatch, Aging
 from dmtools.terrain.pipeline.planet_eruptions import Eruptions
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
@@ -161,6 +162,13 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
                     data["fork_discharge_m3_s"].astype(np.float64),
                     data["fork_area_m2"].astype(np.float64),
                 ),
+                Aging(tuple(
+                    AgedPatch(xyz, change, float(spacing), float(age))
+                    for xyz, change, spacing, age in zip(
+                        *paths_from_archive(data, "aging"), data["aging_spacing_m"],
+                        data["aging_age_myr"], strict=True,
+                    )
+                )),
             ),
             volcanoes=Volcanoes(
                 data["volcano_xyz"].astype(np.float64),

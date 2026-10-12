@@ -298,6 +298,29 @@ Two water wonders follow (`planet_waters.py`):
   branch, and regional maps route the branch's share from where it crosses.
   Both maps draw the short link across the divide.
 
+**Aging** (ADR-0091, `planet_aging.py`). Craters, chasms, great cliffs and
+tepuis can be given an age. Each is eroded on its own patch, a jittered hexagonal
+mesh of about 120,000 nodes centred on it, starting from the ground plus the fresh
+wonder, with the planet's stream-power model and runoff, no uplift and a quarter
+of the planet's erodibility (a quarter of that again for tepuis, which keep a
+quartzite caprock, and 40 % for great cliffs), then rounded by creep
+(0.5 m²/yr). On an 800k-node Aethelara build aged 20 Myr, tepuis at the full
+rate shrank to blobs and nearly vanished, hence the caprock. On a 120 km
+crater over 1,500 m plains, 10 Myr wears and gullies the rim and partly fills the
+trough; 60 Myr leaves a faint ring.
+
+- A first version kept the deepest floors as fixed sinks: they drew an erosion
+  wave across the whole plain within 5 Myr, and the full erosion rate wrecked
+  the crater by then.
+- The erosion model fills every closed hollow to its spill level at once, which
+  terraced the floor; now only 1 − exp(−age / 50 Myr) of that fill is kept.
+- A creep diffusivity of 30 m²/yr rounded rims over tens of kilometres and was
+  numerically unstable at the step cap; 0.5 m²/yr with exact stable substeps
+  rounds them over a few kilometres.
+
+The build stores each patch's aged-minus-fresh change; maps add it, interpolated,
+to the fresh shape they draw at their own scale.
+
 The wonder kinds are placed in a fixed order (titan, shattered and active
 volcanoes, craters, chasm, cliff, tepuis, oases, and the splitting river once
 rivers are known), each from its own random stream, and each keeps clear of the

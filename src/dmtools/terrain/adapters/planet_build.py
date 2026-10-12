@@ -301,6 +301,16 @@ def write_planet_build(
         "fork_branch_xyz": result.wonders.forks.branch_xyz.astype("<f8"),
         "fork_discharge_m3_s": result.wonders.forks.discharge_m3_s.astype("<f8"),
         "fork_area_m2": result.wonders.forks.area_m2.astype("<f8"),
+        **paths_archive(
+            "aging", tuple(patch.xyz for patch in result.wonders.aging.patches),
+            tuple(patch.change_m for patch in result.wonders.aging.patches),
+        ),
+        "aging_spacing_m": np.array(
+            [patch.spacing_m for patch in result.wonders.aging.patches], dtype="<f8"
+        ),
+        "aging_age_myr": np.array(
+            [patch.age_myr for patch in result.wonders.aging.patches], dtype="<f8"
+        ),
         "volcanic_m": result.volcanic_m.astype("<f4"),
         "volcano_xyz": v.xyz.astype("<f8"),
         "volcano_height_m": v.height_m.astype("<f4"),

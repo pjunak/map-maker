@@ -170,6 +170,15 @@
             "items": {
               "type": "number"
             }
+          },
+          "age_myr": {
+            "description": "Age (Myr) for the aging tool; null uses the planet's wonder age. Only craters, chasms, great cliffs and tepuis age.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 500
           }
         }
       }

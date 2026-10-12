@@ -75,7 +75,8 @@ land are identical with or without the optional recipe.
 The **Landmarks** tab places [wonders](wonders.md) where you want them. Choose a
 kind; the tab describes it and its size range. Optionally give a name and a size
 (a diameter, a width or a height, depending on the kind; blank uses the usual
-size). Click **Place on map**, then a point on land. Wonders placed by their two
+size). An age (**Age Myr**) erodes craters, chasms, cliffs and tepuis ([wonder guide](wonders.md#age)); blank uses the planet's.
+Click **Place on map**, then a point on land. Wonders placed by their two
 ends, such as a chasm, take a second click for the other end. Select a landmark
 in the tree to rename, resize (**Update**) or **Delete** it. Undo and redo cover
 landmarks too.
@@ -83,8 +84,8 @@ landmarks too.
 When the planet is generated with this recipe, placed wonders replace the random
 wonders of their kind. The planet reports an error if a landmark, or either end
 of a two-ended one, lies at sea. Landmarks are saved in the recipe's optional
-`landmarks` list, each with `kind`, `position`, `size_km` and, for two-ended
-wonders, `end` ([schema](../schemas/world/geology-v2.schema.json)). Recipes
+`landmarks` list, each with `kind`, `position`, `size_km`, an optional
+`age_myr` and, for two-ended wonders, `end` ([schema](../schemas/world/geology-v2.schema.json)). Recipes
 without landmarks still open.
 
 ## Values and overlap rules

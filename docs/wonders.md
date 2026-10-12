@@ -27,5 +27,21 @@ Lakes form in them where the climate is wet and salt pans where it is dry.
 | Oasis | `oasis` | A spring-fed pond in a hollow, ringed by palms and gardens. Random oases (two to five, at least 300 km apart) lie in hot deserts, where rain is under 15 % of the potential evaporation; they need a climate. | Diameter 2–60 km, usually 15 km. |
 | Splitting river | `fork` | A large river divides on a low divide (at most 300 m above it) and sends a quarter to nearly half of its water to the sea by another basin, like the Casiquiare joining the Orinoco to the Amazon. Every map draws the branch. | No size; place it near a large river and it splits where another basin is close and the divide lowest. |
 
+## Age
+
+Wonders are drawn fresh, as if they formed just now. An age erodes them: rivers
+cut gullies into their walls, creep rounds their rims and their floors fill with
+sediment. A crater 10 million years old keeps its shape with a worn, gullied
+rim; at 60 million years it is a faint ring, as Earth's oldest craters are.
+
+- **For the whole planet:** choose **Age** under **Wonders** on the Planet page
+  (fresh, weathered, old or ancient) or pass `--wonder-age` in million years.
+- **For one landmark:** set **Age Myr** in the Landmarks tab; blank uses the
+  planet's age.
+
+Craters, chasms, great cliffs and tepuis age; volcanoes, oases and rivers stay
+young. Each aged wonder is eroded on its own patch around it, about a minute
+each ([ADR-0091](adr/0091-age-wonders-on-their-own-patches.md)).
+
 The science behind each shape, and what was tried before, is in the
 [volcanism and wonders report](research/2026-10-08-volcanism.md).
