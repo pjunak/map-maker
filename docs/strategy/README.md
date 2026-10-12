@@ -34,6 +34,9 @@ backlog, and [status](../research/status.md) records what works now.
    - Regional coasts are refined below the drawing's precision, so local maps
      show bays and headlands instead of smooth traced curves (ADR-0090, tile
      algorithm `planet-blended-tiles-v6`).
+   - Regional plains no longer show straight grid lines: display carving drains
+     filled hollows along their thalweg, and ridged detail has no steps
+     ([report](../research/2026-10-12-straight-display-lines.md)).
 2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
    settings for random placement or placed by hand. Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a

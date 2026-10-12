@@ -18,10 +18,10 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | User guides and current contracts | 20 |
 | Developer and reference guides | 9 |
 | Architecture decision records | 88 |
-| Dated research reports | 93 |
+| Dated research reports | 95 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **230** |
+| **Total** | **232** |
 
 ## Project entry and guidance (4)
 
@@ -195,13 +195,14 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0089-one-map-view-with-drill-down-levels.md](adr/0089-one-map-view-with-drill-down-levels.md) | One World map view: registry themes in any projection, drill-down levels with a breadcrumb, background jobs and shared UI styles. |
 | [docs/adr/0090-regional-coast-detail-below-drawing-precision.md](adr/0090-regional-coast-detail-below-drawing-precision.md) | Regional levels use the drawn coast smoothed at its precision plus nested fractal detail; the planet keeps the exact coast. |
 
-## Dated research reports (93)
+## Dated research reports (95)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-12-straight-display-lines.md](research/2026-10-12-straight-display-lines.md) | Straight lines in regional hillshade: display carving across filled depressions and stepped ridged detail; isolating experiment, fixes, tests and Aethelara before/after. |
 | [docs/research/2026-10-11-regional-coast-detail.md](research/2026-10-11-regional-coast-detail.md) | Regional coast detail below the drawing's precision: method trials, chosen parameters and Aethelara before/after. |
 | [docs/research/2026-10-08-volcanism.md](research/2026-10-08-volcanism.md) | Arc, hotspot, rift and intraplate volcanoes: placement, shapes, rendering, export and limits. |
 | [docs/research/2026-10-08-plate-tectonics-and-sediment.md](research/2026-10-08-plate-tectonics-and-sediment.md) | Plate-driven collision belts, rifts, leading-edge margins and trenches; old orogens; results and limits. |
