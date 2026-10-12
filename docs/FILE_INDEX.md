@@ -15,13 +15,13 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 |---|---:|
 | Project entry and guidance | 4 |
 | Active plans and indexes | 13 |
-| User guides and current contracts | 20 |
+| User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 88 |
+| Architecture decision records | 92 |
 | Dated research reports | 96 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **232** |
+| **Total** | **238** |
 
 ## Project entry and guidance (4)
 
@@ -54,7 +54,7 @@ Current direction and navigation. Plans mark unimplemented features explicitly; 
 | [docs/strategy/landscape-evolution.md](strategy/landscape-evolution.md) | LE0-LE6 evolution, authoring, conservation and regional-history gates. |
 | [docs/strategy/world-context.md](strategy/world-context.md) | WC0-WC6 full-world import, shared context, climate and regional-history plan. |
 
-## User guides and current contracts (20)
+## User guides and current contracts (21)
 
 Current user workflows and numeric/file semantics, with future limits labelled in each guide.
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (90)
+## Architecture decision records (92)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -194,6 +194,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0088-nested-regional-detail-levels.md](adr/0088-nested-regional-detail-levels.md) | Nested regional detail levels (region 5 km, province 1 km, local 200 m), each enriched from a level parent built from the coarser level's tiles. |
 | [docs/adr/0089-one-map-view-with-drill-down-levels.md](adr/0089-one-map-view-with-drill-down-levels.md) | One World map view: registry themes in any projection, drill-down levels with a breadcrumb, background jobs and shared UI styles. |
 | [docs/adr/0090-regional-coast-detail-below-drawing-precision.md](adr/0090-regional-coast-detail-below-drawing-precision.md) | Regional levels use the drawn coast smoothed at its precision plus nested fractal detail; the planet keeps the exact coast. |
+| [docs/adr/0091-age-wonders-on-their-own-patches.md](adr/0091-age-wonders-on-their-own-patches.md) | Each aged wonder is eroded on its own patch with the planet's stream-power model; maps draw the aged relief in place of the fresh shape. |
 | [docs/adr/0092-regional-lakes-fill-the-regional-relief.md](adr/0092-regional-lakes-fill-the-regional-relief.md) | Regional lakes fill the window relief from the parent lake's core, closed lakes are sinks, tiles hold lakes without young relief, and lake outlines get nested detail. |
 
 ## Dated research reports (96)
