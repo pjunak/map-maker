@@ -34,7 +34,12 @@ backlog, and [status](../research/status.md) records what works now.
    - Regional coasts are refined below the drawing's precision, so local maps
      show bays and headlands instead of smooth traced curves (ADR-0090, tile
      algorithm `planet-blended-tiles-v6`).
-2. **Political and civilization overlays** as registered themes.
+2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
+   settings for random placement or placed by hand. Titans, craters, chasms,
+   great cliffs and tepuis are done; next are volcano wonders (a shattered and a
+   giant active volcano), water wonders (oasis, splitting river), an aging tool
+   that erodes each wonder for its age, and waterfalls where rivers leave cliffs.
+3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks
 

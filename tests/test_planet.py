@@ -178,6 +178,15 @@ def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
     assert wonder_kinds("") == ()
     with pytest.raises(ValueError, match="dragon"):
         wonder_kinds("crater,dragon")
+    # The public schemas list exactly the catalog's kinds.
+    root = Path(__file__).parents[1] / "schemas/world"
+    geology = json.loads((root / "geology-v2.schema.json").read_text(encoding="utf-8"))
+    build = json.loads((root / "planet-build-v1.schema.json").read_text(encoding="utf-8"))
+    landmark = geology["properties"]["landmarks"]["items"]["properties"]["kind"]
+    assert tuple(landmark["enum"]) == WONDER_KINDS
+    assert tuple(build["properties"]["settings"]["properties"]["wonders"]["items"]["enum"]) == (
+        WONDER_KINDS
+    )
 
 
 def test_planet_build_publishes_verified_world_aligned_products(
@@ -771,9 +780,10 @@ def test_craters_have_level_troughs_central_plateaus_and_raised_rims() -> None:
 def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
     from dmtools.terrain.pipeline.planet_forcing import coast_distance
     from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_scarps import place_cliff, tepui_group
     from dmtools.terrain.pipeline.planet_wonders import place_chasm, place_craters
 
-    centres, axes = [], []
+    centres, axes, scarps, mesas = [], [], [], []
     for nodes in (30_000, 120_000):
         mesh = build_mesh(nodes, RADIUS, 15)
         land = mesh.xyz[:, 2] > -0.3
@@ -781,18 +791,23 @@ def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
         ground = np.where(land, 1500.0 + 1000.0 * mesh.xyz[:, 0], 0.0)
         centres.append(place_craters(mesh, land, coast, ground, np.random.default_rng(5)).xyz)
         axes.append(place_chasm(mesh, land, coast, ground, np.random.default_rng(5)).paths[0])
+        scarps.append(place_cliff(mesh, land, coast, ground, np.random.default_rng(5)).paths[0])
+        mesas.append(tepui_group(mesh, land, coast, np.random.default_rng(5)).xyz)
     coarse, fine = centres
     assert len(coarse) == len(fine) >= 1
     assert np.allclose(coarse, fine)
     assert np.allclose(*axes)
+    assert np.allclose(*scarps)
+    assert len(mesas[0]) == len(mesas[1]) >= 1 and np.allclose(*mesas)
 
 
 def straight_chasm(depth: float) -> tuple[np.ndarray, Chasms]:
-    from dmtools.terrain.pipeline.planet_wonders import Chasms, chasm_axis, destination
+    from dmtools.terrain.pipeline.planet_wonders import Chasms
+    from dmtools.terrain.pipeline.wonder_geometry import destination, rift_axis
 
     start = np.array([1.0, 0.0, 0.0])
     end = destination(start, np.pi / 2, 1500e3 / RADIUS)
-    axis = chasm_axis(start, end, 60e3, RADIUS, np.random.default_rng(4))
+    axis = rift_axis(start, end, 60e3, RADIUS, np.random.default_rng(4))
     return axis, Chasms((axis,), np.array([60e3]), (np.full(len(axis), depth),))
 
 
@@ -831,6 +846,103 @@ def test_chasms_have_floors_ragged_walls_shoulders_and_headwalls() -> None:
     assert np.corrcoef(fine.ravel(), height.ravel())[0, 1] > 0.9
 
 
+def test_cliffs_raise_a_tilted_block_behind_a_steep_face() -> None:
+    from dmtools.terrain.pipeline.planet_scarps import CLIFF_BACK, Cliffs, cliff_relief
+    from dmtools.terrain.pipeline.wonder_geometry import destination, rift_axis
+
+    start = np.array([1.0, 0.0, 0.0])
+    end = destination(start, np.pi / 2, 600e3 / RADIUS)
+    axis = rift_axis(start, end, 30e3, RADIUS, np.random.default_rng(5), wander=0.4)
+    height = 2500.0
+    cliffs = Cliffs((axis,), np.array([height]), (np.full(len(axis), 200.0),))
+    # Cross-sections along the middle third, from 40 km on the low side to
+    # 120 km on the high side (left of the path).
+    rows = np.arange(len(axis) // 3, 2 * len(axis) // 3, 3)
+    tangent = axis[rows + 1] - axis[rows - 1]
+    tangent -= np.sum(tangent * axis[rows], axis=1)[:, None] * axis[rows]
+    left = np.cross(axis[rows], tangent / np.linalg.norm(tangent, axis=1)[:, None])
+    offsets_km = np.arange(-40.0, 120.5, 0.5)
+    angle = (offsets_km * 1e3 / RADIUS)[None, :, None]
+    points = np.cos(angle) * axis[rows][:, None] + np.sin(angle) * left[:, None]
+    h = cliff_relief(points.reshape(-1, 3), RADIUS, cliffs).reshape(len(rows), -1)
+
+    def at(km: float) -> float:
+        return float(np.median(h[:, np.abs(offsets_km - km).argmin()]))
+
+    assert at(20.0) > 0.8 * height  # the raised block behind the edge
+    back_km = CLIFF_BACK * height / 1e3
+    assert 0.2 * height < at(0.5 * back_km) < 0.8 * height  # tilting back
+    assert abs(at(-30.0)) < 0.05 * height  # the plain below
+    # A steep face: each section climbs most of the height within a few km.
+    steepest = np.max(np.diff(h, axis=1), axis=1) / 500.0
+    assert np.median(steepest) > 0.3
+    # The scarp dies out at its ends.
+    ends = cliff_relief(
+        np.stack([np.cos(10e3 / RADIUS) * axis[k] + np.sin(10e3 / RADIUS) * left[0]
+                  for k in (0, -1)]), RADIUS, cliffs,
+    )
+    assert np.all(ends < 0.3 * height)
+
+
+def test_tepuis_stand_flat_topped_behind_sheer_walls() -> None:
+    from dmtools.terrain.pipeline.planet_scarps import Tepuis, tepui_relief
+
+    centre = np.array([1.0, 0.0, 0.0])
+    tepuis = Tepuis(centre[None], np.array([30e3]), np.array([1800.0]), np.ones(1), np.zeros(1))
+    side = np.linspace(-90e3, 90e3, 181) / RADIUS
+    y, z = np.meshgrid(side, side)
+    points = np.stack([np.ones(y.size), y.ravel(), z.ravel()], axis=1)
+    points /= np.linalg.norm(points, axis=1)[:, None]
+    h = tepui_relief(points, RADIUS, tepuis)
+    assert h[np.argmax(points @ centre)] == pytest.approx(1800.0, rel=0.1)
+    top = h > 0.8 * 1800.0
+    walls = (h > 0.25 * 1800.0) & ~top
+    assert top.sum() > 2000  # a broad summit (km^2 on this 1 km grid)
+    assert walls.sum() < 0.15 * top.sum()  # with sheer sides
+    assert np.all(h[points @ centre < np.cos(80e3 / RADIUS)] == 0)
+
+
+def test_random_cliffs_and_tepuis_stand_inland() -> None:
+    from scipy.spatial import KDTree
+
+    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from dmtools.terrain.pipeline.planet_scarps import (
+        CLIFF_BACK,
+        CLIFF_COAST_M,
+        TEPUI_COAST_M,
+        place_cliff,
+        tepui_group,
+    )
+    from dmtools.terrain.pipeline.wonder_geometry import path_normals
+
+    mesh = build_mesh(60_000, RADIUS, 14)
+    land = mesh.xyz[:, 2] > -0.3
+    coast = coast_distance(mesh, land)
+    # Ground rising towards +x: the cliff's high side faces up that slope.
+    ground = np.where(land, 1500.0 + 1000.0 * mesh.xyz[:, 0], 0.0)
+    cliffs = place_cliff(mesh, land, coast, ground, np.random.default_rng(3))
+    assert len(cliffs) == 1
+    axis, height = cliffs.paths[0], float(cliffs.height_m[0])
+    tree = KDTree(mesh.xyz)
+    nodes = tree.query(axis)[1]
+    assert np.all(land[nodes] & (coast[nodes] > CLIFF_COAST_M))
+    reach = 0.5 * CLIFF_BACK * height / RADIUS
+    normals = path_normals(axis)
+    high, low = (
+        ground[tree.query(np.cos(reach) * axis + sign * np.sin(reach) * normals)[1]].mean()
+        for sign in (1, -1)
+    )
+    assert high > low - 50.0  # never raised on the clearly lower side
+    tepuis = tepui_group(mesh, land, coast, np.random.default_rng(3))
+    assert len(tepuis) >= 1
+    sites = tree.query(tepuis.xyz)[1]
+    assert np.all(land[sites] & (coast[sites] > TEPUI_COAST_M))
+    apart = np.arccos(np.clip(tepuis.xyz @ tepuis.xyz.T, -1, 1)) * RADIUS
+    np.fill_diagonal(apart, np.inf)
+    assert np.all(apart > 2 * tepuis.radius_m.min())
+
+
 def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
     from scipy.spatial import KDTree
 
@@ -838,12 +950,12 @@ def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
     from dmtools.terrain.pipeline.planet_mesh import build_mesh
     from dmtools.terrain.pipeline.planet_wonders import (
         CHASM_DEPTH_M,
-        CHASM_FLOOR_M,
         CHASM_LENGTH_M,
         CHASM_MIN_DEPTH_M,
         CHASM_WIDTH_M,
         place_chasm,
     )
+    from dmtools.terrain.pipeline.wonder_geometry import FLOOR_M, footprint
 
     mesh = build_mesh(60_000, RADIUS, 14)
     land = mesh.xyz[:, 2] > -0.3
@@ -858,16 +970,16 @@ def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
     assert CHASM_LENGTH_M[0] <= length <= CHASM_LENGTH_M[1]
     assert depth.mean() >= CHASM_MIN_DEPTH_M and depth.max() <= CHASM_DEPTH_M
     # The floor stays above the sea where the ground is low.
-    assert np.all(ground[nodes] - depth > 0.9 * CHASM_FLOOR_M)
+    assert np.all(ground[nodes] - depth > 0.9 * FLOOR_M)
     assert np.all(chasms.width_m[1:] < chasms.width_m[0])
     assert all(d.max() < depth.max() for d in chasms.depth_m[1:])
     # Kept off other landmarks.
     away = place_chasm(
         mesh, land, coast, ground, np.random.default_rng(3),
-        (axis[len(axis) // 2][None], np.array([400e3])),
+        footprint(mesh, axis[len(axis) // 2][None], np.array([600e3])),
     )
     gap = np.arccos(np.clip(away.paths[0] @ axis[len(axis) // 2], -1, 1)) * RADIUS
-    assert gap.min() > 1.5 * 400e3
+    assert gap.min() > 600e3
 
 
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
@@ -901,6 +1013,9 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     )
     span = np.arccos(np.clip(plain.mesh.xyz @ plain.mesh.xyz[rift], -1, 1)) * RADIUS
     rift_end = next(int(k) for k in inland if 300e3 < span[k] < 600e3)
+    # A cliff and a tepui near the crater; hand-placed wonders may overlap.
+    scarp_end = next(int(k) for k in inland if 300e3 < reach[k] < 700e3)
+    mesa = next(int(k) for k in inland if 200e3 < reach[k] < 600e3 and k != scarp_end)
     placed = replace_recipe(
         recipe,
         landmarks=(
@@ -909,6 +1024,10 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
             GeologyLandmark(
                 "landmark-rift", "The Rift", "chasm", source(rift), 40.0, source(rift_end)
             ),
+            GeologyLandmark(
+                "landmark-wall", "The Wall", "cliff", source(far), 1.5, source(scarp_end)
+            ),
+            GeologyLandmark("landmark-mesa", "High Table", "tepui", source(mesa), 80.0),
         ),
     )
     result = generate_planet(world, replace(FAST, climate_passes=0), placed)
@@ -925,6 +1044,10 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     near = np.cos(0.5 * plain.mesh.spacing_m / RADIUS)
     assert chasms.paths[0][0] @ plain.mesh.xyz[rift] > near
     assert chasms.paths[0][-1] @ plain.mesh.xyz[rift_end] > near
+    cliffs, tepuis = result.wonders.cliffs, result.wonders.tepuis
+    assert len(cliffs) == 1 and cliffs.height_m[0] == pytest.approx(1500.0)
+    assert cliffs.paths[0][0] @ plain.mesh.xyz[far] > near
+    assert len(tepuis) == 1 and tepuis.radius_m[0] == pytest.approx(40e3)
     assert np.any(result.wonder_m != 0)
     # A landmark in the sea is reported, not moved.
     sea = int(np.argmax(np.where(plain.land, -1.0, -plain.elevation_m)))
@@ -932,6 +1055,8 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     for wet in (
         GeologyLandmark("landmark-wet", "Wet", "crater", source(sea)),
         GeologyLandmark("landmark-wet", "Wet", "chasm", source(rift), None, source(shore)),
+        GeologyLandmark("landmark-wet", "Wet", "cliff", source(rift), None, source(shore)),
+        GeologyLandmark("landmark-wet", "Wet", "tepui", source(sea)),
     ):
         with pytest.raises(ValueError, match=r"Wet.*sea"):
             generate_planet(

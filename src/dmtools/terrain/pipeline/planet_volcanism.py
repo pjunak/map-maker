@@ -30,7 +30,7 @@ from scipy.spatial import KDTree
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_tectonics import Tectonics, plume_track
-from dmtools.terrain.pipeline.planet_wonders import draw_site
+from dmtools.terrain.pipeline.wonder_geometry import draw_site
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]

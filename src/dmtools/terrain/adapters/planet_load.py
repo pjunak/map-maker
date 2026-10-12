@@ -4,12 +4,14 @@
 
 import itertools
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
 from dmtools.terrain.adapters.planet_build import PLANET_BUILD_SCHEMA, PLANET_BUILD_VERSION
@@ -17,9 +19,12 @@ from dmtools.terrain.adapters.world_project import read_world_project
 from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
+from dmtools.terrain.pipeline.planet_scarps import Cliffs, Tepuis
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
 from dmtools.terrain.pipeline.planet_wonders import Chasms, Craters, Wonders
 from dmtools.terrain.pipeline.world import prepare_world_map
+
+type F64 = NDArray[np.float64]
 
 MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 
@@ -57,6 +62,17 @@ def verified_build(path: Path, files: tuple[str, ...]) -> tuple[Path, dict[str, 
     return folder, manifest
 
 
+
+def paths_from_archive(
+    data: Mapping[str, NDArray[Any]], name: str
+) -> tuple[tuple[F64, ...], tuple[F64, ...]]:
+    """Paths and their per-vertex profiles, split at the archived offsets."""
+    spans = tuple(itertools.pairwise(data[f"{name}_offsets"].tolist()))
+    return (
+        tuple(data[f"{name}_xyz"][a:b].astype(np.float64) for a, b in spans),
+        tuple(data[f"{name}_profile"][a:b].astype(np.float64) for a, b in spans),
+    )
+
 def read_planet_parent(path: Path) -> LoadedPlanet:
     """Verify the manifest and output hashes, then rebuild the parent fields."""
     folder, manifest = verified_build(path, ("world.dmworld.json", "planet.npz"))
@@ -72,7 +88,8 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
             data["xyz"].astype(np.float64), data["triangles"].astype(np.int64), radius_m
         )
         land = data["land"].astype(bool)
-        spans = tuple(itertools.pairwise(data["chasm_offsets"].tolist()))
+        chasm_paths, chasm_depths = paths_from_archive(data, "chasm")
+        cliff_paths, cliff_troughs = paths_from_archive(data, "cliff")
         parent = RegionalParent(
             world=world,
             settings=settings,
@@ -114,10 +131,14 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
                     data["crater_radius_m"].astype(np.float64),
                     data["crater_depth_m"].astype(np.float64),
                 ),
-                Chasms(
-                    tuple(data["chasm_xyz"][a:b].astype(np.float64) for a, b in spans),
-                    data["chasm_width_m"].astype(np.float64),
-                    tuple(data["chasm_depth_m"][a:b].astype(np.float64) for a, b in spans),
+                Chasms(chasm_paths, data["chasm_width_m"].astype(np.float64), chasm_depths),
+                Cliffs(cliff_paths, data["cliff_height_m"].astype(np.float64), cliff_troughs),
+                Tepuis(
+                    data["tepui_xyz"].astype(np.float64).reshape(-1, 3),
+                    data["tepui_radius_m"].astype(np.float64),
+                    data["tepui_height_m"].astype(np.float64),
+                    data["tepui_aspect"].astype(np.float64),
+                    data["tepui_azimuth"].astype(np.float64),
                 ),
             ),
             volcanoes=Volcanoes(

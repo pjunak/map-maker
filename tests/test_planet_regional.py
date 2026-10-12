@@ -148,8 +148,9 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
 
     from dmtools.terrain.adapters.planet_load import read_planet_parent
     from dmtools.terrain.application.planet import export_planet, generate_planet_run
+    from dmtools.terrain.domain.wonders import WONDER_KINDS
 
-    settings = replace(parent.settings, wonders=("titan", "crater", "chasm"))
+    settings = replace(parent.settings, wonders=WONDER_KINDS)
     run = generate_planet_run(parent.world.project, None, settings, preview_width=0)
     result = run.result
     regional = RegionalParent.from_result(result)
@@ -170,6 +171,12 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
         reloaded.chasms.depth_m, wonders.chasms.depth_m, strict=True,
     ):
         assert np.allclose(a, b) and np.allclose(c, d)
+    assert len(wonders.cliffs) == 1 and len(wonders.tepuis) >= 1
+    for a, b in zip(reloaded.cliffs.paths, wonders.cliffs.paths, strict=True):
+        assert np.allclose(a, b)
+    assert np.allclose(reloaded.cliffs.height_m, wonders.cliffs.height_m)
+    assert np.allclose(reloaded.tepuis.xyz, wonders.tepuis.xyz)
+    assert np.allclose(reloaded.tepuis.aspect, wonders.tepuis.aspect)
     assert np.allclose(loaded.parent.young_m(), young, atol=0.1)
 
 

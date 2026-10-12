@@ -52,6 +52,17 @@ MAX_RIVER_FEATURES = 200_000
 type Verify = Callable[[], None]
 
 
+
+def paths_archive(
+    name: str, paths: tuple[NDArray[np.float64], ...], profiles: tuple[NDArray[np.float64], ...]
+) -> dict[str, NDArray[Any]]:
+    """Paths and per-vertex profiles of any length, concatenated; offsets mark each start."""
+    return {
+        f"{name}_xyz": (np.vstack(paths) if paths else np.zeros((0, 3))).astype("<f8"),
+        f"{name}_offsets": np.cumsum([0, *(len(path) for path in paths)]).astype("<i8"),
+        f"{name}_profile": (np.concatenate(profiles) if profiles else np.zeros(0)).astype("<f8"),
+    }
+
 def planet_crs_wkt(radius_km: float) -> str:
     """Geographic CRS on the world's custom sphere; deliberately not Earth's datum."""
     radius = radius_km * 1000
@@ -265,22 +276,15 @@ def write_planet_build(
         "crater_xyz": result.wonders.craters.xyz.astype("<f8"),
         "crater_radius_m": result.wonders.craters.radius_m.astype("<f8"),
         "crater_depth_m": result.wonders.craters.depth_m.astype("<f8"),
-        # Chasm paths and depth profiles of any length, concatenated; offsets mark
-        # where each path starts.
-        "chasm_xyz": (
-            np.vstack(result.wonders.chasms.paths)
-            if len(result.wonders.chasms)
-            else np.zeros((0, 3))
-        ).astype("<f8"),
-        "chasm_offsets": np.cumsum(
-            [0, *(len(path) for path in result.wonders.chasms.paths)]
-        ).astype("<i8"),
+        **paths_archive("chasm", result.wonders.chasms.paths, result.wonders.chasms.depth_m),
         "chasm_width_m": result.wonders.chasms.width_m.astype("<f8"),
-        "chasm_depth_m": (
-            np.concatenate(result.wonders.chasms.depth_m)
-            if len(result.wonders.chasms)
-            else np.zeros(0)
-        ).astype("<f8"),
+        **paths_archive("cliff", result.wonders.cliffs.paths, result.wonders.cliffs.trough_m),
+        "cliff_height_m": result.wonders.cliffs.height_m.astype("<f8"),
+        "tepui_xyz": result.wonders.tepuis.xyz.astype("<f8"),
+        "tepui_radius_m": result.wonders.tepuis.radius_m.astype("<f8"),
+        "tepui_height_m": result.wonders.tepuis.height_m.astype("<f8"),
+        "tepui_aspect": result.wonders.tepuis.aspect.astype("<f8"),
+        "tepui_azimuth": result.wonders.tepuis.azimuth.astype("<f8"),
         "volcanic_m": result.volcanic_m.astype("<f4"),
         "volcano_xyz": v.xyz.astype("<f8"),
         "volcano_height_m": v.height_m.astype("<f4"),

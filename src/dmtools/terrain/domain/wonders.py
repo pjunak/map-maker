@@ -8,7 +8,7 @@ wonders replace random ones of their kind.
 from dataclasses import dataclass
 from typing import Literal
 
-type WonderKind = Literal["titan", "crater", "chasm"]
+type WonderKind = Literal["titan", "crater", "chasm", "cliff", "tepui"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +39,17 @@ WONDERS: dict[WonderKind, WonderSpec] = {
         "Great chasm",
         "A rift canyon system up to 3 km deep with parallel troughs and side canyons.",
         "width", (10.0, 200.0, 60.0), (100.0, 4000.0),
+    ),
+    "cliff": WonderSpec(
+        "Great cliff",
+        "A fault scarp kilometres high whose raised block tilts gently back from its "
+        "edge; the high side lies to the left going from the first end to the second.",
+        "height", (0.5, 6.0, 2.5), (50.0, 3000.0),
+    ),
+    "tepui": WonderSpec(
+        "Tepui",
+        "A table mountain walled by sheer cliffs on every side; random ones come in groups.",
+        "diameter", (10.0, 300.0, 70.0),
     ),
 }
 WONDER_KINDS: tuple[WonderKind, ...] = tuple(WONDERS)

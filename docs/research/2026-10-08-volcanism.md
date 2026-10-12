@@ -231,6 +231,33 @@ and 1.8 km deep, and the Yarlung Tsangpo gorge about 5 km deep.
   chasm first, then troughs, side canyons and splays) with its ends, length,
   width and depth.
 
+Great cliffs and tepuis (`planet_scarps.py`) are raised rather than cut.
+
+- **Great cliff.** A fault scarp 1.5–3.5 km high and 300–1,200 km long, beyond
+  Earth's tallest fault scarps (the Sierra Nevada's eastern face rises about
+  3 km) and closer to Verona Rupes on Miranda.
+  - Its foot follows a segmented axis like the chasm's. The raised block stands
+    the full height at the edge and tilts back to the plain over 35 times the
+    height, as tilted fault blocks do.
+  - The face is about 60 degrees, shifted along its length into buttresses and
+    gullies; talus heaps below it, and a trough up to 12 % of the height runs
+    along the foot where it may hold lakes.
+  - The scarp dies out over the last sixth of its length at each end.
+  - At random it rises on the side whose mean ground along the scarp already
+    stands higher, as escarpments face the lower country; a near tie (within
+    50 m) is settled by a coin drawn before the comparison, so meshes agree.
+- **Tepui.** A table mountain like Roraima and Auyan-tepui: 1–2.8 km of sheer
+  walls (larger ones stand higher) around a nearly flat summit, with talus
+  below. Its plan is stretched up to 2.2 times along a random direction and
+  domain-warped by up to 0.65 of its radius, which cuts re-entrant bays and
+  leaves detached outliers; a first version with a weaker warp looked like
+  round pancakes. At random two to five tepuis stand in a group a few of their
+  widths apart, as on the Gran Sabana.
+
+The wonder kinds are placed in a fixed order (titan, craters, chasm, cliff,
+tepuis), each from its own random stream, and each keeps clear of the wonders
+placed before it.
+
 Wonders are placed by rejection sampling of continuous positions on the sphere
 (`draw_site`), from their own random streams, with yes/no eligibility tests.
 Picking mesh nodes, or weighting by relief that differs between resolutions,

@@ -134,7 +134,9 @@
             "enum": [
               "titan",
               "crater",
-              "chasm"
+              "chasm",
+              "cliff",
+              "tepui"
             ]
           },
           "position": {

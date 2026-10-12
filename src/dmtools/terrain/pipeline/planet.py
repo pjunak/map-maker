@@ -67,16 +67,13 @@ from dmtools.terrain.pipeline.planet_volcanism import (
     with_titans,
 )
 from dmtools.terrain.pipeline.planet_wonders import (
-    Chasms,
-    Craters,
+    PlacedWonder,
     Wonders,
-    authored_chasms,
-    authored_craters,
     level_crater_floors,
-    place_chasm,
-    place_craters,
+    place_wonders,
     wonder_relief,
 )
+from dmtools.terrain.pipeline.wonder_geometry import footprint
 from dmtools.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -127,6 +124,14 @@ class PlanetResult:
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
+
+
+def lonlat(xyz: F64) -> list[float]:
+    """Longitude and latitude (degrees) of a unit vector, for the manifest."""
+    return [
+        round(float(np.degrees(np.arctan2(xyz[1], xyz[0]))), 3),
+        round(float(np.degrees(np.arcsin(np.clip(xyz[2], -1, 1)))), 3),
+    ]
 
 def river_sediment(
     mesh: SphereMesh, land: B, flow: FlowState, forcing: Forcing
@@ -322,8 +327,6 @@ def generate_planet(
     # Hand-placed wonders from the geology recipe replace random ones of their kind.
     landmarks = () if geology is None else geology.landmarks
     titans = tuple(m for m in landmarks if m.kind == "titan")
-    placed_craters = tuple(m for m in landmarks if m.kind == "crater")
-    placed_chasms = tuple(m for m in landmarks if m.kind == "chasm")
     frame = world.project.frame
 
     def unit(position: tuple[float, float]) -> F64:
@@ -351,42 +354,21 @@ def generate_planet(
     # carries cones widened to its resolution; images redraw them sharply.
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
     evolved = np.where(land, evolved + cones, evolved)
-    # Opt-in impact craters and chasms are young too; lakes may then fill them.
-    craters, chasms, wonder_m = Craters.empty(), Chasms.empty(), np.zeros(mesh.size)
-    if placed_craters:
-        craters = authored_craters(
-            mesh, land, evolved, np.array([unit(m.position) for m in placed_craters]),
-            np.array([m.effective_size_km * 500.0 for m in placed_craters]),
-            tuple(m.name for m in placed_craters),
-        )
-    elif "crater" in settings.wonders:
-        titan = volcanoes.subset(volcanoes.setting == TITAN)
-        craters = place_craters(
-            mesh, land, coast, evolved,
-            np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9090]),
-            (titan.xyz, titan.radius_m),
-        )
-    chasm_rng = np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9191])
-    if placed_chasms:
-        chasms = authored_chasms(
-            mesh, land, evolved,
-            tuple(
-                (unit(m.position), unit(m.end if m.end is not None else m.position))
-                for m in placed_chasms
-            ),
-            np.array([m.effective_size_km * 1000.0 for m in placed_chasms]),
-            tuple(m.name for m in placed_chasms), chasm_rng,
-        )
-    elif "chasm" in settings.wonders:
-        titan = volcanoes.subset(volcanoes.setting == TITAN)
-        chasms = place_chasm(
-            mesh, land, coast, evolved, chasm_rng,
-            (
-                np.vstack((titan.xyz, craters.xyz)),
-                np.concatenate((titan.radius_m, 1.5 * craters.radius_m)),
-            ),
-        )
-    wonders = Wonders(craters, chasms)
+    # Wonders are young too; lakes may then fill them.
+    titan = volcanoes.subset(volcanoes.setting == TITAN)
+    wonders = place_wonders(
+        mesh, land, coast, evolved, settings.wonders,
+        tuple(
+            PlacedWonder(
+                m.kind, unit(m.position), None if m.end is None else unit(m.end),
+                m.effective_size_km * 1e3, m.name,
+            )
+            for m in landmarks if m.kind != "titan"
+        ),
+        footprint(mesh, titan.xyz, 2.0 * titan.radius_m), seeds[PLANET_VOLCANISM_STAGE_ID],
+    )
+    craters, chasms = wonders.craters, wonders.chasms
+    wonder_m = np.zeros(mesh.size)
     if len(wonders):
         wonder_m = np.where(land, wonder_relief(mesh.xyz, mesh.radius_m, wonders), 0.0)
         levelled = level_crater_floors(mesh, evolved, craters)
@@ -435,14 +417,8 @@ def generate_planet(
     ]
     metrics["chasms"] = [
         {
-            "from_lonlat": [
-                round(float(np.degrees(np.arctan2(path[0][1], path[0][0]))), 3),
-                round(float(np.degrees(np.arcsin(path[0][2]))), 3),
-            ],
-            "to_lonlat": [
-                round(float(np.degrees(np.arctan2(path[-1][1], path[-1][0]))), 3),
-                round(float(np.degrees(np.arcsin(path[-1][2]))), 3),
-            ],
+            "from_lonlat": lonlat(path[0]),
+            "to_lonlat": lonlat(path[-1]),
             "length_km": round(
                 float(np.arccos(np.clip(path[0] @ path[-1], -1, 1))) * mesh.radius_m / 1e3, 1
             ),
@@ -451,6 +427,28 @@ def generate_planet(
             "mean_depth_m": round(float(depth.mean())),
         }
         for path, width, depth in zip(chasms.paths, chasms.width_m, chasms.depth_m, strict=True)
+    ]
+    metrics["cliffs"] = [
+        {
+            "from_lonlat": lonlat(path[0]),
+            "to_lonlat": lonlat(path[-1]),
+            "length_km": round(
+                float(np.arccos(np.clip(path[0] @ path[-1], -1, 1))) * mesh.radius_m / 1e3, 1
+            ),
+            "height_m": round(float(height)),
+        }
+        for path, height in zip(wonders.cliffs.paths, wonders.cliffs.height_m, strict=True)
+    ]
+    metrics["tepuis"] = [
+        {
+            "lat": round(float(np.degrees(np.arcsin(xyz[2]))), 3),
+            "lon": round(float(np.degrees(np.arctan2(xyz[1], xyz[0]))), 3),
+            "diameter_km": round(2 * float(radius) / 1e3, 1),
+            "height_m": round(float(height)),
+        }
+        for xyz, radius, height in zip(
+            wonders.tepuis.xyz, wonders.tepuis.radius_m, wonders.tepuis.height_m, strict=True
+        )
     ]
     metrics["lakes"] = {
         "count": len(lakes.level_m),

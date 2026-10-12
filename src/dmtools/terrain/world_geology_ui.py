@@ -997,8 +997,9 @@ class GeologyEditor(tk.Toplevel):
                             fill=MAP_HIGHLIGHT,
                             width=2,
                         )
-        # Landmarks to scale: a titan as a triangle, a crater as a ring and a
-        # chasm as a broad line between its ends, across the seam if shorter.
+        # Landmarks to scale: a titan as a triangle, a tepui as a block, other
+        # round wonders as rings, a chasm as a broad line and a cliff as an
+        # escarpment symbol, across the seam where that is shorter.
         px_per_km = (right - left) / (2 * math.pi * frame.radius_km)
         for m in self.recipe.landmarks:
             x, y = at(*m.position)
@@ -1009,11 +1010,15 @@ class GeologyEditor(tk.Toplevel):
                     m.end[0] + round((m.position[0] - m.end[0]) / frame.width) * frame.width,
                     m.end[1],
                 )
-                canvas.create_line(
-                    x, y, ex, ey, fill=colour, width=max(3.0, 2 * r), capstyle="round",
-                    stipple="gray50",
-                )
-                canvas.create_line(x, y, ex, ey, fill=colour, width=2)
+                if m.kind == "cliff":
+                    self._draw_scarp(canvas, (x, y), (ex, ey), colour)
+                    r = 5.0
+                else:
+                    canvas.create_line(
+                        x, y, ex, ey, fill=colour, width=max(3.0, 2 * r), capstyle="round",
+                        stipple="gray50",
+                    )
+                    canvas.create_line(x, y, ex, ey, fill=colour, width=2)
                 # Label a line wonder beyond its right-hand end, clear of the line.
                 x, y = max((x, y), (ex, ey))
             elif m.kind == "titan":
@@ -1021,6 +1026,9 @@ class GeologyEditor(tk.Toplevel):
                     x, y - r, x - r, y + r * 0.7, x + r, y + r * 0.7,
                     outline=colour, fill="", width=2,
                 )
+            elif m.kind == "tepui":
+                canvas.create_rectangle(x - r, y - 0.7 * r, x + r, y + 0.7 * r, outline=colour,
+                                        width=2)
             else:
                 canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
             canvas.create_text(x + r + 4, y, text=m.name, fill=colour, anchor="w")
@@ -1037,6 +1045,24 @@ class GeologyEditor(tk.Toplevel):
         ):
             canvas.create_rectangle(*bounds, fill=OCEAN, outline="")
         canvas.create_rectangle(left, top, right, bottom, outline=MAP_FRAME)
+
+    @staticmethod
+    def _draw_scarp(
+        canvas: FlatMapCanvas, start: tuple[float, float], end: tuple[float, float], colour: str
+    ) -> None:
+        """The map symbol of an escarpment: its edge with ticks down the low side.
+
+        The high side lies to the left going from ``start`` to ``end`` (north up).
+        """
+        (x, y), (ex, ey) = start, end
+        canvas.create_line(x, y, ex, ey, fill=colour, width=3)
+        length = math.hypot(ex - x, ey - y)
+        if length < 1:
+            return
+        dx, dy = (ex - x) / length, (ey - y) / length
+        for k in range(1, int(length // 10) + 1):
+            px, py = x + dx * 10 * k, y + dy * 10 * k
+            canvas.create_line(px, py, px - dy * 7, py + dx * 7, fill=colour, width=2)
 
     def close(self) -> None:
         if self._closed:
