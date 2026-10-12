@@ -782,32 +782,39 @@ def straight_chasm(depth: float) -> tuple[np.ndarray, Chasms]:
     return axis, Chasms((axis,), np.array([60e3]), (np.full(len(axis), depth),))
 
 
-def test_chasms_have_flat_floors_steep_walls_shoulders_and_pinched_ends() -> None:
+def test_chasms_have_floors_ragged_walls_shoulders_and_headwalls() -> None:
     from dmtools.terrain.pipeline.planet_wonders import chasm_relief
 
     axis, chasms = straight_chasm(2000.0)
     assert len(axis) > 100
-    middle = len(axis) // 2
-    point = axis[middle]
-    tangent = axis[middle + 1] - axis[middle - 1]
-    tangent -= (tangent @ point) * point
-    normal = np.cross(point, tangent / np.linalg.norm(tangent))
-
-    def across(half_widths: float) -> float:
-        angle = half_widths * 30e3 / RADIUS
-        side = np.cos(angle) * point + np.sin(angle) * normal
-        return float(chasm_relief(side[None], RADIUS, chasms)[0])
-
-    floor = across(0.0)
-    assert floor == pytest.approx(-2000.0, rel=0.01)
-    assert across(0.25) == pytest.approx(floor, rel=0.02)  # a flat floor
-    assert across(-0.85) > floor + 500  # steep walls on both sides
-    assert across(0.85) > floor + 500
-    assert across(1.25) > 0.25 * 2000  # uplifted shoulders that fall away
-    assert 0 < across(3.0) < across(1.25)
-    assert across(6.0) == 0
-    ends = chasm_relief(axis[[0, len(axis) // 25]], RADIUS, chasms)
-    assert ends[0] > -50 and 0.5 * floor < ends[1] < -100  # pinched out at the ends
+    # Cross-sections every few vertices along the middle of the chasm, out to
+    # seven half widths (30 km) on either side.
+    rows = np.arange(len(axis) // 5, 4 * len(axis) // 5, 4)
+    tangent = axis[rows + 1] - axis[rows - 1]
+    tangent -= np.sum(tangent * axis[rows], axis=1)[:, None] * axis[rows]
+    normal = np.cross(axis[rows], tangent / np.linalg.norm(tangent, axis=1)[:, None])
+    offsets = np.linspace(-7.0, 7.0, 141)
+    angle = (offsets * 30e3 / RADIUS)[None, :, None]
+    points = np.cos(angle) * axis[rows][:, None] + np.sin(angle) * normal[:, None]
+    height = chasm_relief(points.reshape(-1, 3), RADIUS, chasms).reshape(len(rows), -1)
+    centre = height[:, 70]
+    assert np.median(centre) == pytest.approx(-2000.0, rel=0.05)  # floor, slightly hummocky
+    assert np.all(height[:, [0, -1]] == 0)  # nothing beyond the reach
+    assert np.median(height[:, np.abs(offsets - 2.5).argmin()]) > 0.1 * 2000  # shoulders
+    # Each wall's rim (where the cut ends) wanders on its own: ragged, and
+    # not mirrored by the opposite wall.
+    inside = height < -0.1 * 2000
+    left = offsets[np.argmax(inside, axis=1)]
+    right = offsets[len(offsets) - 1 - np.argmax(inside[:, ::-1], axis=1)]
+    assert np.std(right) > 0.1 * np.mean(right) and np.std(left) > 0.1 * np.mean(-left)
+    assert abs(np.corrcoef(right, -left)[0, 1]) < 0.6
+    # The ends stop at rounded headwalls rather than pinching out.
+    ends = chasm_relief(axis[[0, -1]], RADIUS, chasms)
+    assert np.all(ends < -0.5 * 2000)
+    # A finer map adds detail to the same large shapes.
+    fine = chasm_relief(points.reshape(-1, 3), RADIUS, chasms, 500.0).reshape(height.shape)
+    assert not np.allclose(fine, height)
+    assert np.corrcoef(fine.ravel(), height.ravel())[0, 1] > 0.9
 
 
 def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:

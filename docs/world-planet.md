@@ -85,9 +85,10 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   can move by up to about one drawing unit from your line, which is 13 km on an
   Earth-size world drawn 2,880 units wide
   ([ADR-0090](adr/0090-regional-coast-detail-below-drawing-precision.md)).
-- Volcanoes, impact craters and chasms are drawn sharply. Closed hollows deeper
-  than 10 m (crater troughs, chasm floors, calderas) fill with lakes where it is wet. Where it is dry, a playa
-  lies only in the lowest part.
+- Volcanoes, impact craters and chasms are drawn sharply, chasm outlines down to
+  the map's own scale. Closed hollows deeper than 10 m (crater troughs, chasm
+  floors, calderas) fill with lakes where it is wet. Where it is dry, a playa lies
+  only in the lowest part.
 - A scale bar shows distance. Hovering shows the place, the offset from the centre
   and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
@@ -132,7 +133,7 @@ leaves no `manifest.json`, so it never looks complete.
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
-| `--wonders` | off | Add fantastical landmarks beyond Earth's extremes: a titan shield volcano (~10 km high, ~560 km across, ice-capped, with a basal cliff), 1-3 impact craters 180-300 km across that may hold ring lakes, and a great chasm 900-2,200 km long, 60 km wide and up to 3 km deep, with side canyons and uplifted shoulders. Also a checkbox on the Planet page. |
+| `--wonders` | off | Add fantastical landmarks beyond Earth's extremes: a titan shield volcano (~10 km high, ~560 km across, ice-capped, with a basal cliff), 1-3 impact craters 180-300 km across that may hold ring lakes, and a great chasm system 900-2,200 km long: a main chasm 60 km wide and up to 3 km deep with parallel troughs, side canyons and uplifted shoulders. Also a checkbox on the Planet page. |
 | `--volcanic-islands` | off | Let young volcanoes at sea rise as islands: hotspot chains of shield islands and island arcs behind ocean trenches. **Adds land beyond your coastline.** Also a checkbox on the Planet page. |
 | `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
 | `--process-km2` | 600 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys; keep it at least a few mesh cells. |

@@ -157,7 +157,8 @@ def display_fields(
     # Island pixels already carry their sharp volcano surface.
     base_land = np.where(land_px & ~islands, base_land - coarse + sharp, base_land)
     # Craters and chasms too are redrawn at pixel scale.
-    cut = wonder_relief(points, radius, result.wonders).reshape(shape)
+    cut = wonder_relief(points, radius, result.wonders, 2 * np.pi * radius / shape[1])
+    cut = cut.reshape(shape)
     base_land = np.where(
         land_px & ~islands, base_land - raster.interpolate(mesh, result.wonder_m) + cut, base_land
     )

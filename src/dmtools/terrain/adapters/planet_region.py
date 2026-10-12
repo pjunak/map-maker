@@ -303,7 +303,8 @@ def _compose(
     wonders = parent.wonders
     if wonders is not None and len(wonders):
         elevation = np.where(
-            land, elevation + wonder_relief(points, planet_m, wonders).reshape(pixels, pixels),
+            land,
+            elevation + wonder_relief(points, planet_m, wonders, finest).reshape(pixels, pixels),
             elevation,
         )
     elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -52,6 +53,12 @@ CHASM_SHOULDER = 0.3
 CHASM_MIN_GROUND_M = 1000.0  # preferred ground for its first end
 CHASM_SEGMENT_WIDTHS = 6.0  # rift segments, offset en echelon, in widths
 CHASM_SIDE_CANYONS = (3, 7)
+CHASM_TRIBUTARIES = (0, 3)  # per side canyon, branching near its head
+CHASM_SPLAYS = (1, 3)  # smaller offset troughs where each end of the rift dies out
+CHASM_PARALLEL = (1, 4)  # troughs alongside part of the chasm, like Valles Marineris's chasmata
+# Domain warp: points are displaced by multi-scale noise before their distance
+# to the axes is measured, so every outline is irregular without a pattern.
+CHASM_WARP = 0.45  # of the widest path's width, at the coarsest scale
 CHASM_TRIES = 120
 
 
@@ -170,10 +177,16 @@ class Wonders:
         return Wonders(Craters.empty(), Chasms.empty())
 
 
-def wonder_relief(points: F64, planet_radius_m: float, wonders: Wonders) -> F64:
-    """Height change (m) all wonders make at unit vectors ``points``."""
+def wonder_relief(
+    points: F64, planet_radius_m: float, wonders: Wonders, detail_m: float | None = None
+) -> F64:
+    """Height change (m) all wonders make at unit vectors ``points``.
+
+    ``detail_m`` is the finest scale drawn (a map's pixel or level spacing);
+    None draws the coarse shape that a planet mesh carries.
+    """
     return crater_relief(points, planet_radius_m, wonders.craters) + chasm_relief(
-        points, planet_radius_m, wonders.chasms
+        points, planet_radius_m, wonders.chasms, detail_m
     )
 
 
@@ -184,7 +197,7 @@ def wonder_zones(points: F64, planet_radius_m: float, wonders: Wonders) -> B:
         zone |= points @ xyz > np.cos(1.05 * radius / planet_radius_m)
     chasms = wonders.chasms
     for path, width in zip(chasms.paths, chasms.width_m, strict=True):
-        reach = 0.85 * width / planet_radius_m  # the widest basins
+        reach = 1.0 * width / planet_radius_m  # the widest basins and alcoves
         distance = np.asarray(
             KDTree(path).query(points, distance_upper_bound=2 * np.sin(reach / 2), workers=-1)[0]
         )
@@ -202,14 +215,20 @@ def destination(start: F64, azimuth: float, angle: float) -> F64:
 
 
 def chasm_axis(
-    start: F64, end: F64, width_m: float, planet_radius_m: float, rng: np.random.Generator
+    start: F64,
+    end: F64,
+    width_m: float,
+    planet_radius_m: float,
+    rng: np.random.Generator,
+    wander: float = 0.3,
 ) -> F64:
     """A floor axis from ``start`` to ``end`` in straight segments, like a rift.
 
     Rifts grow as segments offset en echelon, so the axis follows the great
     circle in straight stretches of about ``CHASM_SEGMENT_WIDTHS`` widths, each
-    shifted sideways by up to a width and a bit, joined by diagonal jogs. The
-    ends stay where they were put.
+    shifted sideways by up to a width and a bit, joined by diagonal jogs. A
+    smoothed random walk of ``wander`` widths keeps stretches from repeating.
+    The ends stay where they were put.
     """
     a, b = start / np.linalg.norm(start), end / np.linalg.norm(end)
     angle = float(np.arccos(np.clip(a @ b, -1, 1)))
@@ -228,8 +247,11 @@ def chasm_axis(
     offset = np.full(len(t), shifts[0])
     for edge, step in zip(edges, np.diff(shifts), strict=True):
         offset += step * _smooth(t, edge - jog / 2, edge + jog / 2)
-    phase = rng.uniform(0, 2 * np.pi)
-    offset += 0.1 * width_m * np.sin(2 * np.pi * length / (5 * width_m) * t + phase)
+    walk = gaussian_filter1d(
+        np.cumsum(rng.normal(size=len(t))), max(2.0, len(t) / 12), mode="nearest"
+    )
+    walk -= np.linspace(walk[0], walk[-1], len(t))
+    offset += wander * width_m * walk / max(float(np.abs(walk).max()), 1e-9)
     offset *= np.sin(np.pi * t) ** 0.5
     axis = base + (offset / planet_radius_m)[:, None] * side
     return axis / np.linalg.norm(axis, axis=1)[:, None]
@@ -258,33 +280,94 @@ def chasm_with_canyons(
     planet_radius_m: float,
     rng: np.random.Generator,
 ) -> Chasms:
-    """A chasm up to ``depth_m`` deep with narrower, shallower side canyons.
+    """A chasm system up to ``depth_m`` deep, from ``start`` to ``end``.
+
+    Around the main chasm (the first path):
+    - side canyons hang above the floor they join and grow shallower towards
+      rounded heads; some fork near the head;
+    - parallel troughs run alongside part of it, merging into basins or
+      leaving plateau ridges between;
+    - each end dies out in smaller troughs offset en echelon.
 
     ``tree`` indexes the mesh nodes that ``ground_m`` belongs to.
     """
-    axis = chasm_axis(start, end, width_m, planet_radius_m, rng)
-    length = float(np.arccos(np.clip(axis[0] @ axis[-1], -1, 1))) * planet_radius_m
-    paths, widths, depths = [axis], [width_m], [floor_depth(axis, ground_m, tree, depth_m)]
+    radius = planet_radius_m
+    axis = chasm_axis(start, end, width_m, radius, rng)
+    length = float(np.arccos(np.clip(axis[0] @ axis[-1], -1, 1))) * radius
+    main_depth = floor_depth(axis, ground_m, tree, depth_m)
+    paths, widths, depths = [axis], [width_m], [main_depth]
+
+    def frame(path: F64, i: int) -> tuple[F64, F64, F64]:
+        point = path[i]
+        tangent = path[min(i + 1, len(path) - 1)] - path[max(i - 1, 0)]
+        tangent = tangent - (tangent @ point) * point
+        tangent = tangent / max(float(np.linalg.norm(tangent)), 1e-12)
+        return point, tangent, np.cross(point, tangent)
+
+    def branch(path: F64, floor: F64, i: int, width: float, reach_m: float, hang: float) -> F64:
+        point, tangent, normal = frame(path, i)
+        heading = rng.choice((-1.0, 1.0)) * normal + rng.uniform(-1.2, 1.2) * tangent
+        heading /= np.linalg.norm(heading)
+        tip = np.cos(reach_m / radius) * point + np.sin(reach_m / radius) * heading
+        axis = chasm_axis(point, tip, width, radius, rng, wander=1.0)
+        cap = float(floor[i]) * hang
+        paths.append(axis)
+        widths.append(width)
+        depths.append(floor_depth(axis, ground_m, tree, cap) * np.linspace(1.0, 0.35, len(axis)))
+        return axis
+
     for _ in range(int(rng.integers(*CHASM_SIDE_CANYONS))):
         i = int(rng.integers(int(0.15 * len(axis)), int(0.85 * len(axis))))
-        point = axis[i]
-        tangent = axis[min(i + 1, len(axis) - 1)] - axis[max(i - 1, 0)]
-        tangent -= (tangent @ point) * point
-        tangent /= max(float(np.linalg.norm(tangent)), 1e-12)
-        normal = np.cross(point, tangent)
-        heading = rng.choice((-1.0, 1.0)) * normal + rng.uniform(-0.6, 0.6) * tangent
-        heading /= np.linalg.norm(heading)
-        reach = rng.uniform(0.06, 0.18) * length / planet_radius_m
-        tip = np.cos(reach) * point + np.sin(reach) * heading
-        branch_width = width_m * rng.uniform(0.3, 0.5)
-        branch = chasm_axis(point, tip, branch_width, planet_radius_m, rng)
-        paths.append(branch)
-        widths.append(branch_width)
-        # A side canyon hangs above the main floor where it joins and grows
-        # shallower towards its head.
-        cap = float(depths[0][i]) * rng.uniform(0.45, 0.7)
-        head = np.linspace(1.0, 0.35, len(branch))
-        depths.append(floor_depth(branch, ground_m, tree, cap) * head)
+        side_width = width_m * rng.uniform(0.3, 0.5)
+        reach = rng.uniform(0.06, 0.18) * length
+        side = branch(axis, main_depth, i, side_width, reach, rng.uniform(0.45, 0.7))
+        side_floor = depths[-1]
+        for _ in range(int(rng.integers(*CHASM_TRIBUTARIES))):
+            k = int(rng.integers(int(0.35 * len(side)), int(0.85 * len(side))))
+            branch(
+                side, side_floor, k, side_width * rng.uniform(0.5, 0.7),
+                reach * rng.uniform(0.3, 0.6), rng.uniform(0.6, 0.85),
+            )
+    normals = _path_normals(axis)
+    for _ in range(int(rng.integers(*CHASM_PARALLEL))):
+        # Its own segments and bends: it may merge with the chasm into a basin
+        # or stand apart behind a plateau ridge.
+        span = rng.uniform(0.25, 0.6) * len(axis)
+        middle = rng.uniform(0.2, 0.8) * len(axis)
+        a = int(max(0, middle - span / 2))
+        b = int(min(len(axis) - 1, middle + span / 2))
+        side = rng.choice((-1.0, 1.0))
+        ends = [
+            axis[k] + side * rng.uniform(1.0, 2.0) * width_m / radius * normals[k] for k in (a, b)
+        ]
+        trough_width = width_m * rng.uniform(0.5, 0.85)
+        trough = chasm_axis(
+            ends[0] / np.linalg.norm(ends[0]), ends[1] / np.linalg.norm(ends[1]),
+            trough_width, radius, rng, wander=0.8,
+        )
+        paths.append(trough)
+        widths.append(trough_width)
+        cap = float(main_depth[(a + b) // 2]) * rng.uniform(0.6, 0.9)
+        depths.append(floor_depth(trough, ground_m, tree, cap))
+    for end_index, outward in ((0, -1), (len(axis) - 1, 1)):
+        for _ in range(int(rng.integers(*CHASM_SPLAYS))):
+            k = end_index - outward * int(rng.uniform(0.02, 0.08) * len(axis))
+            point, tangent, normal = frame(axis, k)
+            shift = rng.choice((-1.0, 1.0)) * rng.uniform(0.7, 1.3) * width_m / radius
+            first = point + shift * normal
+            first /= np.linalg.norm(first)
+            heading = outward * tangent + rng.uniform(-0.25, 0.25) * normal
+            heading -= (heading @ first) * first
+            heading /= np.linalg.norm(heading)
+            reach = rng.uniform(0.05, 0.12) * length / radius
+            tip = np.cos(reach) * first + np.sin(reach) * heading
+            splay_width = width_m * rng.uniform(0.35, 0.6)
+            splay = chasm_axis(first, tip, splay_width, radius, rng, wander=0.5)
+            paths.append(splay)
+            widths.append(splay_width)
+            depths.append(
+                floor_depth(splay, ground_m, tree, float(main_depth[k]) * rng.uniform(0.4, 0.65))
+            )
     return Chasms(tuple(paths), np.array(widths), tuple(depths))
 
 
@@ -364,20 +447,48 @@ def authored_chasms(
     return Chasms(tuple(paths), np.array(widths), tuple(depths))
 
 
-def chasm_relief(points: F64, planet_radius_m: float, chasms: Chasms) -> F64:
+def chasm_relief(
+    points: F64, planet_radius_m: float, chasms: Chasms, detail_m: float | None = None
+) -> F64:
     """Height change (m) the chasms make at unit vectors ``points``.
 
-    A flat floor, steep walls stepped by resistant layers and slumped into
-    spurs, uplifted shoulders that fall away from the rim, and ends that pinch
-    out. The floor lies ``depth`` below the ground and the rim stands the
-    shoulder above it. Inside a chasm or side canyon the deeper floor wins;
-    outside, the higher shoulder.
+    Each wall follows its own ragged rim, a fractal of bays and spurs that run
+    across the wall because the rim noise depends only on the position along
+    the axis. Walls lean like a half-graben whose
+    master fault swaps sides along the rift, resistant layers crop out as
+    patchy benches, talus and slumps raise the floor towards the walls, and
+    gullies notch the uplifted shoulders. Ends stop at rounded headwalls. The
+    floor lies about ``depth`` below the ground. Inside a chasm or side canyon
+    the deeper floor wins; outside, the higher shoulder. Every point is first
+    displaced by a domain warp, drawn down to ``detail_m`` (or to a few
+    kilometres when it is None), which makes all outlines organically irregular.
     """
+    radius = planet_radius_m
+    out = np.zeros(len(points))
+    if not len(chasms):
+        return out
+    widest = float(chasms.width_m.max())
+    # Only points near some path are worked on, which keeps big maps fast.
+    reach = (3.0 + CHASM_WARP) * widest / radius
+    near = np.flatnonzero(
+        np.isfinite(
+            np.asarray(
+                KDTree(np.vstack(chasms.paths)).query(
+                    points, distance_upper_bound=2 * np.sin(reach / 2), workers=-1
+                )[0]
+            )
+        )
+    )
+    if not len(near):
+        return out
+    octaves = 5 if detail_m is None else int(np.clip(np.log2(widest / detail_m), 3, 11))
+    points = _warp(points[near], seed=9311, amount=CHASM_WARP * widest / radius,
+                   frequency=radius / widest, octaves=octaves)
     low = np.zeros(len(points))
     high = np.zeros(len(points))
     for path, width, depth in zip(chasms.paths, chasms.width_m, chasms.depth_m, strict=True):
         half = width / 2
-        reach = 6.0 * half / planet_radius_m
+        reach = 6.0 * half / radius
         found = KDTree(path).query(points, distance_upper_bound=2 * np.sin(reach / 2), workers=-1)
         distance = np.asarray(found[0], dtype=np.float64)
         index = np.asarray(found[1], dtype=np.int64)
@@ -385,23 +496,95 @@ def chasm_relief(points: F64, planet_radius_m: float, chasms: Chasms) -> F64:
         if not hit.any():
             continue
         p = points[hit]
-        r = 2 * np.arcsin(np.clip(distance[hit] / 2, 0, 1)) * planet_radius_m
-        t = index[hit] / max(len(path) - 1, 1)
-        floor = depth[index[hit]]
-        taper = _smooth(t, 0.0, 0.1) * _smooth(1 - t, 0.0, 0.1)
-        # Narrows and basins along the length, and spurs along the walls.
-        along = np.clip(1 + 0.5 * fbm3(path[index[hit]], 9303, 2, planet_radius_m / (8 * width)),
-                        0.6, 1.5)
-        wobble = 1 + 0.15 * fbm3(p, 9301, 3, planet_radius_m / (3 * width))
-        s = r / (half * along * wobble * (0.35 + 0.65 * taper))
-        # Two benches where resistant layers crop out of the walls.
-        u = _smooth(s, 0.6, 1.0)
-        u = np.clip(u + 0.07 * np.sin(4 * np.pi * u) * (1 + fbm3(p, 9302, 2, 50.0)), 0, 1)
-        shoulder = CHASM_SHOULDER * floor * taper
-        height = shoulder * (1 - _smooth(s, 1.0, 4.0)) - (floor * taper + shoulder) * (1 - u)
+        i = index[hit]
+        last = len(path) - 1
+        r = 2 * np.arcsin(np.clip(distance[hit] / 2, 0, 1)) * radius
+        # The local frame at the nearest vertex: along the axis and across it.
+        ahead = path[np.minimum(i + 1, last)] - path[np.maximum(i - 1, 0)]
+        ahead -= np.sum(ahead * path[i], axis=1)[:, None] * path[i]
+        ahead /= np.maximum(np.linalg.norm(ahead, axis=1), 1e-12)[:, None]
+        across = np.cross(path[i], ahead)
+        offset = p - path[i]
+        # Which wall a point belongs to, blended across the axis so the two
+        # walls meet without a seam beyond the ends.
+        right = _smooth(np.sum(offset * across, axis=1) * radius, -0.25 * half, 0.25 * half)
+        foot = path[i] + np.sum(offset * ahead, axis=1)[:, None] * ahead
+        foot /= np.linalg.norm(foot, axis=1)[:, None]
+        walls = partial(_wall_noise, foot, across * (3 * width / radius), right)
+        per = radius / width  # noise frequencies are in cycles per width
+        step = float(np.arccos(np.clip(path[0] @ path[min(1, last)], -1, 1))) * radius
+        from_end = np.minimum(i, last - i) * step
+        # Narrows and basins along the length. Each rim wanders on its own like
+        # a fractal coastline: bays where the wall has retreated, spurs
+        # between them and smaller scallops on both.
+        along = np.clip(1 + 0.5 * fbm3(foot, 9303, 2, radius / (8 * width)), 0.6, 1.5)
+        scallop = walls(9301, 5, per / 1.5, 0.6)
+        alcove = _smooth(scallop, 0.15, 0.6)  # where the wall has retreated most
+        blunt = 0.8 + 0.2 * _smooth(from_end, 0.0, 2 * width)
+        s = r / (half * along * (1 + 0.2 * scallop) * blunt)
+        # A half-graben: one wall gentler and its shoulder higher, swapping along the rift.
+        tilt = fbm3(foot, 9305, 1, radius / (10 * width)) * (2 * right - 1)
+        lean = np.clip(0.62 + 0.13 * tilt, 0.45, 0.75)
+        u = _smooth(s, lean, 1.0)
+        layers = 0.08 * _smooth(walls(9302, 2, per / 2), -0.1, 0.4)
+        layers *= float(_smooth(np.array(width), 15e3, 45e3))
+        shift = 2 * walls(9306, 1, per / 3)
+        # Benches step the wall but leave the floor and the rim where they are.
+        u = np.clip(u + layers * np.sin(4 * np.pi * u + shift) * 4 * u * (1 - u), 0, 1)
+        floor = depth[i] * _smooth(from_end, -width, 0.3 * width)
+        # Gullies notch the shoulder just behind the rim. The shoulder fades
+        # with plain distance, so it ends inside the search reach.
+        notch = 0.8 * alcove * (1 - _smooth(s, 1.0, 1.8))
+        shoulder = CHASM_SHOULDER * floor * (1 + 0.6 * tilt) * (1 - notch)
+        fall = 1 - _smooth(r / (half * along), 1.0, 4.0)
+        # Talus and slumps (larger below alcoves) and hummocks on the floor.
+        apron = 0.12 * _smooth(s, 0.2 * lean, lean) * (0.6 + 0.8 * alcove)
+        hummocks = 0.04 * fbm3(p, 9307, 3, radius / (0.25 * width))
+        height = (
+            shoulder * fall
+            - (floor * (1 - apron - hummocks) + shoulder * fall) * (1 - u)
+        )
         low[hit] = np.minimum(low[hit], height)
         high[hit] = np.maximum(high[hit], height)
-    return np.where(low < 0, low, high)
+    out[near] = np.where(low < 0, low, high)
+    return out
+
+
+def _warp(points: F64, seed: int, amount: float, frequency: float, octaves: int) -> F64:
+    """Unit vectors displaced by up to about ``amount`` radians of fractal noise."""
+    shift = np.stack(
+        [fbm3(points, seed + k, octaves, frequency, 0.55) for k in range(3)], axis=1
+    )
+    shift -= np.sum(shift * points, axis=1)[:, None] * points
+    moved = points + amount * shift
+    return moved / np.linalg.norm(moved, axis=1)[:, None]
+
+
+def _path_normals(path: F64) -> F64:
+    """Unit vectors across ``path`` at each vertex, in the tangent plane."""
+    ahead = np.gradient(path, axis=0)
+    ahead -= np.sum(ahead * path, axis=1)[:, None] * path
+    ahead /= np.maximum(np.linalg.norm(ahead, axis=1), 1e-12)[:, None]
+    return np.cross(path, ahead)
+
+
+def _wall_noise(
+    foot: F64,
+    apart: F64,
+    right: F64,
+    seed: int,
+    octaves: int,
+    frequency: float,
+    gain: float = 0.5,
+) -> F64:
+    """Noise along each wall: a function of the position along the axis and the wall.
+
+    It is sampled ``apart`` to either side of the axis foot point, so the two
+    walls vary independently, and blended by ``right`` (0 left, 1 right).
+    """
+    left_noise = fbm3(foot - apart, seed, octaves, frequency, gain)
+    right_noise = fbm3(foot + apart, seed, octaves, frequency, gain)
+    return right * right_noise + (1 - right) * left_noise
 
 
 def draw_site(
@@ -488,6 +671,6 @@ def crater_relief(points: F64, planet_radius_m: float, craters: Craters) -> F64:
     return out
 
 
-def _smooth(x: F64, a: float, b: float) -> F64:
+def _smooth(x: F64, a: F64 | float, b: F64 | float) -> F64:
     t = np.clip((x - a) / (b - a), 0, 1)
     return t * t * (3 - 2 * t)

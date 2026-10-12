@@ -174,11 +174,12 @@ smaller Valles Marineris (on Mars 4,000 km long, up to 200 km wide and 7 km
 deep). Earth's largest canyons are far smaller: the Grand Canyon is 446 km long
 and 1.8 km deep, and the Yarlung Tsangpo gorge about 5 km deep.
 
-- **Size.** One chasm, 900–2,200 km long and 60 km wide from rim to rim.
+- **Size.** One chasm system, 900–2,200 km long; the main chasm is 60 km wide
+  from rim to rim.
 - **Axis.** Rifts grow from segments offset en echelon, so the axis runs between
   its ends in straight stretches of about six widths (360 km), each shifted
-  sideways by up to 1.2 widths and joined by diagonal jogs. A first version bent the axis in smooth
-  waves, which looked like a meandering worm.
+  sideways by up to 1.2 widths and joined by diagonal jogs, with a smoothed
+  random walk on top so no two stretches repeat.
 - **Placement.** It starts on high ground (at least 1 km where there is some) and
   lies wholly inland, at least two widths from the coast and away from the titan
   and the craters. The first trial whose mean depth reaches 1.2 km is taken, or
@@ -189,26 +190,46 @@ and 1.8 km deep, and the Yarlung Tsangpo gorge about 5 km deep.
   deepest cut follows the lowest ground within two widths either way and eases
   along the axis, so the floor neither steps nor dips to the sea. Below-sea-level
   floors, like the Dead Sea's rift, are not supported yet.
-- **Shape.**
-  - narrows and basins: the width varies from 0.6 to 1.5 times along the length,
-    as Valles Marineris widens from its narrow chasmata into broad basins;
-  - a flat floor across the middle 60 % of the width;
-  - steep walls with two benches where resistant layers crop out, wobbling in
-    width as spurs slump;
-  - rift shoulders: the flanks are uplifted by 30 % of the depth at the rim and
-    fall away over two widths, as flexure lifts the shoulders of Earth's large
-    rifts by 1–2 km. They make the walls taller without lowering the floor;
-  - ends that narrow and pinch out over the last tenth of the length.
-- **Side canyons.** Three to six branch from the middle seven tenths: a third to
-  half as wide, hanging at half to two thirds of the main floor's depth, each 6–18 %
-  of the chasm's length. Their own segments give them doglegs, and they grow
-  shallower towards their heads. Inside, the deeper floor wins; outside, the higher shoulder.
+- **The system.** Around the main chasm:
+  - one to three parallel troughs, half to most of its width, run alongside a
+    quarter to six tenths of its length on their own bends, like the chasmata of
+    Valles Marineris: they merge with it into basins or stand apart behind
+    plateau ridges;
+  - three to six side canyons branch from the middle seven tenths, a third to
+    half as wide, 6–18 % of its length, hanging at half to two thirds of the
+    floor's depth and growing shallower towards rounded heads; up to two
+    tributaries fork near each head;
+  - each end stops at a rounded headwall and dies out in one or two smaller
+    troughs offset en echelon, as rift tips splay.
+- **Shape of each trough.**
+  - narrows and basins: the width varies from 0.6 to 1.5 times along the length;
+  - a floor across the middle half or more, raised towards the walls by talus
+    and slumps and roughened by hummocks;
+  - steep walls with patchy benches where resistant layers crop out; one wall is
+    gentler and its shoulder higher, like a half-graben whose master fault swaps
+    sides along the rift;
+  - rift shoulders: the flanks are uplifted by about 30 % of the depth and fall
+    away over two widths, as flexure lifts the shoulders of Earth's large rifts
+    by 1–2 km. Gullies notch them just behind the rim;
+  - a domain warp: every point is displaced by fractal noise (up to about 0.45
+    widths) before its distance to the axes is measured, so rims, walls, bends
+    and ends are irregular without a repeating pattern. Maps draw the warp down
+    to their own scale (a pixel of the atlas, the detail of a regional level), so
+    nested maps agree on the large shapes and add finer ones.
+  Inside, the deeper floor wins; outside, the higher shoulder.
+- **Earlier versions looked artificial.** A cross-section swept along one axis
+  gave parallel walls, ruled benches, needle-point ends and a ribbon-like plan;
+  smooth sine bends looked like a worm; rim noise with sharp ridges cut evenly
+  spaced teeth; short box canyons as separate paths curled into hooks; and
+  troughs copied from the main axis looked like rails. The warp replaced most of
+  these hand-made details.
 - **Timing.** Like the craters, a chasm is cut into the eroded relief before lakes
   form. Where it is wet its closed floor holds a long rift lake, as Lake Baikal and
   Lake Tanganyika fill rift valleys; where it is dry, playas lie in the lowest parts.
 - **Build data.** Craters and chasms form one overlay (`Wonders`). The archive keeps
-  each path's axis and depth profile; `metrics.chasms` lists every path (the chasm
-  and its side canyons) with its ends, length, width and depth.
+  each path's axis and depth profile; `metrics.chasms` lists every path (the main
+  chasm first, then troughs, side canyons and splays) with its ends, length,
+  width and depth.
 
 Wonders are placed by rejection sampling of continuous positions on the sphere
 (`draw_site`), from their own random streams, with yes/no eligibility tests.

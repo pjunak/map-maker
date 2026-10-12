@@ -77,8 +77,8 @@ The **Landmarks** tab places fantastical wonders where you want them:
   200–1,200 km are allowed.
 - **Crater:** an impact crater with a central plateau that may hold a ring lake.
   Its usual diameter is 240 km, and 20–600 km are allowed.
-- **Chasm:** a great rift canyon with stepped walls and side canyons, between two
-  points 100–4,000 km apart. Its usual width is 60 km, and 10–200 km are allowed.
+- **Chasm:** a great rift canyon system with parallel troughs and side canyons,
+  between two points 100–4,000 km apart. Its usual width is 60 km, and 10–200 km are allowed.
   It is cut up to 3 km deep, shallower where the ground is low, and holds a long
   lake where it is wet.
 
@@ -91,7 +91,8 @@ landmarks too.
 When the planet is generated with this recipe, the placed landmarks replace the
 random wonders of their kind: placed titans replace the random titan, placed
 craters replace random craters, and placed chasms replace the random chasm. The
-planet reports an error if a landmark, or either end of a chasm, lies at sea. Landmarks are saved in the recipe's optional `landmarks` list
+planet reports an error if a landmark, or either end of a chasm, lies at sea.
+Landmarks are saved in the recipe's optional `landmarks` list
 ([schema](../schemas/world/geology-v2.schema.json)). Recipes without them still
 open.
 

@@ -135,7 +135,9 @@ def lake_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> NDArra
     lake[near] = lakes.lake[owners[found[near]]]
     ground = raster.interpolate(
         mesh, np.where(result.land, result.elevation_m - result.wonder_m, 0.0)
-    )[zone] + wonder_relief(pixels, mesh.radius_m, wonders)
+    )[zone] + wonder_relief(
+        pixels, mesh.radius_m, wonders, 2 * np.pi * mesh.radius_m / raster.shape[1]
+    )
     wet = near & land_px[zone] & (ground < lakes.level_m[np.maximum(lake, 0)])
     ids[zone] = np.where(wet, lake, -1)
     return ids
