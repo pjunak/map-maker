@@ -32,9 +32,14 @@ traced the same straight parent contours.
    are contours of the regional relief, and open lakes do not run down their
    outlet valleys. The wonder-zone widening is removed: crater and chasm lakes
    follow the sharp relief through the same rule.
-2. **Closed lakes are sinks.** Where a window holds a closed lake, river and
+2. **Lakes drain their basins.** Where a window holds a closed lake, river and
    pond routing ends in it, so its basin drains into it instead of filling to
-   its rim, and no playa is drawn above it.
+   its rim, and no playa is drawn above it. Ponds are measured with open lakes
+   as sinks too. Rivers route through an open lake, so its outflow keeps its
+   upstream area. Where the window basin spills above the lake's level, the
+   outflow is lowered to the level along the basin floor from the lake to the
+   pour point and beyond, for routing only. The basin then drains into the
+   lake rather than across a filled flat towards the pour point.
 3. **Tiles hold lakes in their own frame.** A lake node is held at the lake level
    minus the young relief (volcanoes and wonders) the tile leaves out. Level
    parents carry the planet's young relief on top of their surface, as the planet
@@ -57,3 +62,5 @@ traced the same straight parent contours.
 - Where the relief is smooth or planar at the level's resolution, shores are
   smooth too; finer detail comes from finer levels.
 - Crater regions lose the rugged relief that tiles had eroded towards the pits.
+- An open lake's outflow can cross a pass above the lake's level that the
+  displayed relief does not cut, since only routing lowers it.

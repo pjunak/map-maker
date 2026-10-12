@@ -203,7 +203,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
-| [docs/research/2026-10-12-regional-lake-shores.md](research/2026-10-12-regional-lake-shores.md) | Straight regional lake shores: causes, the relief flood, crater lakes held in the tiles' frame, refined outlines and Aethelara measurements. |
+| [docs/research/2026-10-12-regional-lake-shores.md](research/2026-10-12-regional-lake-shores.md) | Straight regional lake shores: causes, the relief flood, crater lakes held in the tiles' frame, refined outlines, open-lake playa rings and Aethelara measurements. |
 | [docs/research/2026-10-11-regional-coast-detail.md](research/2026-10-11-regional-coast-detail.md) | Regional coast detail below the drawing's precision: method trials, chosen parameters and Aethelara before/after. |
 | [docs/research/2026-10-08-volcanism.md](research/2026-10-08-volcanism.md) | Arc, hotspot, rift and intraplate volcanoes: placement, shapes, rendering, export and limits. |
 | [docs/research/2026-10-08-plate-tectonics-and-sediment.md](research/2026-10-08-plate-tectonics-and-sediment.md) | Plate-driven collision belts, rifts, leading-edge margins and trenches; old orogens; results and limits. |

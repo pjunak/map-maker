@@ -93,7 +93,8 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   hills and valleys, including a crater's sharp trough. Their outlines also gain
   detail below the planet's mesh spacing, as coasts do, so a lake can sit a few
   kilometres from where the world map shows it. Rivers and closed hollows in a
-  closed lake's basin drain into it
+  lake's basin drain into it, so no ring of playa or ponds lines its shore, and
+  an open lake drains out over its basin's lowest pass
   ([ADR-0092](adr/0092-regional-lakes-fill-the-regional-relief.md)).
 - A scale bar shows distance. Hovering shows the place, the offset from the centre
   and the height.

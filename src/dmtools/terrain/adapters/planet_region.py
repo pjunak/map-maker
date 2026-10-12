@@ -22,6 +22,7 @@ from scipy.ndimage import (
     gaussian_filter,
     label,
     maximum,
+    minimum_position,
 )
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
@@ -335,11 +336,13 @@ def _compose(
         cover.reshape(pixels, pixels) > LAKE_CORE_COVER, level.reshape(pixels, pixels),
     )
     salt = lakes & closed.reshape(pixels, pixels)
-    if salt.any():
-        # A closed lake is where its basin's water ends: the basin drains into it
-        # instead of filling up to its rim, and holds no playa above the lake.
-        flow = window_flow(parent, points, elevation, land & ~salt, inside, pixel_m)
-    coverage, ponds, depth = window_rivers(flow, land, lakes, inside, river_km2, pixel_m)
+    flow, basin_depth = lake_flow(flow, lakes, salt, level.reshape(pixels, pixels))
+    # Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
+    # calderas) hold water or a playa: rivers end there instead of crossing a
+    # filled flat.
+    ponds = land & inside & ~lakes & (basin_depth > POND_DEPTH_M)
+    depth = np.where(ponds, basin_depth, 0.0)
+    coverage = window_rivers(flow, lakes | ponds, river_km2)
     # Ponds are closed basins: lakes where it is wet enough, playas where it is dry.
     dry = np.zeros_like(ponds)
     if climate is not None:
@@ -419,6 +422,24 @@ class WindowFlow:
     area_m2: F64  # drainage area, with the water entering from beyond the window
     filled: F64  # relief with closed depressions filled to their spill level
     links: tuple[tuple[int, int], ...]  # splitting rivers: (split pixel, branch pixel)
+    inflow_m2: F64  # drainage area entering at each pixel from beyond the window
+    pixel_m: float
+
+    @classmethod
+    def route(
+        cls,
+        z: F64,
+        outlet: B,
+        pixel_m: float,
+        inflow_m2: F64,
+        links: tuple[tuple[int, int], ...] = (),
+    ) -> WindowFlow:
+        receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow_m2)
+        return cls(z, outlet, receiver, area, filled, links, inflow_m2, pixel_m)
+
+    def rerouted(self, z: F64, outlet: B) -> WindowFlow:
+        """The same water routed over other relief and outlets."""
+        return WindowFlow.route(z, outlet, self.pixel_m, self.inflow_m2, self.links)
 
 
 def window_flow(
@@ -446,8 +467,7 @@ def window_flow(
                    for k, end in zip(ends, (a, b), strict=True)):
                 inflow.ravel()[ends[1]] += carried
                 links.append((ends[0], ends[1]))
-    receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow)
-    return WindowFlow(z, outlet, receiver, area, filled, tuple(links))
+    return WindowFlow.route(z, outlet, pixel_m, inflow, tuple(links))
 
 
 def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
@@ -468,22 +488,76 @@ def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
     return keep[labels]
 
 
-def window_rivers(
-    flow: WindowFlow, land: B, lakes: B, inside: B, river_km2: float, pixel_m: float
-) -> tuple[F64, B, F64]:
-    """River coverage on the window's drainage, closed ponds and their depth.
+def lake_flow(flow: WindowFlow, lakes: B, closed: B, level: F64) -> tuple[WindowFlow, F64]:
+    """Drainage with the window's lakes, and the depth of its closed depressions.
 
-    Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
-    calderas) hold water or a playa: rivers end there instead of crossing a
-    filled flat.
+    Routing fills each depression up to wherever the window lets it spill. For
+    a lake's basin that can lie above the lake's level, so depressions are
+    measured with every lake as a sink: the ground between a lake and its
+    basin's spill is no pond. Closed lakes are where their basin's water ends.
+    Rivers route through open lakes, so outflows keep their upstream area, over
+    an outflow lowered to the lake's level (``lake_outflows``).
     """
-    z, filled, receiver, area = flow.z, flow.filled, flow.receiver, flow.area_m2
+    if not lakes.any():
+        return flow, flow.filled - flow.z
+    inward, _, basins = grid_flow(
+        flow.z, flow.outlet | lakes, flow.pixel_m, np.zeros_like(flow.z)
+    )
+    routed = lake_outflows(flow, inward, lakes & ~closed, level)
+    return flow.rerouted(routed, flow.outlet | (lakes & closed)), basins - flow.z
+
+
+def lake_outflows(flow: WindowFlow, inward: NDArray[np.int64], lakes: B, level: F64) -> F64:
+    """Routed relief with each lake's outflow lowered to the lake's level.
+
+    A lake's routed path out, from its last-filled pixel, may cross the filled
+    basin to a pour point above the lake's level, where the tiles do not hold
+    the parent's outflow. Drainage would then cross that flat towards the pour
+    point instead of entering the lake. The outflow is lowered to the level
+    along the basin's floor from the lake up to the pour point (``inward``,
+    receivers with every lake a sink, leads down that floor into the lake),
+    then along the routed path until the filled relief is down to the lake's
+    shore. The basin then drains into the lake and the lake out over the pour
+    point. Only routing uses this relief.
+    """
+    found = cast(tuple[NDArray[np.int32], int], label(lakes))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    if not count:
+        return flow.z
+    relief, filled, outlet = flow.z.ravel(), flow.filled.ravel(), flow.outlet.ravel()
+    z, ids, columns = relief.copy(), labels.ravel(), flow.z.shape[1]
+    starts = minimum_position(flow.filled, labels, np.arange(1, count + 1))
+    for lake, (row, column) in enumerate(cast(list[tuple[int, int]], starts), start=1):
+        start = row * columns + column
+        top = float(level.ravel()[start])
+        path: list[int] = []
+        node = int(flow.receiver[start])
+        while node >= 0 and not outlet[node] and filled[node] > top + LAKE_SHORE_M:
+            path.append(node)
+            node = int(flow.receiver[node])
+        if not path:
+            continue
+        # The pour point is where the path leaves the filled basin.
+        crest = int(np.argmin(filled[path] > relief[path]))
+        floor: list[int] = []
+        node = path[crest - 1] if crest else -1
+        while node >= 0 and ids[node] != lake:
+            floor.append(node)
+            node = int(inward[node])
+        # Where the floor does not lead back to this lake, keep the routed path.
+        channel = path[crest:] + (floor if node >= 0 else path[:crest])
+        z[channel] = np.minimum(z[channel], top)
+    return z.reshape(flow.z.shape)
+
+
+def window_rivers(flow: WindowFlow, water: B, river_km2: float) -> F64:
+    """River coverage on the window's drainage; rivers end in ``water``."""
+    z, receiver, area, pixel_m = flow.z, flow.receiver, flow.area_m2, flow.pixel_m
     pixels = z.shape[0]
-    ponds = land & inside & ~lakes & (filled - z > POND_DEPTH_M)
     flat = np.arange(pixels * pixels)
     x = (flat % pixels + 0.5).astype(np.float64)
     y = (flat // pixels + 0.5).astype(np.float64)
-    stop = (flow.outlet | lakes | ponds).ravel()
+    stop = (flow.outlet | water).ravel()
     major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
     # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
     # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
@@ -493,11 +567,10 @@ def window_rivers(
     drop = z.ravel() - z.ravel()[target]
     run = np.hypot(flat % pixels - target % pixels, flat // pixels - target // pixels) * pixel_m
     gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
-    coverage = river_coverage(
+    return river_coverage(
         x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
         meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=flow.links,
     )
-    return coverage, ponds, np.where(ponds, filled - z, 0.0)
 
 
 def regional_climate(

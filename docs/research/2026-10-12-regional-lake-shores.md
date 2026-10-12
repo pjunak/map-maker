@@ -60,10 +60,46 @@ Other findings:
 The images are local artifacts, not tracked in the repository
 (`artifacts/aethelara/lake-shores-*.png`).
 
+## Open-lake shores — 2026-10-13
+
+Open lakes whose window basin spills above the lake's level drew a pale playa
+ring along the shore where it is dry, and a band of pond water where it is wet.
+Routing passes through open lakes, so their basin filled up to its pour point,
+and the ground from the shore to 10 m below that point counted as ponds. Ponds
+are now measured with every lake as a sink.
+
+That alone exposed rivers crossing the filled basin towards the pour point,
+some running along the shore for over 100 km instead of entering the lake.
+Routing now lowers each open lake's outflow to the lake's level: up the basin
+floor from the lake to the pour point, then along the routed path until the
+filled relief is down to the shore. The floor path follows receivers with
+every lake a sink, from the pour point down into the lake. Lowering the routed
+path across the basin instead left the valley floor beside it draining back
+towards the lake, so two rivers ran in parallel for about 200 pixels.
+
+Level-1 windows of radius 150 km, 900 pixels (333 m). *Ringed* is the share of
+open-lake shore pixels within 2 pixels of playa or pond water. *Shore rivers*
+counts river pixels within 4 pixels of an open lake.
+
+| Window | Before | Ponds with every lake a sink | Plus lowered outflows |
+|---|---|---|---|
+| 69.11°, 45.05° (dry) | ringed 100 %; playa 26,385 px; shore rivers 12 px | 0 %; 0; 189 px | 0 %; 0; 80 px |
+| 73.51°, 58.48° (wet) | ringed 92 %; pond water 25,636 px, playa 3,989 px; shore rivers 88 px | 0 %; 0; 386 px | 0 %; 0; 52 px |
+
+- All but one of the 56,013 removed playa or pond pixels were connected to an
+  open lake.
+- The ring had hidden most shore rivers, hence the low counts before.
+- Wet ponds no longer widen open lakes: water in the 73.51° window fell from
+  163,415 to 137,779 pixels, the open lakes alone.
+- The crater window (85.76°, 22.74°), whose lakes are all closed, is
+  pixel-identical.
+
+Images: `artifacts/aethelara/lake-ring-*.png`.
+
 ## Limits and follow-ups
 
 - Shores are as fine as the level's relief and outline octaves: level 1 is
   smooth below about 10 km.
-- Open lakes whose window basin spills above the lake level can show a playa
-  ring along the shore. This happened before this change too; measuring ponds
-  with all lakes as sinks would remove it.
+- An open lake's outflow is lowered for routing only. Where its window basin
+  spills above the lake's level, the outflow river crosses a pass that the
+  displayed relief does not cut.

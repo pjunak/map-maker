@@ -577,6 +577,63 @@ def test_open_lake_water_stops_at_its_outlet() -> None:
     assert not np.any(lakes[valley & (columns > 28)])  # water does not run downstream
 
 
+def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
+    from scipy.ndimage import binary_dilation, label
+
+    from dmtools.terrain.adapters.planet_region import (
+        POND_DEPTH_M,
+        WindowFlow,
+        lake_flow,
+        lake_water,
+        window_rivers,
+    )
+
+    n, level, pixel_m = 120, 300.0, 500.0
+    rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
+    r = np.hypot(rows, columns)
+    # An open lake flat at its level in a bowl whose rim rises 60 m above it.
+    # A valley rises from the shore to a pass 40 m above the lake, then falls
+    # to the map's edge: the window basin spills well above the lake's level.
+    z = level + 3.0 * np.clip(r - 25.0, 0.0, 20.0) - 3.0 * np.maximum(r - 45.0, 0.0)
+    valley = (np.abs(rows) < 2) & (columns > 25)
+    rise = level + 2.0 + 1.9 * (columns - 25.0)
+    floor = np.where(columns < 45.0, rise, level + 40.0 - 2.0 * (columns - 45.0))
+    z[valley] = np.minimum(z, floor)[valley]
+    outlet = np.zeros((n, n), dtype=bool)
+    outlet[[0, -1], :] = outlet[:, [0, -1]] = True
+    # A river enters the bowl over its north rim, far from the pass.
+    inflow = np.zeros((n, n))
+    inflow[16, n // 2] = 2e9
+    flow = WindowFlow.route(z, outlet, pixel_m, inflow)
+    lakes = lake_water(z, ~outlet, flow.filled, r < 10.0, np.full((n, n), level))
+    assert np.all(lakes[r < 25.0]) and not np.any(lakes[(r > 27.0) & ~valley])
+    shore = (r > 27.0) & (r < 33.0) & ~valley
+    assert np.all(flow.filled[shore] - z[shore] > POND_DEPTH_M)  # far below the basin's spill
+    routed, depth = lake_flow(flow, lakes, np.zeros((n, n), dtype=bool), np.full((n, n), level))
+    # The lake drains its basin: the ground between its shore and the spill
+    # holds no pond (a pale playa ring in dry climates).
+    ponds = ~outlet & ~lakes & (depth > POND_DEPTH_M)
+    assert not ponds.any()
+    # The river from the north runs down into the lake, not around it to the pass.
+    node = 16 * n + n // 2
+    while node >= 0 and not lakes.flat[node]:
+        node = int(routed.receiver[node])
+    assert node >= 0
+    # Rivers route through the open lake: everything leaves down the valley,
+    # in one river from the shore along the valley floor, not across the bowl.
+    exit_area = routed.area_m2.reshape(n, n)[n // 2 - 2 : n // 2 + 2, -2].max()
+    assert exit_area > 2e9 + 0.9 * np.pi * 45.0**2 * pixel_m**2
+    coverage = window_rivers(routed, lakes | ponds, 500.0)
+    drawn = (coverage > 0.3) & (r > 27.0) & (r < 44.0)
+    north = (np.abs(columns) < 5) & (rows < 0)
+    assert drawn[valley].any() and not np.any(drawn & ~north & (np.abs(rows) > 5))
+    parts = np.zeros((n, n), dtype=np.int32)
+    label(coverage > 0.3, structure=np.ones((3, 3)), output=parts)
+    leaving = np.setdiff1d(parts[n // 2 - 2 : n // 2 + 2, -3], [0])
+    near_shore = np.asarray(binary_dilation(lakes, iterations=2), dtype=bool)
+    assert np.any(np.isin(parts, leaving) & near_shore)
+
+
 def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult) -> None:
     from dataclasses import replace
 
