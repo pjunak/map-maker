@@ -6,6 +6,7 @@ from re import fullmatch
 from typing import Literal
 
 from dmtools.terrain.domain.models import LandformSettings, Point2D
+from dmtools.terrain.domain.wonders import WONDER_KINDS, WONDERS, WonderKind
 from dmtools.terrain.domain.world import WorldProject
 
 type GeologicalSetting = Literal[
@@ -21,15 +22,6 @@ GEOLOGICAL_SETTINGS: tuple[GeologicalSetting, ...] = (
 )
 MAX_PROVINCES = 128
 MAX_PROVINCE_VERTICES = 256
-type LandmarkKind = Literal["titan", "crater", "chasm"]
-LANDMARK_KINDS: tuple[LandmarkKind, ...] = ("titan", "crater", "chasm")
-# Allowed diameters (km) of hand-placed wonders, and the size used when none is given.
-LANDMARK_DIAMETER_KM: dict[str, tuple[float, float, float]] = {
-    "titan": (200.0, 1200.0, 560.0),
-    "crater": (20.0, 600.0, 240.0),
-    "chasm": (10.0, 200.0, 60.0),  # a chasm's width
-}
-CHASM_LENGTH_KM = (100.0, 4000.0)
 MAX_LANDMARKS = 32
 MAX_AGE_MA = 1_000_000.0
 
@@ -100,18 +92,18 @@ class GeologyProvince:
 
 @dataclass(frozen=True, slots=True)
 class GeologyLandmark:
-    """A hand-placed wonder at a source position: a titan, a crater or a chasm.
+    """A hand-placed wonder (``domain.wonders``) at a source position.
 
-    ``diameter_km`` is the titan's basal diameter, the crater's rim diameter or
-    the chasm's width; None uses the kind's usual size. A chasm runs from
-    ``position`` to ``end``.
+    ``size_km`` is what the kind's size measures (a diameter, a width or a
+    height); None uses the usual size. Line wonders run from ``position`` to
+    ``end``.
     """
 
     id: str
     name: str
-    kind: LandmarkKind
+    kind: WonderKind
     position: Point2D
-    diameter_km: float | None = None
+    size_km: float | None = None
     end: Point2D | None = None
 
     def __post_init__(self) -> None:
@@ -121,33 +113,30 @@ class GeologyLandmark:
                 "Landmark ID must start with landmark- and use letters, digits, _ or -."
             )
         _name(self.name, "Landmark name")
-        if self.kind not in LANDMARK_KINDS:
-            raise ValueError(f"Landmark kind must be one of: {', '.join(LANDMARK_KINDS)}.")
+        if self.kind not in WONDER_KINDS:
+            raise ValueError(f"Landmark kind must be one of: {', '.join(WONDER_KINDS)}.")
         if len(self.position) != 2 or any(not _finite_number(v) for v in self.position):
             raise ValueError("A landmark position must be a finite coordinate pair.")
-        if self.diameter_km is not None:
-            low, high, _ = LANDMARK_DIAMETER_KM[self.kind]
-            if not _finite_number(self.diameter_km) or not low <= self.diameter_km <= high:
-                size = "width" if self.kind == "chasm" else "diameter"
-                raise ValueError(
-                    f"A {self.kind} needs a {size} from {low:,.0f} to {high:,.0f} km."
-                )
-        if self.kind == "chasm":
+        spec = WONDERS[self.kind]
+        label = spec.label.lower()
+        if self.size_km is not None:
+            low, high, _ = spec.size_km
+            if not _finite_number(self.size_km) or not low <= self.size_km <= high:
+                raise ValueError(f"A {label} needs a {spec.size} from {low:g} to {high:g} km.")
+        if spec.line:
             if self.end is None or len(self.end) != 2 or any(
                 not _finite_number(v) for v in self.end
             ):
-                raise ValueError("A chasm needs a finite end point.")
+                raise ValueError(f"A {label} needs a finite end point.")
             if tuple(self.end) == tuple(self.position):
-                raise ValueError("A chasm's ends must differ.")
+                raise ValueError(f"A {label}'s ends must differ.")
         elif self.end is not None:
-            raise ValueError(f"Only a chasm has an end point, not a {self.kind}.")
+            raise ValueError(f"A {label} has no end point.")
 
     @property
-    def size_km(self) -> float:
-        """The diameter in kilometres, defaulting to the kind's usual size."""
-        return (
-            LANDMARK_DIAMETER_KM[self.kind][2] if self.diameter_km is None else self.diameter_km
-        )
+    def effective_size_km(self) -> float:
+        """The size in kilometres, defaulting to the kind's usual size."""
+        return WONDERS[self.kind].size_km[2] if self.size_km is None else self.size_km
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,15 +168,16 @@ class WorldGeologyRecipe:
             for x, y in (landmark.position, *(() if landmark.end is None else (landmark.end,))):
                 if not (x0 <= x <= x1 and y0 <= y <= y1):
                     raise ValueError(f"{landmark.name}: position is outside the world frame.")
-            if landmark.end is not None:
+            spec = WONDERS[landmark.kind]
+            if landmark.end is not None and spec.length_km is not None:
                 length = frame.distance_km(
                     frame.source_to_lonlat(landmark.position), frame.source_to_lonlat(landmark.end)
                 )
-                low, high = CHASM_LENGTH_KM
+                low, high = spec.length_km
                 if not low <= length <= high:
                     raise ValueError(
-                        f"{landmark.name}: a chasm must be {low:,.0f}-{high:,.0f} km long "
-                        f"(it is {length:,.0f} km)."
+                        f"{landmark.name}: a {spec.label.lower()} must be "
+                        f"{low:,.0f}-{high:,.0f} km long (it is {length:,.0f} km)."
                     )
         for province in self.provinces:
             xs, ys = zip(*province.vertices, strict=True)

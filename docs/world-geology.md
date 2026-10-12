@@ -72,29 +72,20 @@ land are identical with or without the optional recipe.
 
 ## Place wonders by hand
 
-The **Landmarks** tab places fantastical wonders where you want them:
-- **Titan:** a giant ice-capped shield volcano. Its usual diameter is 560 km, and
-  200–1,200 km are allowed.
-- **Crater:** an impact crater with a central plateau that may hold a ring lake.
-  Its usual diameter is 240 km, and 20–600 km are allowed.
-- **Chasm:** a great rift canyon system with parallel troughs and side canyons,
-  between two points 100–4,000 km apart. Its usual width is 60 km, and 10–200 km are allowed.
-  It is cut up to 3 km deep, shallower where the ground is low, and holds a long
-  lake where it is wet.
-
-To place one, choose its kind, optionally a name and a size (a titan's or
-crater's diameter, a chasm's width), and click **Place on map**, then a point on
-land. A chasm takes a second click for its other end. Select a landmark in the
-tree to rename, resize (**Update**) or **Delete** it. Undo and redo cover
+The **Landmarks** tab places [wonders](wonders.md) where you want them. Choose a
+kind; the tab describes it and its size range. Optionally give a name and a size
+(a diameter, a width or a height, depending on the kind; blank uses the usual
+size). Click **Place on map**, then a point on land. Wonders placed by their two
+ends, such as a chasm, take a second click for the other end. Select a landmark
+in the tree to rename, resize (**Update**) or **Delete** it. Undo and redo cover
 landmarks too.
 
-When the planet is generated with this recipe, the placed landmarks replace the
-random wonders of their kind: placed titans replace the random titan, placed
-craters replace random craters, and placed chasms replace the random chasm. The
-planet reports an error if a landmark, or either end of a chasm, lies at sea.
-Landmarks are saved in the recipe's optional `landmarks` list
-([schema](../schemas/world/geology-v2.schema.json)). Recipes without them still
-open.
+When the planet is generated with this recipe, placed wonders replace the random
+wonders of their kind. The planet reports an error if a landmark, or either end
+of a two-ended one, lies at sea. Landmarks are saved in the recipe's optional
+`landmarks` list, each with `kind`, `position`, `size_km` and, for two-ended
+wonders, `end` ([schema](../schemas/world/geology-v2.schema.json)). Recipes
+without landmarks still open.
 
 ## Values and overlap rules
 

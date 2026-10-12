@@ -11,10 +11,10 @@ from typing import cast
 from dmtools.terrain.adapters.build import canonical_json
 from dmtools.terrain.adapters.landform_inputs import landform_from_json
 from dmtools.terrain.adapters.world_project import world_project_document, world_project_from_bytes
+from dmtools.terrain.domain.wonders import WONDER_KINDS
 from dmtools.terrain.domain.world import WorldProject
 from dmtools.terrain.domain.world_geology import (
     GEOLOGICAL_SETTINGS,
-    LANDMARK_KINDS,
     ContinentGeology,
     GeologyLandmark,
     GeologyProfile,
@@ -76,7 +76,7 @@ def geology_document(recipe: WorldGeologyRecipe) -> dict[str, object]:
                 "name": m.name,
                 "kind": m.kind,
                 "position": [float(m.position[0]), float(m.position[1])],
-                "diameter_km": None if m.diameter_km is None else float(m.diameter_km),
+                "size_km": None if m.size_km is None else float(m.size_km),
                 "end": None if m.end is None else [float(m.end[0]), float(m.end[1])],
             }
             for m in sorted(recipe.landmarks, key=lambda m: m.id)
@@ -185,15 +185,15 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
             )
         landmarks: list[GeologyLandmark] = []
         for item in _array(record.get("landmarks", [])):
-            keys = {"id", "name", "kind", "position", "diameter_km"}
+            keys = {"id", "name", "kind", "position", "size_km"}
             landmark = _record(item, keys | ({"end"} if "end" in _keys(item) else set()))
             position = tuple(_number(n) for n in _array(landmark["position"]))
             if len(position) != 2:
                 raise ValueError("Landmark positions need two coordinates.")
             kind = landmark["kind"]
-            if kind not in LANDMARK_KINDS:
+            if kind not in WONDER_KINDS:
                 raise ValueError(f"Unknown landmark kind: {kind}.")
-            diameter = landmark["diameter_km"]
+            size = landmark["size_km"]
             end: tuple[float, float] | None = None
             if landmark.get("end") is not None:
                 values = tuple(_number(n) for n in _array(landmark["end"]))
@@ -206,7 +206,7 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
                     _text(landmark["name"]),
                     kind,
                     (position[0], position[1]),
-                    None if diameter is None else _number(diameter),
+                    None if size is None else _number(size),
                     end,
                 )
             )

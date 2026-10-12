@@ -335,7 +335,7 @@ def generate_planet(
         if plates is None
         else place_volcanoes(
             mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved,
-            settings.volcanic_islands, settings.wonders and not titans,
+            settings.volcanic_islands, "titan" in settings.wonders and not titans,
         )
     )
     if titans:
@@ -344,7 +344,7 @@ def generate_planet(
             if not land[int(np.argmax(mesh.xyz @ site))]:
                 raise ValueError(f"{landmark.name} lies at sea; place a titan on land.")
         volcanoes = with_titans(
-            volcanoes, sites, np.array([m.size_km * 500.0 for m in titans]),
+            volcanoes, sites, np.array([m.effective_size_km * 500.0 for m in titans]),
             seeds[PLANET_VOLCANISM_STAGE_ID],
         )
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
@@ -356,10 +356,10 @@ def generate_planet(
     if placed_craters:
         craters = authored_craters(
             mesh, land, evolved, np.array([unit(m.position) for m in placed_craters]),
-            np.array([m.size_km * 500.0 for m in placed_craters]),
+            np.array([m.effective_size_km * 500.0 for m in placed_craters]),
             tuple(m.name for m in placed_craters),
         )
-    elif settings.wonders:
+    elif "crater" in settings.wonders:
         titan = volcanoes.subset(volcanoes.setting == TITAN)
         craters = place_craters(
             mesh, land, coast, evolved,
@@ -374,10 +374,10 @@ def generate_planet(
                 (unit(m.position), unit(m.end if m.end is not None else m.position))
                 for m in placed_chasms
             ),
-            np.array([m.size_km * 1000.0 for m in placed_chasms]),
+            np.array([m.effective_size_km * 1000.0 for m in placed_chasms]),
             tuple(m.name for m in placed_chasms), chasm_rng,
         )
-    elif settings.wonders:
+    elif "chasm" in settings.wonders:
         titan = volcanoes.subset(volcanoes.setting == TITAN)
         chasms = place_chasm(
             mesh, land, coast, evolved, chasm_rng,

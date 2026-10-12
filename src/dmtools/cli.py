@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from dmtools import __version__
+from dmtools.terrain.domain.wonders import WONDER_KINDS, wonder_kinds
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -155,9 +156,9 @@ def create_parser() -> argparse.ArgumentParser:
     planet.add_argument("--volcanic-islands", action="store_true",
                         help="Let young volcanoes at sea rise as islands (adds land "
                              "beyond your coastline).")
-    planet.add_argument("--wonders", action="store_true",
-                        help="Add fantastical landmarks beyond Earth's extremes "
-                             "(a titan shield volcano, impact craters and a great chasm).")
+    planet.add_argument("--wonders", type=wonder_kinds, default=(), metavar="KINDS",
+                        help="Fantastical landmarks placed at random: a comma-separated "
+                             f"list of {', '.join(WONDER_KINDS)}, or all.")
     planet.add_argument("--climate-passes", type=int, default=1,
                         help="Climate/erosion couplings; 0 disables climate and biomes.")
     planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")

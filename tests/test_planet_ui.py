@@ -174,6 +174,17 @@ def test_planet_panel_rejects_an_invalid_seed(app: ui.TerrainApp) -> None:
     assert not app.world_workspace.busy
 
 
+def test_planet_panel_chooses_wonder_kinds(app: ui.TerrainApp) -> None:
+    panel = app.world_workspace.planet_panel
+    assert panel.settings().wonders == ()
+    panel.wonders["chasm"].set(True)
+    panel.wonders["titan"].set(True)
+    assert panel.settings().wonders == ("titan", "chasm")  # catalog order
+    panel.set_busy(True)
+    assert all(str(check["state"]) == "disabled" for check in panel.wonder_inputs)
+    panel.set_busy(False)
+
+
 def test_planet_probe_describes_sea_land_climate_and_lakes(app: ui.TerrainApp) -> None:
     from dmtools.terrain.map_probes import PlanetProbe
     from dmtools.terrain.pipeline.planet_koppen import KOPPEN

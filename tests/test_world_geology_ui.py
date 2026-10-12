@@ -358,23 +358,24 @@ def test_invalid_landform_keeps_pending_form_and_busy_controls_lock(app: ui.Terr
 
 def test_landmarks_are_placed_updated_and_deleted(app: ui.TerrainApp) -> None:
     editor = edit(app)
-    editor.landmark["kind"].set("titan")
-    editor.landmark["diameter"].set("400")
+    editor.landmark["kind"].set("Titan volcano")
+    editor.landmark["size"].set("400")
     editor.place_landmark()
     assert editor._placing
     editor._click((0.4, 0.4), tk.Event())  # type: ignore[arg-type]
     wait(editor)
     (titan,) = editor.recipe.landmarks
-    assert titan.kind == "titan" and titan.diameter_km == 400.0 and titan.name == "Titan 1"
+    assert titan.kind == "titan" and titan.size_km == 400.0
+    assert titan.name == "Titan volcano 1"
     assert editor.tree.exists(titan.id)
     editor.landmark["name"].set("Skyfather")
-    editor.landmark["diameter"].set("")
+    editor.landmark["size"].set("")
     editor.update_landmark()
     wait(editor)
     (renamed,) = editor.recipe.landmarks
-    assert renamed.name == "Skyfather" and renamed.size_km == 560.0
+    assert renamed.name == "Skyfather" and renamed.effective_size_km == 560.0
     assert renamed.position == titan.position
-    editor.landmark["diameter"].set("nonsense")
+    editor.landmark["size"].set("nonsense")
     editor.update_landmark()
     assert "size" in editor.status.get() and editor.recipe.landmarks == (renamed,)
     editor.delete_landmark()
@@ -386,7 +387,7 @@ def test_landmarks_are_placed_updated_and_deleted(app: ui.TerrainApp) -> None:
 
 def test_a_chasm_is_placed_with_two_clicks(app: ui.TerrainApp) -> None:
     editor = edit(app)
-    editor.landmark["kind"].set("chasm")
+    editor.landmark["kind"].set("Great chasm")
     editor.place_landmark()
     editor._click((0.40, 0.45), tk.Event())  # type: ignore[arg-type]
     assert editor.recipe.landmarks == () and "other end" in editor.status.get()
@@ -394,7 +395,7 @@ def test_a_chasm_is_placed_with_two_clicks(app: ui.TerrainApp) -> None:
     wait(editor)
     (chasm,) = editor.recipe.landmarks
     assert chasm.kind == "chasm" and chasm.end is not None and chasm.end != chasm.position
-    assert not editor._placing and editor._chasm_start is None
+    assert not editor._placing and editor._line_start is None
     # Renaming keeps both ends.
     editor.landmark["name"].set("The Rift")
     editor.update_landmark()
@@ -405,4 +406,4 @@ def test_a_chasm_is_placed_with_two_clicks(app: ui.TerrainApp) -> None:
     editor.place_landmark()
     editor._click((0.40, 0.50), tk.Event())  # type: ignore[arg-type]
     editor.revert()
-    assert not editor._placing and editor._chasm_start is None
+    assert not editor._placing and editor._line_start is None

@@ -116,7 +116,7 @@
           "name",
           "kind",
           "position",
-          "diameter_km"
+          "size_km"
         ],
         "properties": {
           "id": {
@@ -130,6 +130,7 @@
             "maxLength": 256
           },
           "kind": {
+            "description": "A wonder kind from the catalog (domain.wonders).",
             "enum": [
               "titan",
               "crater",
@@ -144,17 +145,16 @@
               "type": "number"
             }
           },
-          "diameter_km": {
-            "description": "Titan or crater diameter, or chasm width; null uses the usual size.",
+          "size_km": {
+            "description": "What the kind's size measures (diameter, width or height); null uses the usual size.",
             "type": [
               "number",
               "null"
             ],
-            "minimum": 10,
-            "maximum": 1200
+            "exclusiveMinimum": 0
           },
           "end": {
-            "description": "A chasm's far end in source coordinates; null for other kinds.",
+            "description": "The far end of a wonder placed by two ends; null for others.",
             "type": [
               "array",
               "null"

@@ -8,6 +8,7 @@ A reading guide. The [file inventory](FILE_INDEX.md) lists every document.
 |---|---|
 | Import, map and review an SVG world | [World guide](terrain-worlds.md) |
 | Generate whole-planet relief, climate, maps, views and regional detail | [Planet guide](world-planet.md) |
+| Add fantastical landmarks, at random or by hand | [Wonder guide](wonders.md) |
 | Generate geographic context (coverage, water, shore distance, exposure) | [Context guide](world-context.md) |
 | Author geology provinces and landform intent | [Geology guide](world-geology.md) |
 | Generate ocean-depth hypotheses | [Bathymetry guide](world-bathymetry.md) |

@@ -354,14 +354,14 @@ def test_landmarks_round_trip_and_stay_optional() -> None:
     geology_validator().validate(document)
     reopened = files.geology_from_bytes(canonical_json(document))
     assert reopened.landmarks == tuple(sorted(placed.landmarks, key=lambda m: m.id))
-    assert reopened.landmarks[1].size_km == 60.0  # chasm default width
-    assert reopened.landmarks[2].size_km == 560.0  # titan default diameter
+    assert reopened.landmarks[1].effective_size_km == 60.0  # chasm default width
+    assert reopened.landmarks[2].effective_size_km == 560.0  # titan default diameter
     # Recipes saved before landmarks existed still open, with none.
     del document["landmarks"]
     assert files.geology_from_bytes(canonical_json(document)).landmarks == ()
     for bad in (
         {"kind": "volcano"},
-        {"diameter_km": 5.0},
+        {"size_km": 5.0},
         {"id": "eye"},
         {"end": (x0 + 1, y0 + 1)},  # only a chasm has an end
         {"kind": "chasm"},  # without one

@@ -11,6 +11,7 @@ import numpy as np
 from dmtools.terrain.adapters.map_views import THEMES
 from dmtools.terrain.application.planet import PlanetRun
 from dmtools.terrain.domain.planet import PlanetSettings
+from dmtools.terrain.domain.wonders import WONDER_KINDS, WONDERS
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.ui_components import WrappingLabel, section
 from dmtools.terrain.ui_style import GAP
@@ -50,7 +51,7 @@ class PlanetPanel(ttk.Frame):
         self.detail_preset = tk.StringVar(self, value=DEFAULT_PRESET)
         self.climate = tk.BooleanVar(self, value=True)
         self.islands = tk.BooleanVar(self, value=False)
-        self.wonders = tk.BooleanVar(self, value=False)
+        self.wonders = {kind: tk.BooleanVar(self, value=False) for kind in WONDER_KINDS}
         self.seed = tk.StringVar(self, value=str(PlanetSettings().seed))
         self.geology_path: Path | None = None
         self.geology_label = tk.StringVar(self, value="Automatic ranges · no geology recipe")
@@ -82,11 +83,20 @@ class PlanetPanel(ttk.Frame):
             variable=self.islands,
         )
         self.islands_input.pack(anchor="w", pady=(GAP // 2, 0))
-        self.wonders_input = ttk.Checkbutton(
-            features, text="Wonders (fantastical landmarks beyond Earth's extremes)",
-            variable=self.wonders,
-        )
-        self.wonders_input.pack(anchor="w", pady=(GAP // 2, 0))
+        wonders = section(self, "Wonders")
+        WrappingLabel(
+            wonders,
+            text="Fantastical landmarks beyond Earth's extremes, placed at random. "
+            "Landmarks in the geology recipe place them by hand.",
+            style="Muted.TLabel",
+        ).pack(fill="x")
+        grid = ttk.Frame(wonders, style="Panel.TFrame")
+        grid.pack(fill="x", pady=(GAP // 2, 0))
+        self.wonder_inputs: list[ttk.Checkbutton] = []
+        for index, kind in enumerate(WONDER_KINDS):
+            check = ttk.Checkbutton(grid, text=WONDERS[kind].label, variable=self.wonders[kind])
+            check.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, GAP))
+            self.wonder_inputs.append(check)
         geology = section(self, "Geology")
         WrappingLabel(geology, textvariable=self.geology_label, style="Body.TLabel").pack(
             fill="x"
@@ -127,7 +137,7 @@ class PlanetPanel(ttk.Frame):
             nodes=DETAIL_PRESETS[self.detail_preset.get()],
             climate_passes=1 if self.climate.get() else 0,
             volcanic_islands=bool(self.islands.get()),
-            wonders=bool(self.wonders.get()),
+            wonders=tuple(kind for kind in WONDER_KINDS if self.wonders[kind].get()),
         )
 
     def request_generate(self) -> None:
@@ -141,7 +151,7 @@ class PlanetPanel(ttk.Frame):
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"
         self.preset_input.configure(state="disabled" if busy else "readonly")
-        for widget in (self.climate_input, self.islands_input, self.wonders_input,
+        for widget in (self.climate_input, self.islands_input, *self.wonder_inputs,
                        self.seed_input, self.geology_button, self.generate_button):
             widget.configure(state=state)
         self.clear_geology_button.configure(

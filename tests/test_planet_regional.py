@@ -149,7 +149,7 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
     from dmtools.terrain.adapters.planet_load import read_planet_parent
     from dmtools.terrain.application.planet import export_planet, generate_planet_run
 
-    settings = replace(parent.settings, wonders=True)
+    settings = replace(parent.settings, wonders=("titan", "crater", "chasm"))
     run = generate_planet_run(parent.world.project, None, settings, preview_width=0)
     result = run.result
     regional = RegionalParent.from_result(result)

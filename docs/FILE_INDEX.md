@@ -76,6 +76,7 @@ Current user workflows and numeric/file semantics, with future limits labelled i
 | [docs/terrain-water.md](terrain-water.md) | Authored lakes and dry basins |
 | [docs/terrain-worlds.md](terrain-worlds.md) | Import, map, validate and save retained world sources; geographic and workflow limits. |
 | [docs/world-planet.md](world-planet.md) | Experimental whole-planet relief, climate and biomes: command, options, outputs, alignment with the SVG and limits. |
+| [docs/wonders.md](wonders.md) | Wonder catalog: what each kind is, random placement and hand placement. |
 | [docs/world-bathymetry.md](world-bathymetry.md) | Explicit ocean selection, shelf/slope/basin hypotheses, numerical depth/error/support and portable input/result workflow. |
 | [docs/world-context.md](world-context.md) | Generate spherical geography, inspect water/resolution support and export context products. |
 | [docs/world-geology.md](world-geology.md) | Author continent defaults and independent province hypotheses; priority, time, coverage and portable recipe contracts. |

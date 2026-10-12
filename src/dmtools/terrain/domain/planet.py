@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from math import isfinite
 
 from dmtools.terrain.domain.seeds import validate_master_seed
+from dmtools.terrain.domain.wonders import WONDER_KINDS, WonderKind
 
 PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v20"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v6"
@@ -73,16 +74,19 @@ class PlanetSettings:
     # Opt-in: young volcanoes at sea may break the surface as new islands, which
     # adds land beyond the authored coastline.
     volcanic_islands: bool = False
-    # Opt-in: a few fantastical landmarks beyond Earth's extremes (a titan shield
-    # volcano, impact craters, a great chasm).
-    wonders: bool = False
+    # Opt-in: the kinds of wonder (domain.wonders) placed at random.
+    wonders: tuple[WonderKind, ...] = ()
 
     def __post_init__(self) -> None:
         validate_master_seed(self.seed)
         if type(self.volcanic_islands) is not bool:
             raise ValueError("Volcanic islands must be true or false.")
-        if type(self.wonders) is not bool:
-            raise ValueError("Wonders must be true or false.")
+        if (
+            type(self.wonders) is not tuple
+            or len(set(self.wonders)) != len(self.wonders)
+            or any(kind not in WONDER_KINDS for kind in self.wonders)
+        ):
+            raise ValueError(f"Wonders must be distinct kinds from: {', '.join(WONDER_KINDS)}.")
         if (
             type(self.nodes) is not int
             or not MIN_PLANET_NODES <= self.nodes <= MAX_PLANET_NODES

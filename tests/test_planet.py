@@ -159,11 +159,25 @@ def test_settings_reject_unsupported_requests() -> None:
         {"step_kyr": 5000.0, "duration_myr": 1.0},
         {"climate_passes": 9},
         {"erodibility": float("nan")},
+        {"wonders": True},
+        {"wonders": ["crater"]},
+        {"wonders": ("crater", "crater")},
+        {"wonders": ("dragon",)},
     ):
         with pytest.raises(ValueError):
             PlanetSettings(**bad)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         PlanetClimateSettings(pole_sst_c=40.0)
+
+
+def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
+    from dmtools.terrain.domain.wonders import WONDER_KINDS, wonder_kinds
+
+    assert wonder_kinds("all") == WONDER_KINDS
+    assert wonder_kinds(" Chasm, crater ") == ("crater", "chasm")  # catalog order
+    assert wonder_kinds("") == ()
+    with pytest.raises(ValueError, match="dragon"):
+        wonder_kinds("crater,dragon")
 
 
 def test_planet_build_publishes_verified_world_aligned_products(

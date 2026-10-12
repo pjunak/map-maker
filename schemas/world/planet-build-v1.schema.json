@@ -59,7 +59,12 @@
         "climate_passes": { "type": "integer", "minimum": 0 },
         "climate": { "type": "object" },
         "volcanic_islands": { "type": "boolean" },
-        "wonders": { "type": "boolean" }
+        "wonders": {
+          "description": "Wonder kinds placed at random.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "enum": ["titan", "crater", "chasm"] }
+        }
       }
     },
     "seed_policy": { "const": "named-stage-sha256@1" },

@@ -63,6 +63,7 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
     claimed = manifest["build_sha256"]
     settings_doc = dict(manifest["settings"])
     climate = PlanetClimateSettings(**settings_doc.pop("climate"))
+    settings_doc["wonders"] = tuple(settings_doc["wonders"])
     settings = PlanetSettings(**settings_doc, climate=climate)
     world = prepare_world_map(read_world_project(folder / "world.dmworld.json"))
     radius_m = float(manifest["world_frame"]["radius_km"]) * 1000
