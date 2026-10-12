@@ -53,6 +53,10 @@ type Verify = Callable[[], None]
 
 
 
+# Kinds of aged wonders, by their archived index.
+AGING_KINDS = ("crater", "chasm", "cliff", "tepui")
+
+
 def paths_archive(
     name: str, paths: tuple[NDArray[np.float64], ...], profiles: tuple[NDArray[np.float64], ...]
 ) -> dict[str, NDArray[Any]]:
@@ -303,7 +307,22 @@ def write_planet_build(
         "fork_area_m2": result.wonders.forks.area_m2.astype("<f8"),
         **paths_archive(
             "aging", tuple(patch.xyz for patch in result.wonders.aging.patches),
-            tuple(patch.change_m for patch in result.wonders.aging.patches),
+            tuple(patch.relief_m for patch in result.wonders.aging.patches),
+        ),
+        "aging_centre": np.array(
+            [patch.centre for patch in result.wonders.aging.patches], dtype="<f8"
+        ).reshape(-1, 3),
+        "aging_reach_m": np.array(
+            [patch.reach_m for patch in result.wonders.aging.patches], dtype="<f8"
+        ),
+        "aging_kind": np.array(
+            [AGING_KINDS.index(patch.kind) for patch in result.wonders.aging.patches], dtype="<i1"
+        ),
+        "aging_member_offsets": np.cumsum(
+            [0, *(len(patch.members) for patch in result.wonders.aging.patches)]
+        ).astype("<i8"),
+        "aging_members": np.array(
+            [m for patch in result.wonders.aging.patches for m in patch.members], dtype="<i8"
         ),
         "aging_spacing_m": np.array(
             [patch.spacing_m for patch in result.wonders.aging.patches], dtype="<f8"

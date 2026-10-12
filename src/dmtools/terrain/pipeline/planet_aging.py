@@ -46,12 +46,16 @@ MAX_AGE_MYR = 500.0
 
 @dataclass(frozen=True, slots=True)
 class AgedPatch:
-    """The change aging made to a wonder, on its patch's nodes."""
+    """An aged wonder: its eroded relief on its patch's nodes, and which wonder it is."""
 
     xyz: F64  # (n, 3) unit vectors of the patch nodes
-    change_m: F64  # aged minus fresh surface at each node
+    relief_m: F64  # the aged wonder's height change over the ground, at each node
     spacing_m: float
     age_myr: float
+    centre: F64  # unit vector at the patch centre
+    reach_m: float  # patch radius
+    kind: str  # the wonder's catalog kind
+    members: tuple[int, ...]  # its entries (craters, tepuis) or paths (chasms, cliffs)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +90,8 @@ class AgingSetup:
         relief: Callable[[F64, float], F64],
         age_myr: float,
         index: int,
+        kind: str,
+        members: tuple[int, ...],
         resistance: float = 1.0,
     ) -> AgedPatch:
         """``resistance`` divides the erodibility: caprock and hard layers wear slowly."""
@@ -96,7 +102,7 @@ class AgingSetup:
         return age_wonder(
             centre, reach_m, planet_radius_m, relief, self.ground, erodibility, self.runoff,
             age_myr=age_myr, area_exponent=self.area_exponent, seed=self.seed + 97 * index,
-            cancellation=self.cancellation,
+            kind=kind, members=members, cancellation=self.cancellation,
         )
 
 
@@ -118,6 +124,8 @@ def age_wonder(
     age_myr: float,
     area_exponent: float,
     seed: int,
+    kind: str = "",
+    members: tuple[int, ...] = (),
     cancellation: CancellationToken | None = None,
 ) -> AgedPatch:
     """Erode one wonder for ``age_myr`` on a patch of radius ``reach_m`` around ``centre``.
@@ -149,7 +157,7 @@ def age_wonder(
     change = np.where(change > 0, (1 - np.exp(-age_myr / INFILL_MYR)) * change, change)
     aged = creep(mesh, start + change, fixed, AGING_DIFFUSIVITY_M2_YR * age_myr * 1e6)
     change = np.where(fixed, 0.0, aged - start)
-    return AgedPatch(mesh.xyz, change, spacing, age_myr)
+    return AgedPatch(mesh.xyz, fresh + change, spacing, age_myr, centre, reach_m, kind, members)
 
 
 def creep(mesh: SphereMesh, h: F64, fixed: B, diffusion_m2: float) -> F64:
@@ -168,20 +176,28 @@ def creep(mesh: SphereMesh, h: F64, fixed: B, diffusion_m2: float) -> F64:
     return out
 
 
-def aging_change(points: F64, planet_radius_m: float, aging: Aging) -> F64:
-    """The change aging made (metres) at unit vectors ``points``, smoothly interpolated."""
-    out = np.zeros(len(points))
-    for patch in aging.patches:
-        reach = 1.5 * patch.spacing_m / planet_radius_m
-        found = KDTree(patch.xyz).query(
-            points, k=3, distance_upper_bound=2 * np.sin(reach / 2), workers=-1
-        )
-        distance = np.asarray(found[0], dtype=np.float64).reshape(len(points), -1)
-        index = np.asarray(found[1], dtype=np.int64).reshape(len(points), -1)
-        valid = index < len(patch.xyz)
-        weight = np.where(valid, 1.0 / np.maximum(distance, 1e-12), 0.0)
-        total = weight.sum(axis=1)
-        hit = total > 0
-        values = patch.change_m[np.where(valid, index, 0)]
-        out[hit] += (weight * values).sum(axis=1)[hit] / total[hit]
-    return out
+def patch_weight(points: F64, planet_radius_m: float, patch: AgedPatch) -> F64:
+    """How fully the aged surface replaces the fresh one: 1 inside, fading at the rim."""
+    distance = np.arccos(np.clip(points @ patch.centre, -1, 1)) * planet_radius_m
+    t = np.clip((distance / patch.reach_m - 0.8) / 0.18, 0, 1)
+    return 1 - t * t * (3 - 2 * t)
+
+
+def aged_relief(points: F64, patch: AgedPatch, planet_radius_m: float) -> F64:
+    """The aged wonder's relief at unit vectors ``points``, smoothly interpolated.
+
+    A Gaussian kernel over a dozen nearest nodes: weights fade smoothly, so the
+    surface has no seams where the nearest nodes change (inverse-distance
+    weighting of three nodes drew straight lines in hillshade).
+    """
+    sigma = 0.8 * patch.spacing_m / planet_radius_m  # radians
+    found = KDTree(patch.xyz).query(
+        points, k=12, distance_upper_bound=2 * np.sin(1.5 * sigma), workers=-1
+    )
+    distance = np.asarray(found[0], dtype=np.float64).reshape(len(points), -1)
+    index = np.asarray(found[1], dtype=np.int64).reshape(len(points), -1)
+    valid = index < len(patch.xyz)
+    weight = np.where(valid, np.exp(-0.5 * (np.where(valid, distance, 0.0) / sigma) ** 2), 0.0)
+    total = np.maximum(weight.sum(axis=1), 1e-30)
+    values = patch.relief_m[np.where(valid, index, 0)]
+    return (weight * values).sum(axis=1) / total

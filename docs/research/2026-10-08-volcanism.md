@@ -292,11 +292,22 @@ Two water wonders follow (`planet_waters.py`):
   2 % of the largest discharge (not at their mouths), with a neighbour across a
   divide at most 300 m higher that drains to the sea by another outlet. The best
   candidates favour large rivers and low divides; a random one is drawn from
-  the best five, and a hand-placed one takes the best within 300 km. A quarter
+  the best five, and a hand-placed one takes the best within 300 km. The split
+  must lie at least 150 km inland and the two courses must reach the sea at
+  least 400 km apart: on Aethelara a first version split a river a few
+  kilometres from the coast into two mouths 13 km apart, a delta rather than a
+  divided river. A quarter
   to nearly half of the water and drainage area moves from the main stem's
   course to the branch's, so the atlas draws a thinner main stem and the
   branch, and regional maps route the branch's share from where it crosses.
   Both maps draw the short link across the divide.
+
+**Polish.** Crater outlines are domain-warped by up to 14 % of the radius, so
+rims are scalloped (their crest wanders by about 3–4 km around a 100 km crater)
+instead of circular. Rivers fall as waterfalls, drawn as white spray, where the
+ground under them is steeper than 0.2 (atlas pixels) or 0.35 (regional pixels):
+off great cliffs and tepuis, as at Angel Falls and Kaieteur, over chasm walls and
+crater rims. The map hover names the wonder under the cursor.
 
 **Aging** (ADR-0091, `planet_aging.py`). Craters, chasms, great cliffs and
 tepuis can be given an age. Each is eroded on its own patch, a jittered hexagonal
@@ -318,8 +329,10 @@ trough; 60 Myr leaves a faint ring.
   numerically unstable at the step cap; 0.5 m²/yr with exact stable substeps
   rounds them over a few kilometres.
 
-The build stores each patch's aged-minus-fresh change; maps add it, interpolated,
-to the fresh shape they draw at their own scale.
+The build stores each patch's aged relief and which wonder it belongs to; inside
+the patch maps draw that relief in place of the wonder's fresh shape. Adding a
+smooth aged-minus-fresh change to the sharp fresh shape, as first done, left a
+ridge along an aged tepui's wall top and a moat of ponds at its foot.
 
 The wonder kinds are placed in a fixed order (titan, shattered and active
 volcanoes, craters, chasm, cliff, tepuis, oases, and the splitting river once

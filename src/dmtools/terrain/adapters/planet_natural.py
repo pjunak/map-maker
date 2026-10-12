@@ -88,6 +88,10 @@ BASALT_SOIL: RGB = (96, 86, 72)
 FRESH_LAVA: RGB = (34, 31, 30)
 ASH: RGB = (138, 132, 124)
 LAVA_GLOW: RGB = (246, 104, 32)
+SPRAY: RGB = (236, 243, 247)
+# A river falls where the ground under it is this steep at the map's pixel size.
+ATLAS_FALLS_SLOPE = 0.2
+REGION_FALLS_SLOPE = 0.35
 OASIS_GREEN: RGB = (58, 108, 46)
 LAKE: RGB = (62, 106, 146)
 SALT_FLAT: RGB = (214, 210, 196)
@@ -115,6 +119,10 @@ HYPSOMETRIC: tuple[tuple[float, RGB], ...] = (
 def _smooth(x: F64, a: float, b: float) -> F64:
     t = np.clip((x - a) / (b - a), 0, 1)
     return t * t * (3 - 2 * t)
+
+
+def smoothstep_array(x: F64, a: float, b: float) -> F64:
+    return _smooth(x, a, b)
 
 
 def _mix(base: F64, colour: RGB | F64, weight: F64) -> F64:
@@ -798,12 +806,26 @@ def compose(
     rivers: F64,
     result: PlanetResult,
     lakes_px: NDArray[np.int64],
+    slope: F64 | None = None,
 ) -> Image.Image:
     rgb = np.where(land_px[..., None], land_rgb, sea_rgb)
     rgb = paint_water(rgb, result, lakes_px)
     alpha = (0.9 * rivers)[..., None]
     rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
+    if slope is not None:
+        rgb = paint_falls(rgb, rivers * land_px, slope, ATLAS_FALLS_SLOPE)
     return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
+
+
+def paint_falls(rgb: F64, rivers: F64, slope: F64, steep: float) -> F64:
+    """White spray where a river drops over a face steeper than ``steep`` (m/m).
+
+    Rivers leaving a great cliff, a tepui or a chasm wall fall rather than flow,
+    as at Angel Falls off Auyan-tepui and Kaieteur off the Pakaraima scarp.
+    """
+    falls = gaussian_filter((rivers > 0.4) * smoothstep_array(slope, steep, 1.6 * steep), 0.8)
+    spray = np.clip(1.6 * falls, 0, 0.85)[..., None]
+    return rgb * (1 - spray) + np.asarray(SPRAY, dtype=np.float64) * spray
 
 
 def preview_images(
@@ -827,6 +849,7 @@ def preview_images(
             rivers,
             result,
             rasters.lakes_px,
+            fields.slope,
         )
     images["Planet relief"] = compose(
         relief_colour(fields), sea, land_px, rivers, result, rasters.lakes_px

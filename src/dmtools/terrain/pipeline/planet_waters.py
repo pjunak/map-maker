@@ -36,6 +36,8 @@ FORK_SHARE = (0.25, 0.45)  # share of the river's water that takes the other way
 FORK_DIVIDE_M = 300.0  # the divide it crosses is at most this high above the river
 FORK_REACH_M = 300e3  # a hand-placed fork snaps to a river within this distance
 FORK_MIN_SHARE_OF_PEAK = 0.02  # rivers that may fork: this share of the largest
+FORK_INLAND_M = 150e3  # a split near the coast would be a delta, not a wonder
+FORK_MOUTHS_APART_M = 400e3  # the two courses reach the sea at least this far apart
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,12 +161,16 @@ def oasis_cover(
 def find_fork(
     mesh: SphereMesh,
     land: B,
+    coast_m: F64,
     elevation_m: F64,
     lakes: Lakes,
     rng: np.random.Generator,
     near: F64 | None = None,
 ) -> tuple[int, int] | None:
     """A river node and its neighbour across a low divide that reaches the sea another way.
+
+    The split lies well inland and the two courses reach the sea far apart, as
+    the Orinoco and the Amazon do, so it is a divided river and not a delta.
 
     With ``near`` (a unit vector) the fork is the best one within
     ``FORK_REACH_M`` of it; otherwise one of the best few, drawn at random.
@@ -173,8 +179,8 @@ def find_fork(
     discharge = lakes.discharge_m3_s
     outlet = _outlets(receiver)
     to_sea = ~land[outlet]
-    # Large rivers, not at their mouths (a split there would be a delta).
-    river = land & (lakes.lake < 0) & to_sea & (receiver >= 0) & land[np.maximum(receiver, 0)] & (
+    # Large rivers well inland.
+    river = land & (lakes.lake < 0) & to_sea & (coast_m > FORK_INLAND_M) & (
         discharge >= FORK_MIN_SHARE_OF_PEAK * float(discharge[land].max(initial=0.0))
     )
     if near is not None:
@@ -187,6 +193,8 @@ def find_fork(
         & (outlet[dst] != outlet[src])
         & (elevation_m[dst] - elevation_m[src] < FORK_DIVIDE_M)
     )
+    mouths = np.sum(mesh.xyz[outlet[src]] * mesh.xyz[outlet[dst]], axis=1)
+    ok &= mouths < np.cos(FORK_MOUTHS_APART_M / mesh.radius_m)
     if not ok.any():
         return None
     u, v = src[ok], dst[ok]

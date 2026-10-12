@@ -37,8 +37,8 @@ backlog, and [status](../research/status.md) records what works now.
 2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
    settings for random placement or placed by hand. Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a
-   splitting river are done, and wonders age on their own patches (ADR-0091);
-   next are waterfalls where rivers leave cliffs.
+   splitting river are done, wonders age on their own patches (ADR-0091), and
+   rivers fall as waterfalls off their cliffs. Next: more kinds as needed.
 3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks

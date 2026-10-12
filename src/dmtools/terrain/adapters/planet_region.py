@@ -30,11 +30,13 @@ from dmtools.terrain.adapters.map_topographic import topographic_image
 from dmtools.terrain.adapters.planet_natural import (
     HYPSOMETRIC,
     LAKE,
+    REGION_FALLS_SLOPE,
     RIVER,
     SALT_FLAT,
     PixelClimate,
     erg_cover,
     land_colour,
+    paint_falls,
     parchment_inputs,
     ramp,
     river_coverage,
@@ -681,6 +683,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
     rgb[window.playa] = SALT_FLAT
     alpha = (0.9 * window.rivers)[..., None]
     rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
+    rgb = paint_falls(rgb, window.rivers * land, slope, REGION_FALLS_SLOPE)
     rgb[~np.isfinite(window.elevation_m)] = (36, 54, 82)
     return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
 

@@ -14,7 +14,8 @@ small synthetic terrain before choosing one.
 
 See the [plan](docs/strategy/README.md) for states and evidence.
 
-- [ ] **Wonders:** waterfalls where rivers leave cliffs.
+- [ ] **Wonders:** more kinds as needed (natural arches, sinkhole fields, ice
+  canyons); below-sea-level floors for chasms and craters.
 - [ ] **M2 planet relief:**
   - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).

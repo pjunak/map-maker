@@ -434,7 +434,7 @@ def generate_planet(
         [("", None)] if "fork" in settings.wonders else []
     )
     for name, near in sites:
-        found = find_fork(mesh, land, evolved, lakes, fork_rng, near)
+        found = find_fork(mesh, land, coast, evolved, lakes, fork_rng, near)
         if found is None:
             if near is not None:
                 raise ValueError(

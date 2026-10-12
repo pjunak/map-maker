@@ -14,7 +14,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from dmtools.terrain.adapters.build import canonical_json, file_sha256
-from dmtools.terrain.adapters.planet_build import PLANET_BUILD_SCHEMA, PLANET_BUILD_VERSION
+from dmtools.terrain.adapters.planet_build import (
+    AGING_KINDS,
+    PLANET_BUILD_SCHEMA,
+    PLANET_BUILD_VERSION,
+)
 from dmtools.terrain.adapters.world_project import read_world_project
 from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
 from dmtools.terrain.pipeline.planet_aging import AgedPatch, Aging
@@ -163,10 +167,17 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
                     data["fork_area_m2"].astype(np.float64),
                 ),
                 Aging(tuple(
-                    AgedPatch(xyz, change, float(spacing), float(age))
-                    for xyz, change, spacing, age in zip(
+                    AgedPatch(
+                        xyz, relief, float(spacing), float(age),
+                        centre.astype(np.float64), float(reach), AGING_KINDS[int(kind)],
+                        tuple(int(m) for m in data["aging_members"][a:b]),
+                    )
+                    for xyz, relief, spacing, age, centre, reach, kind, (a, b) in zip(
                         *paths_from_archive(data, "aging"), data["aging_spacing_m"],
-                        data["aging_age_myr"], strict=True,
+                        data["aging_age_myr"], data["aging_centre"].reshape(-1, 3),
+                        data["aging_reach_m"], data["aging_kind"],
+                        itertools.pairwise(data["aging_member_offsets"].tolist()),
+                        strict=True,
                     )
                 )),
             ),

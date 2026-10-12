@@ -40,6 +40,18 @@ a crater or a chasm at once.
    interpolated change to the fresh shape it draws at its own scale, so all
    scales agree on the aged wonder and keep fine detail.
 
+## Revision (2026-10-12)
+
+Point 5 first added the interpolated change to the fresh, pixel-sharp shape. At
+a steep edge erosion moves a wall back horizontally, which a smooth vertical
+change on a kilometre grid cannot express: the fresh edge survived as a narrow
+ridge and the lowering bled into the foot as a moat of ponds (seen around an
+aged tepui at province zoom). Each patch now keeps the aged wonder's relief and
+records which wonder it belongs to; inside the patch maps draw that relief in
+place of the wonder's own fresh shape, fading to the fresh shape at the patch
+rim. Aged wonders are therefore smooth at the patch spacing, and the base
+terrain's detail textures them.
+
 ## Consequences
 
 - Aged wonders gain gully networks on their walls, rounded rims and partly
@@ -47,8 +59,8 @@ a crater or a chasm at once.
   astroblemes have.
 - Aging costs about a minute per wonder and 100 steps; builds with fresh wonders
   are unchanged.
-- The change is resolved at the patch spacing (1–4 km); finer maps show it
-  smoothly under the fresh shape's own detail.
+- An aged wonder is resolved at the patch spacing (1–5 km); finer maps show it
+  smoothly, textured by the base terrain's detail.
 - Erosion does not deposit downstream of the patch, and the patch boundary is
   held fixed; both are acceptable at the scale of one wonder.
 

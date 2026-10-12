@@ -6,11 +6,14 @@ import numpy as np
 from scipy.spatial import KDTree  # pyright: ignore[reportMissingTypeStubs]
 
 from dmtools.terrain.adapters.planet_region import RegionWindow, forward_aeqd
+from dmtools.terrain.domain.wonders import WONDERS
 from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_koppen import KOPPEN, KOPPEN_NAMES
 from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
 from dmtools.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETTINGS
+from dmtools.terrain.pipeline.planet_volcanism import SHATTERED, TITAN, WONDER
+from dmtools.terrain.pipeline.planet_wonders import wonder_at
 from dmtools.terrain.pipeline.world_context import WorldContext
 
 
@@ -62,6 +65,9 @@ class PlanetProbe:
             )
         if volcano is not None:
             parts.append(volcano)
+        elif (wonder := wonder_at(np.array(point), self.result.mesh.radius_m,
+                                  self.result.wonders)) is not None:
+            parts.append(wonder)
         return " · ".join(parts)
 
     def _volcano(self, point: tuple[float, float, float]) -> str | None:
@@ -74,10 +80,18 @@ class PlanetProbe:
         distance = 2 * asin(min(float(chord) / 2, 1.0)) * self.result.mesh.radius_m  # pyright: ignore[reportUnknownArgumentType]
         if distance > max(float(v.radius_m[index]), 1.5 * self.result.mesh.spacing_m):
             return None
+        setting = int(v.setting[index])
+        if setting in (TITAN, WONDER):
+            # Wonders go by their catalog names.
+            kind = (
+                "titan" if setting == TITAN
+                else "shattered" if int(v.kind[index]) == SHATTERED else "active"
+            )
+            return f"{WONDERS[kind].label} ({v.height_m[index]:,.0f} m edifice)"
         state = "active" if v.active[index] else f"extinct ~{v.age_myr[index]:.1f} Myr"
         return (
             f"{state} {VOLCANO_KINDS[int(v.kind[index])]} "
-            f"({VOLCANO_SETTINGS[int(v.setting[index])]}, {v.height_m[index]:,.0f} m edifice)"
+            f"({VOLCANO_SETTINGS[setting]}, {v.height_m[index]:,.0f} m edifice)"
         )
 
 

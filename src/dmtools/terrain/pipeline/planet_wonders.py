@@ -20,7 +20,14 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.spatial import KDTree
 
-from dmtools.terrain.pipeline.planet_aging import AgedPatch, Aging, AgingSetup, aging_change
+from dmtools.terrain.domain.wonders import WONDERS
+from dmtools.terrain.pipeline.planet_aging import (
+    AgedPatch,
+    Aging,
+    AgingSetup,
+    aged_relief,
+    patch_weight,
+)
 from dmtools.terrain.pipeline.planet_eruptions import Eruptions, eruption_cover, lava_relief
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh
 from dmtools.terrain.pipeline.planet_noise import fbm3
@@ -288,15 +295,17 @@ def place_wonders(
         reach: float,
         relief: Callable[[F64, float], F64],
         item: PlacedWonder | None,
+        kind: str,
+        members: tuple[int, ...],
         resistance: float = 1.0,
     ) -> None:
         if aging is None:
             return
         age = aging.default_age_myr if item is None or item.age_myr is None else item.age_myr
         if age > 0:
-            patches.append(
-                aging.patch(centre, reach, radius, relief, age, len(patches), resistance)
-            )
+            patches.append(aging.patch(
+                centre, reach, radius, relief, age, len(patches), kind, members, resistance
+            ))
 
     def mine(kind: str) -> tuple[PlacedWonder, ...]:
         return tuple(p for p in placed if p.kind == kind)
@@ -323,8 +332,8 @@ def place_wonders(
         )
         grow(
             craters.xyz[k], 2.6 * float(craters.radius_m[k]),
-            lambda p, _d, one=one: crater_relief(p, radius, one),
-            placed_craters[k] if placed_craters else None,
+            lambda p, d, one=one: crater_relief(p, radius, one, d),
+            placed_craters[k] if placed_craters else None, "crater", (k,),
         )
     systems: list[tuple[Chasms, PlacedWonder | None]] = []
     if items := mine("chasm"):
@@ -339,7 +348,10 @@ def place_wonders(
             ))
     elif "chasm" in kinds:
         systems.append((place_chasm(mesh, land, coast_m, ground_m, stream(9191), blocked), None))
+    first = 0
     for system, item in systems:
+        members = tuple(range(first, first + len(system)))
+        first += len(system)
         if not len(system):
             continue
         middle = system.paths[0].mean(axis=0)
@@ -348,6 +360,7 @@ def place_wonders(
         grow(
             middle, span + 4 * float(system.width_m.max()),
             lambda p, d, system=system: chasm_relief(p, radius, system, d), item,
+            "chasm", members,
         )
     chasms = Chasms(
         tuple(path for system, _ in systems for path in system.paths),
@@ -374,8 +387,7 @@ def place_wonders(
         grow(
             middle, span + CLIFF_BACK * float(height) + 20e3,
             lambda p, d, one=one: cliff_relief(p, radius, one, d),
-            placed_cliffs[k] if placed_cliffs else None,
-            CLIFF_RESISTANCE,
+            placed_cliffs[k] if placed_cliffs else None, "cliff", (k,), CLIFF_RESISTANCE,
         )
     tepuis = Tepuis.empty()
     if items := mine("tepui"):
@@ -394,8 +406,7 @@ def place_wonders(
         grow(
             xyz, 2.5 * float(size) * float(np.sqrt(tepuis.aspect[k])),
             lambda p, d, one=one: tepui_relief(p, radius, one, d),
-            placed_tepuis[k] if placed_tepuis else None,
-            TEPUI_RESISTANCE,
+            placed_tepuis[k] if placed_tepuis else None, "tepui", (k,), TEPUI_RESISTANCE,
         )
     oases = Oases.empty()
     if items := mine("oasis"):
@@ -419,15 +430,83 @@ def wonder_relief(
     ``detail_m`` is the finest scale drawn (a map's pixel or level spacing);
     None draws the coarse shape that a planet mesh carries.
     """
-    return (
-        crater_relief(points, planet_radius_m, wonders.craters)
+    out = (
+        crater_relief(points, planet_radius_m, wonders.craters, detail_m)
         + chasm_relief(points, planet_radius_m, wonders.chasms, detail_m)
         + cliff_relief(points, planet_radius_m, wonders.cliffs, detail_m)
         + tepui_relief(points, planet_radius_m, wonders.tepuis, detail_m)
         + lava_relief(points, planet_radius_m, wonders.eruptions, detail_m)
         + oasis_relief(points, planet_radius_m, wonders.oases, detail_m)
-        + aging_change(points, planet_radius_m, wonders.aging)
     )
+    # An aged wonder is drawn from its eroded surface: inside its patch the aged
+    # relief replaces its own fresh, sharp shape, which erosion has worn back.
+    for patch in wonders.aging.patches:
+        weight = patch_weight(points, planet_radius_m, patch)
+        near = np.flatnonzero(weight > 0)
+        if not len(near):
+            continue
+        own = _own_relief(points[near], planet_radius_m, wonders, patch, detail_m)
+        aged = aged_relief(points[near], patch, planet_radius_m)
+        out[near] += weight[near] * (aged - own)
+    return out
+
+
+def _own_relief(
+    points: F64, planet_radius_m: float, wonders: Wonders, patch: AgedPatch,
+    detail_m: float | None,
+) -> F64:
+    """The fresh relief of the one wonder an aged patch belongs to."""
+    k = list(patch.members)
+    if patch.kind == "crater":
+        c = wonders.craters
+        return crater_relief(
+            points, planet_radius_m, Craters(c.xyz[k], c.radius_m[k], c.depth_m[k]), detail_m
+        )
+    if patch.kind == "chasm":
+        c = wonders.chasms
+        subset = Chasms(tuple(c.paths[i] for i in k), c.width_m[k], tuple(c.depth_m[i] for i in k))
+        return chasm_relief(points, planet_radius_m, subset, detail_m)
+    if patch.kind == "cliff":
+        c = wonders.cliffs
+        subset = Cliffs(
+            tuple(c.paths[i] for i in k), c.height_m[k], tuple(c.trough_m[i] for i in k)
+        )
+        return cliff_relief(points, planet_radius_m, subset, detail_m)
+    t = wonders.tepuis
+    return tepui_relief(
+        points, planet_radius_m,
+        Tepuis(t.xyz[k], t.radius_m[k], t.height_m[k], t.aspect[k], t.azimuth[k]), detail_m,
+    )
+
+
+def wonder_at(point: F64, planet_radius_m: float, wonders: Wonders) -> str | None:
+    """The catalog name of the wonder under unit vector ``point``, if any."""
+    radius = planet_radius_m
+
+    def apart(xyz: F64) -> float:
+        return float(np.arccos(np.clip(xyz @ point, -1, 1))) * radius
+
+    for xyz, size in zip(wonders.craters.xyz, wonders.craters.radius_m, strict=True):
+        if apart(xyz) < 1.1 * size:
+            return WONDERS["crater"].label
+    for xyz, size, aspect in zip(
+        wonders.tepuis.xyz, wonders.tepuis.radius_m, wonders.tepuis.aspect, strict=True
+    ):
+        if apart(xyz) < size * float(np.sqrt(aspect)):
+            return WONDERS["tepui"].label
+    for xyz, size in zip(wonders.oases.xyz, wonders.oases.radius_m, strict=True):
+        if apart(xyz) < size:
+            return WONDERS["oasis"].label
+    for path, width in zip(wonders.chasms.paths, wonders.chasms.width_m, strict=True):
+        if float(np.min(np.arccos(np.clip(path @ point, -1, 1)))) * radius < 0.8 * width:
+            return WONDERS["chasm"].label
+    for path, height in zip(wonders.cliffs.paths, wonders.cliffs.height_m, strict=True):
+        if float(np.min(np.arccos(np.clip(path @ point, -1, 1)))) * radius < 5 * float(height):
+            return WONDERS["cliff"].label
+    for xyz in wonders.forks.split_xyz:
+        if apart(xyz) < 30e3:
+            return WONDERS["fork"].label
+    return None
 
 
 def wonder_zones(points: F64, planet_radius_m: float, wonders: Wonders) -> B:
@@ -737,18 +816,26 @@ def level_crater_floors(mesh: SphereMesh, ground_m: F64, craters: Craters) -> F6
     return out
 
 
-def crater_relief(points: F64, planet_radius_m: float, craters: Craters) -> F64:
+def crater_relief(
+    points: F64, planet_radius_m: float, craters: Craters, detail_m: float | None = None
+) -> F64:
     """Height change (m) the craters make at unit vectors ``points``.
 
     A large complex crater eroded a little, like Manicouagan: a central uplift
     plateau, an annular trough, terraced walls up to a raised rim, and an
     ejecta apron falling off as (r/R)^-3. The rim and the plateau are irregular;
     where the climate fills the trough to its lowest rim notch, a ring lake
-    surrounds the central plateau.
+    surrounds the central plateau. A domain warp, drawn down to ``detail_m``,
+    makes every outline scalloped rather than circular, as slumping leaves
+    large craters' rims.
     """
     out = np.zeros(len(points))
     if not len(craters):
         return out
+    widest = float(craters.radius_m.max())
+    octaves = 4 if detail_m is None else int(np.clip(np.log2(widest / detail_m), 3, 11))
+    points = warp(points, 9205, 0.14 * widest / planet_radius_m, planet_radius_m / (0.5 * widest),
+                  octaves)
     reach = 2.5 * float(craters.radius_m.max()) / planet_radius_m
     tree = KDTree(craters.xyz)
     found_distance, found_index = tree.query(

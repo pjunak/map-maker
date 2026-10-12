@@ -1070,12 +1070,18 @@ def test_an_oasis_greens_the_desert_around_a_spring_pond() -> None:
 def test_a_river_splits_across_a_low_divide_and_reaches_the_sea_twice(
     world_path: Path,
 ) -> None:
-    from dmtools.terrain.pipeline.planet_waters import find_fork, split_river
+    from dmtools.terrain.pipeline.planet_waters import (
+        FORK_INLAND_M,
+        FORK_MOUTHS_APART_M,
+        find_fork,
+        split_river,
+    )
 
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     lakes = result.lakes
     found = find_fork(
-        result.mesh, result.land, result.elevation_m, lakes, np.random.default_rng(1)
+        result.mesh, result.land, result.coast_m, result.elevation_m, lakes,
+        np.random.default_rng(1),
     )
     assert found is not None
     split, branch = found
@@ -1094,30 +1100,50 @@ def test_a_river_splits_across_a_low_divide_and_reaches_the_sea_twice(
         return node
 
     assert mouth(below) != mouth(branch)
+    # Well inland, and the two courses reach the sea far apart: not a delta.
+    assert result.coast_m[split] > FORK_INLAND_M
+    apart = np.arccos(np.clip(
+        result.mesh.xyz[mouth(below)] @ result.mesh.xyz[mouth(branch)], -1, 1
+    )) * RADIUS
+    assert apart > FORK_MOUTHS_APART_M
 
 
 def test_aging_rounds_a_crater_fills_its_floor_and_cuts_gullies() -> None:
-    from dmtools.terrain.pipeline.planet_aging import Aging, age_wonder, aging_change
-    from dmtools.terrain.pipeline.planet_wonders import Craters, crater_relief
+    from dmtools.terrain.pipeline.planet_aging import Aging, age_wonder
+    from dmtools.terrain.pipeline.planet_wonders import (
+        Craters,
+        Wonders,
+        crater_relief,
+        wonder_relief,
+    )
     from dmtools.terrain.pipeline.wonder_geometry import destination
 
     centre = np.array([1.0, 0.0, 0.0])
     craters = Craters(centre[None], np.array([60e3]), np.array([900.0]))
     patch = age_wonder(
-        centre, 160e3, RADIUS, lambda p, _d: crater_relief(p, RADIUS, craters),
+        centre, 160e3, RADIUS, lambda p, d: crater_relief(p, RADIUS, craters, d),
         lambda p: np.full(len(p), 1500.0), lambda p: np.full(len(p), 5e-6), None,
-        age_myr=20.0, area_exponent=0.45, seed=3,
+        age_myr=20.0, area_exponent=0.45, seed=3, kind="crater", members=(0,),
     )
-    aging = Aging((patch,))
-    ring = np.stack([destination(centre, a, 60e3 / RADIUS) for a in np.linspace(0, 6, 24)])
-    trough = np.stack([destination(centre, a, 28e3 / RADIUS) for a in np.linspace(0, 6, 24)])
-    far = np.stack([destination(centre, a, 158e3 / RADIUS) for a in np.linspace(0, 6, 24)])
-    assert np.median(aging_change(ring, RADIUS, aging)) < -10.0  # the rim wears down
-    assert np.median(aging_change(trough, RADIUS, aging)) > 0.0  # the trough fills
-    assert np.all(np.abs(aging_change(far, RADIUS, aging)) < 1.0)  # the patch edge holds
+    fresh = replace(Wonders.empty(), craters=craters)
+    aged = replace(fresh, aging=Aging((patch,)))
+
+    def change(points: np.ndarray) -> np.ndarray:
+        return wonder_relief(points, RADIUS, aged) - wonder_relief(points, RADIUS, fresh)
+
+    def ring(distance: float, count: int = 24) -> np.ndarray:
+        return np.stack([
+            destination(centre, a, distance / RADIUS) for a in np.linspace(0, 6.2, count)
+        ])
+
+    rim = ring(60e3)
+    assert np.median(wonder_relief(rim, RADIUS, aged)) < np.median(
+        wonder_relief(rim, RADIUS, fresh)
+    ) - 10.0  # the rim wears down
+    assert np.median(change(ring(28e3))) > 0.0  # the trough fills
+    assert np.all(np.abs(change(ring(158e3))) < 1.0)  # nothing changes beyond the patch
     # Gullies: the outer flank is cut unevenly around the crater.
-    flank = np.stack([destination(centre, a, 80e3 / RADIUS) for a in np.linspace(0, 6.2, 200)])
-    assert np.std(aging_change(flank, RADIUS, aging)) > 2.0
+    assert np.std(change(ring(80e3, 200))) > 2.0
 
 
 def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Path) -> None:
@@ -1132,7 +1158,55 @@ def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Pat
     loaded = read_planet_parent(export_planet(run, tmp_path / "planet", width=128).parent)
     reloaded = loaded.parent.wonders
     assert reloaded is not None and len(reloaded.aging) == len(aging)
-    assert np.allclose(reloaded.aging.patches[0].change_m, aging.patches[0].change_m, atol=0.01)
+    first, again = aging.patches[0], reloaded.aging.patches[0]
+    assert np.allclose(again.relief_m, first.relief_m, atol=0.01)
+    assert (again.kind, again.members) == (first.kind, first.members) == ("crater", (0,))
+
+
+def test_crater_rims_are_scalloped_rather_than_circular() -> None:
+    from dmtools.terrain.pipeline.planet_wonders import Craters, crater_relief
+    from dmtools.terrain.pipeline.wonder_geometry import destination
+
+    centre = np.array([1.0, 0.0, 0.0])
+    craters = Craters(centre[None], np.array([100e3]), np.array([1000.0]))
+    azimuths = np.linspace(0, 2 * np.pi, 90, endpoint=False)
+    distances = np.linspace(60e3, 140e3, 161)
+    points = np.stack([
+        destination(centre, a, d / RADIUS) for a in azimuths for d in distances
+    ])
+    h = crater_relief(points, RADIUS, craters).reshape(len(azimuths), -1)
+    rim = distances[np.argmax(h, axis=1)]  # the rim crest along each azimuth
+    assert np.std(rim) > 3e3  # it wanders by kilometres around the crater
+
+
+def test_waterfalls_mark_rivers_only_where_they_drop_over_steep_ground() -> None:
+    from dmtools.terrain.adapters.planet_natural import paint_falls
+
+    rivers = np.zeros((20, 20))
+    rivers[10, :] = 1.0
+    slope = np.full((20, 20), 0.02)
+    slope[:, 12:14] = 0.8  # a cliff across the river
+    rgb = np.full((20, 20, 3), 80.0)
+    painted = paint_falls(rgb, rivers, slope, 0.2)
+    assert painted[10, 12:14].mean() > 150  # white spray at the fall
+    assert np.allclose(painted[10, :8], 80.0)  # the river elsewhere is untouched
+    assert np.allclose(painted[2, 12:14], 80.0)  # and so is the cliff away from it
+
+
+def test_the_map_hover_names_wonders() -> None:
+    from dmtools.terrain.pipeline.planet_waters import Oases
+    from dmtools.terrain.pipeline.planet_wonders import Craters, Wonders, wonder_at
+    from dmtools.terrain.pipeline.wonder_geometry import destination
+
+    centre = np.array([1.0, 0.0, 0.0])
+    wonders = replace(
+        Wonders.empty(),
+        craters=Craters(centre[None], np.array([100e3]), np.array([1000.0])),
+        oases=Oases(np.array([[0.0, 1.0, 0.0]]), np.array([10e3])),
+    )
+    assert wonder_at(destination(centre, 1.0, 50e3 / RADIUS), RADIUS, wonders) == "Impact crater"
+    assert wonder_at(np.array([0.0, 1.0, 0.0]), RADIUS, wonders) == "Oasis"
+    assert wonder_at(np.array([0.0, 0.0, 1.0]), RADIUS, wonders) is None
 
 
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
