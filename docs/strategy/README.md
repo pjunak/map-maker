@@ -38,6 +38,9 @@ backlog, and [status](../research/status.md) records what works now.
      refined below the parent spacing, so shores lose the parent mesh's straight
      edges; crater lakes are no longer pits (ADR-0092, `planet-blended-tiles-v7`).
      Open lakes drain their window basin, so no playa ring lines their shores.
+   - Regional plains no longer show straight grid lines: display carving drains
+     filled hollows along their thalweg, and ridged detail has no steps
+     ([report](../research/2026-10-12-straight-display-lines.md)).
 2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
    settings for random placement or placed by hand. Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a

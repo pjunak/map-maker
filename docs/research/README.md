@@ -25,6 +25,10 @@ in the current status or a new dated report.
   straight edges. Open lakes drain their window basin, so no playa ring lines their
   shores.
 
+- [Straight display lines — 2026-10-12](2026-10-12-straight-display-lines.md) traces straight
+  hillshade lines on regional plains to display carving across filled depressions and to
+  stepped ridged detail; depressions now drain along their thalweg and the detail is continuous.
+
 - [Regional coast detail — 2026-10-11](2026-10-11-regional-coast-detail.md) smooths the
   traced coast at its drawing precision and adds nested fractal detail at regional levels,
   so province and local maps show rugged shores instead of straight traced runs.

@@ -223,7 +223,9 @@ def test_grid_carving_matches_the_mesh_kernels_and_wraps_longitude() -> None:
     rows = columns = 24
     cell = 500.0
     rng = np.random.default_rng(1)
-    z = rng.random((rows, columns)) * 300 + np.arange(columns)[None, :] * 30
+    # Ground without depressions, where the grid and mesh routings agree (the
+    # grid routes filled hollows along their thalweg; see the test below).
+    z = rng.random((rows, columns)) * 20 + np.arange(columns)[None, :] * 30
     outlet = np.zeros((rows, columns), dtype=bool)
     outlet[:, 0] = True
     z[outlet] = 0.0
@@ -321,6 +323,72 @@ def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
     # Everything (cells plus inflow) reaches the outlets.
     into_outlet = land & outlet.ravel()[np.maximum(receiver, 0)]
     assert area[into_outlet].sum() == pytest.approx(land.sum() * 100.0**2 + 1e9, rel=1e-9)
+
+
+def _straight_channel_share(receiver: np.ndarray, area: np.ndarray, min_area: float) -> float:
+    """Share of channel cells whose next eight steps keep one grid direction."""
+    channel = np.flatnonzero((area >= min_area) & (receiver >= 0))
+    step = receiver[channel] - channel
+    here, straight = channel, np.ones(len(channel), dtype=bool)
+    for _ in range(8):
+        nxt = receiver[here]
+        straight &= (nxt >= 0) & (nxt - here == step)
+        here = np.where(nxt >= 0, nxt, here)
+    return float(straight.mean())
+
+
+def test_grid_routing_follows_the_ground_through_filled_hollows() -> None:
+    """Flow across a filled depression follows its thalweg, not straight grid lines.
+
+    Steepest descent on the 1 mm fill gradient ran straight across every filled
+    hollow from its spill point, and display carving cut those lines into plains
+    as straight 0, 45 and 90 degree grooves.
+    """
+    from scipy.ndimage import gaussian_filter
+
+    from dmtools.terrain.pipeline.planet_detail import grid_flow
+
+    n, cell = 96, 500.0
+    rng = np.random.default_rng(5)
+    y, x = np.mgrid[0:n, 0:n] - (n - 1) / 2
+    texture = gaussian_filter(rng.normal(size=(n, n)), 3.0)
+    # A closed basin of rough ground: everything below its lowest rim point fills.
+    z = 500.0 + 6.0 * np.hypot(x, y) + 25.0 * texture / texture.std()
+    outlet = np.zeros((n, n), dtype=bool)
+    outlet[[0, -1], :] = True
+    outlet[:, [0, -1]] = True
+    receiver, area, filled = grid_flow(z, outlet, cell, np.zeros((n, n)))
+    land = ~outlet.ravel()
+    assert np.mean((filled - z)[~outlet] > 0.01) > 0.5
+    assert np.all(receiver[land] >= 0)
+    into_outlet = land & outlet.ravel()[np.maximum(receiver, 0)]
+    assert area[into_outlet].sum() == pytest.approx(land.sum() * cell**2, rel=1e-9)
+    # Rough ground bends channels within a few cells; fill rings drew long
+    # straight ones (about 60 % of channel cells here).
+    assert _straight_channel_share(receiver, area, 50 * cell**2) < 0.2
+
+
+def test_ridged_display_detail_is_continuous() -> None:
+    """Ridged detail has sharp crests but no steps.
+
+    Damping by the ridged gradient, which flips sign at every zero crossing,
+    stepped all finer octaves there: sharp scarps along the value-noise lattice,
+    seen as straight north-south and east-west lines on plains.
+    """
+    from dmtools.terrain.pipeline.planet_detail import eroded_fbm
+
+    def largest_step(samples: int, ridged: float) -> float:
+        # An arc of about 300 km on a 6,000 km planet, crossing many zero lines
+        # of the coarse octaves (30 km wavelength).
+        t = np.linspace(0.0, 0.05, samples)
+        points = np.stack((np.cos(t), np.sin(t), np.full_like(t, 0.3)), axis=1)
+        points /= np.linalg.norm(points, axis=1)[:, None]
+        values = eroded_fbm(points, np.full(samples, ridged), 17, 5, 200.0, 0.5, 0.1)
+        return float(np.abs(np.diff(values)).max())
+
+    for ridged in (0.15, 0.5, 1.0):
+        # A continuous field changes ten times less over ten times shorter steps.
+        assert largest_step(200_001, ridged) < 0.3 * largest_step(20_001, ridged)
 
 
 def test_sand_seas_need_dry_flat_low_ground() -> None:

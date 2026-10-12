@@ -7,7 +7,7 @@ drawn at a few km per pixel needs texture below that scale, or slopes between
 rivers look like smooth ramps. This noise is a *display* field:
 
 * coordinate-hashed on unit vectors, so it is resolution- and window-independent;
-* damped by its own accumulated gradient (as in derivative fBm), which leaves
+* damped by its accumulated slope (as in derivative fBm), which leaves
   sharp ridges and smooth valley floors, the look of eroded terrain;
 * blended from soft rolling noise in lowlands to ridged noise in mountains.
 
@@ -95,8 +95,8 @@ def eroded_fbm(
 ) -> F64:
     """Derivative-damped fBm on unit vectors; ``ridged`` (0..1) blends in ridged noise.
 
-    ``base_frequency`` is in cycles per planet radius. Output is roughly zero-mean
-    and within [-1, 1].
+    ``base_frequency`` is in cycles per planet radius. Output is roughly zero-mean,
+    within [-1, 1] and continuous.
     """
     n = xyz.shape[0]
     out = np.empty(n)
@@ -105,20 +105,22 @@ def eroded_fbm(
         total, norm, amplitude, frequency = 0.0, 0.0, 1.0, base_frequency
         sx, sy, sz = 0.0, 0.0, 0.0
         r = ridged[i]
+        # Finer octaves are damped by a continuous slope: the ridged slope's
+        # root-mean-square magnitude over the two sides of a crest. The ridged
+        # gradient itself flips sign at every zero crossing, which stepped all
+        # finer octaves there and drew sharp scarps along the value-noise
+        # lattice (straight north-south and east-west lines).
+        steepness = np.sqrt(1.0 - 2.0 * r + 5.0 * r * r)
         for octave in range(octaves):
             v, gx, gy, gz = _noise(
                 seed + 1013 * octave, px * frequency, py * frequency, pz * frequency
             )
             # Ridged variant: sharp crests where the noise crosses zero.
-            sign = 1.0 if v >= 0 else -1.0
-            ridge = 1.0 - 2.0 * abs(v)
-            value = (1.0 - r) * v + r * (ridge - 0.0)
-            dx = (1.0 - r) * gx - r * 2.0 * sign * gx
-            dy = (1.0 - r) * gy - r * 2.0 * sign * gy
-            dz = (1.0 - r) * gz - r * 2.0 * sign * gz
-            sx += dx * amplitude
-            sy += dy * amplitude
-            sz += dz * amplitude
+            value = (1.0 - r) * v + r * (1.0 - 2.0 * abs(v))
+            slope = steepness * amplitude
+            sx += slope * gx
+            sy += slope * gy
+            sz += slope * gz
             total += amplitude * value / (1.0 + damping * (sx * sx + sy * sy + sz * sz))
             norm += amplitude
             amplitude *= gain
@@ -131,7 +133,7 @@ def eroded_fbm(
 def _route(
     h: F64, fixed: B, dy: float, dx: F64, wrap: bool, source: F64
 ) -> tuple[F64, I64, int, I64, F64, F64]:
-    """Priority-Flood fill, steepest receivers and accumulation on a pixel grid.
+    """Priority-Flood fill, receivers and accumulation on a pixel grid.
 
     Returns the filled surface, cells in downstream-first order (and their
     count), flat receiver indices (-1 at outlets), receiver distances and the
@@ -140,12 +142,20 @@ def _route(
     rows, columns = h.shape
     n = rows * columns
     # Priority-Flood (Barnes et al. 2014) fills pits with a 1 mm gradient and
-    # pops cells in non-decreasing filled height: downstream cells first.
+    # pops cells in non-decreasing water level: downstream cells first. Within
+    # a depression, where the level is the spill height, cells pop lowest
+    # ground first, so the flood runs down the hollow's thalweg and then
+    # spreads uphill. Fill cells drain to the cell they were flooded from. On
+    # the 1 mm fill gradient itself, steepest descent ran straight across the
+    # fill in rings from the spill point; carving cut those straight grid
+    # lines (0, 45 and 90 degrees) into every filled hollow.
     filled = h.copy()
     closed = fixed.copy()
+    parent = np.full(n, -1, np.int64)
+    parent_step = np.ones(n)
     order = np.empty(n, np.int64)
     count = 0
-    heap = [(0.0, np.int64(0))]
+    heap = [(0.0, 0.0, np.int64(0))]
     heap.pop()
     for r in range(rows):
         for c in range(columns):
@@ -165,9 +175,9 @@ def _route(
                     if not fixed[rr, cc]:
                         edge = True
             if edge:
-                heapq.heappush(heap, (h[r, c], np.int64(r * columns + c)))
+                heapq.heappush(heap, (h[r, c], h[r, c], np.int64(r * columns + c)))
     while heap:
-        level, index = heapq.heappop(heap)
+        level, _, index = heapq.heappop(heap)
         r, c = index // columns, index % columns
         if not fixed[r, c]:
             order[count] = index
@@ -185,15 +195,22 @@ def _route(
                 if closed[rr, cc]:
                     continue
                 closed[rr, cc] = True
-                if filled[rr, cc] < level + 1e-3:
-                    filled[rr, cc] = level + 1e-3
-                heapq.heappush(heap, (filled[rr, cc], np.int64(rr * columns + cc)))
-    # Steepest-descent receivers on the filled surface.
+                j = rr * columns + cc
+                parent[j] = index
+                parent_step[j] = np.sqrt((dx[rr] * dc) ** 2 + (dy * dr) ** 2)
+                if filled[rr, cc] < filled[r, c] + 1e-3:
+                    filled[rr, cc] = filled[r, c] + 1e-3
+                heapq.heappush(heap, (max(h[rr, cc], level), h[rr, cc], np.int64(j)))
+    # Fill cells drain to their flood parent; others by steepest descent.
     receiver = np.full(n, -1, np.int64)
     distance = np.ones(n)
     for idx in range(count):
         i = order[idx]
         r, c = i // columns, i % columns
+        if filled[r, c] > h[r, c]:
+            receiver[i] = parent[i]
+            distance[i] = parent_step[i]
+            continue
         best = 0.0
         for dr in range(-1, 2):
             rr = r + dr

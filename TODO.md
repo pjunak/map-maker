@@ -32,6 +32,9 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Check drainage realism at fine levels: rock texture now follows each level's
     spacing and level-3 tiles branch; compare against reference terrain.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
+  - [ ] Lake and salt-pan shores in regional windows have straight 25–50 km edges,
+    most likely from lake cover interpolated on the parent mesh; make them follow
+    the fine relief ([report](docs/research/2026-10-12-straight-display-lines.md)).
 - [ ] **Map views (ADR-0087):** political and civilization views from authored
   overlays.
 
