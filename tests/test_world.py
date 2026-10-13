@@ -229,6 +229,31 @@ def test_portable_roundtrip_needs_no_original_svg(tmp_path: Path) -> None:
     )
 
 
+def test_drawn_coast_detail_is_optional_and_roundtrips(tmp_path: Path) -> None:
+    from dmtools.terrain.adapters.world_svg import drawn_coast_detail_km
+
+    project = read_world_project(EXAMPLE)
+    plain = world_project_document(project)
+    assert "coast_detail_km" not in plain  # projects without it keep their bytes
+    refined = replace(project, coast_detail_km=10.0)
+    output = tmp_path / "refined.dmworld.json"
+    save_world(refined, output)
+    document = json.loads(output.read_text(encoding="utf-8"))
+    assert document["coast_detail_km"] == 10.0
+    schema = json.loads((ROOT / "schemas/world/project-v1.schema.json").read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(document)  # pyright: ignore[reportUnknownMemberType]
+    assert open_world(output).project.coast_detail_km == 10.0
+    for bad in (0.0, -5.0, float("nan"), 5000.0):
+        with pytest.raises(ValueError, match="coast detail"):
+            replace(project, coast_detail_km=bad)
+    # A refined-coast export declares its detail on the SVG root.
+    marked = source("<path d='M10 10 H50 V50 Z'/>").replace(
+        "<svg ", '<svg data-dmtools-coast-detail-km="10" ', 1
+    )
+    assert drawn_coast_detail_km(marked) == 10.0
+    assert drawn_coast_detail_km(source("<path d='M10 10 H50 V50 Z'/>")) is None
+
+
 @pytest.mark.parametrize(
     "change", ["hash", "projection", "version", "preparation", "extra", "duplicate"]
 )

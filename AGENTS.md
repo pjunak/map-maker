@@ -17,6 +17,7 @@ python -m ruff check .
 python -m pyright
 dmtools terrain gui         # desktop app
 dmtools world planet | region | view   # planet build, regional detail, projected views
+dmtools world refine-coast             # the refined coast as a new SVG source map
 ~~~
 
 - **Python or public-schema changes** need all three checks.

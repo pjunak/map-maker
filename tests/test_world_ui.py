@@ -470,3 +470,46 @@ def test_water_connectivity_inspection_shows_pieces_and_finite_links(app: ui.Ter
     maps.flat._motion(event)
     assert "2 water pieces" in maps.inspection.get()
     assert "region 1" in maps.inspection.get() and "intervals" in maps.inspection.get()
+
+
+def test_world_frame_keeps_the_coast_detail_a_map_already_carries(
+    app: ui.TerrainApp,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    view = app.world_workspace
+    # A refined-coast export declares its detail; importing it fills the field.
+    text = (EXAMPLES / "coastlines.svg").read_text(encoding="utf-8")
+    marked = tmp_path / "refined.svg"
+    marked.write_text(text.replace("<svg ", '<svg data-dmtools-coast-detail-km="10" ', 1),
+                      encoding="utf-8")
+    view.load_svg(marked)
+    wait_world(app)
+    assert view.values["coast"].get() == "10"
+    view.suggest_groups()
+    view.values["radius"].set("6500")
+    for key, value in (("x", "10"), ("y", "10"), ("width", "360"), ("height", "180")):
+        view.values[key].set(value)
+    assert view.project().coast_detail_km == 10.0
+    destination = tmp_path / "refined.dmworld.json"
+
+    def save_path(**_kwargs: object) -> str:
+        return str(destination)
+
+    monkeypatch.setattr(world_ui.filedialog, "asksaveasfilename", save_path)
+    view.save()
+    wait_world(app)
+    assert open_world(destination).project.coast_detail_km == 10.0
+    view.load_world(destination)
+    wait_world(app)
+    assert view.values["coast"].get() == "10" and not view.dirty
+    # Blank means a hand-drawn coast; text that is not a number is refused.
+    view.values["coast"].set("")
+    assert view.project().coast_detail_km is None
+    view.values["coast"].set("ten")
+    with pytest.raises(ValueError, match="coast detail"):
+        view.project()
+    # A plain map leaves the field blank.
+    view.load_svg(EXAMPLES / "coastlines.svg")
+    wait_world(app)
+    assert view.values["coast"].get() == ""

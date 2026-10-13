@@ -28,6 +28,10 @@ def _mapping(value: object, keys: set[str]) -> dict[str, object]:
     return cast("dict[str, object]", value)
 
 
+def _keys(value: object) -> set[str]:
+    return set(cast("dict[str, object]", value)) if isinstance(value, dict) else set()
+
+
 def _string(value: object) -> str:
     if not isinstance(value, str) or not value:
         raise ValueError("World names, IDs and source text must be non-empty strings.")
@@ -56,7 +60,7 @@ def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
 
 
 def world_project_document(project: WorldProject) -> dict[str, object]:
-    return {
+    document: dict[str, object] = {
         "schema": WORLD_SCHEMA,
         "version": WORLD_VERSION,
         "importer": WORLD_IMPORTER,
@@ -76,6 +80,10 @@ def world_project_document(project: WorldProject) -> dict[str, object]:
         "continents": [asdict(c) for c in sorted(project.continents, key=lambda c: c.id)],
         "assignments": [asdict(a) for a in sorted(project.assignments, key=lambda a: a.feature_id)],
     }
+    # Written only when stated, so projects without it keep their bytes and identity.
+    if project.coast_detail_km is not None:
+        document["coast_detail_km"] = project.coast_detail_km
+    return document
 
 
 def read_world_project(path: Path) -> WorldProject:
@@ -90,20 +98,18 @@ def world_project_from_bytes(raw: bytes) -> WorldProject:
         raise ValueError("World project exceeds 32 MiB.")
     try:
         value: object = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
-        document = _mapping(
-            value,
-            {
-                "schema",
-                "version",
-                "importer",
-                "preparation",
-                "name",
-                "source",
-                "frame",
-                "continents",
-                "assignments",
-            },
-        )
+        fields = {
+            "schema",
+            "version",
+            "importer",
+            "preparation",
+            "name",
+            "source",
+            "frame",
+            "continents",
+            "assignments",
+        }
+        document = _mapping(value, fields | (_keys(value) & {"coast_detail_km"}))
         version = document["version"]
         if (
             document["schema"] != WORLD_SCHEMA
@@ -145,7 +151,8 @@ def world_project_from_bytes(raw: bytes) -> WorldProject:
             owner = None if record["continent_id"] is None else _string(record["continent_id"])
             assignments.append(WorldAssignment(_string(record["feature_id"]), owner, role))
         return WorldProject(
-            _string(document["name"]), source, frame, tuple(continents), tuple(assignments)
+            _string(document["name"]), source, frame, tuple(continents), tuple(assignments),
+            _number(document["coast_detail_km"]) if "coast_detail_km" in document else None,
         )
     except (UnicodeError, json.JSONDecodeError, OverflowError, RecursionError) as error:
         raise ValueError(f"Invalid world project: {error}") from error

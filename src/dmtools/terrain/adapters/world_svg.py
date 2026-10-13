@@ -22,6 +22,9 @@ from dmtools.terrain.domain.world import Bounds, WorldFeature, WorldSource
 MAX_SVG_BYTES = 8 * 1024 * 1024
 MAX_WORLD_FEATURES = 4096
 MAX_WORLD_POINTS = 500_000
+# Root attribute of a map exported from a planet's refined coast: the finest
+# coast wavelength (km) it already carries.
+COAST_DETAIL_ATTRIBUTE = "data-dmtools-coast-detail-km"
 WORLD_IMPORTER = "retained-svg-v2"
 
 
@@ -244,6 +247,16 @@ def parse_world_svg(svg: str, name: str) -> WorldSource:
     if not features:
         raise ValueError("The SVG contains no supported vector shapes to assign.")
     return WorldSource(name, svg, sha256(raw).hexdigest(), tuple(features), bounds)
+
+
+def drawn_coast_detail_km(svg: str) -> float | None:
+    """The coast detail (km) a DM Tools refined-coast export declares on its root, if any."""
+    value = _xml_root(svg).get(COAST_DETAIL_ATTRIBUTE)
+    try:
+        km = float(value) if value is not None else None
+    except ValueError:
+        return None
+    return km if km is not None and isfinite(km) and km > 0 else None
 
 
 def load_world_svg(path: Path) -> WorldSource:

@@ -94,7 +94,12 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   only adds smaller detail, so a coast keeps its shape as you zoom in. The coast
   can move by up to about one drawing unit from your line, which is 13 km on an
   Earth-size world drawn 2,880 units wide
-  ([ADR-0090](adr/0090-regional-coast-detail-below-drawing-precision.md)).
+  ([ADR-0090](adr/0090-regional-coast-detail-below-drawing-precision.md)). If
+  your map already carries that detail, for example one exported from a planet's
+  refined coast, enter the finest detail it carries as **Coast detail already
+  drawn** in the World frame: zoomed maps then keep its coast unsmoothed and add
+  only finer detail. `dmtools world refine-coast` makes such a map: see
+  [The refined coast as a source map](#the-refined-coast-as-a-source-map).
 - Volcanoes, impact craters and chasms are drawn sharply, chasm outlines down to
   the map's own scale. Closed hollows deeper than 10 m (crater troughs, chasm
   floors, calderas) fill with lakes where it is wet. Where it is dry, a playa lies
@@ -191,6 +196,27 @@ dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 120 --level 2 --
 
 The first deep window takes a few minutes, because it also generates the coarser
 tiles it needs. Later windows nearby reuse the cache.
+
+### The refined coast as a source map
+
+Zoomed maps draw your coast with more detail than you drew, and the planet
+reshapes polar land. To see, edit or adopt that coast, export it as a new SVG:
+
+```powershell
+dmtools world refine-coast my-world.dmworld.json --output my-world-refined.svg
+```
+
+- `--detail-km` sets the finest coast wavelength drawn (10 km by default; finer
+  detail means more points, and the export refuses maps the importer cannot read).
+- `--seed` is the planet's master seed (the default matches `world planet`),
+  since the coast detail depends on it.
+- Each shape keeps its continent and its mainland or island role, and continents
+  that share a land border stay apart.
+
+Import the SVG in the World tab: its **Coast detail already drawn** is filled in,
+so zoomed maps add only finer detail instead of the same detail twice. Your
+original world is unchanged until you save the import as a world
+([ADR-0095](adr/0095-export-the-refined-coast-as-a-source-map.md)).
 
 Options:
 - `--spacing-km` sets the level-1 detail spacing (5 km by default).

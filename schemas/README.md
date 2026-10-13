@@ -4,7 +4,9 @@ Only the current formats are supported:
 
 - [World project v1](world/project-v1.schema.json): portable `.dmworld.json` source
   snapshot, full-sphere frame/radius and explicit continent/island assignments.
-  This is a validated source, not a climate/terrain build or generated parent.
+  Optional `coast_detail_km` states the finest coast detail the drawing already
+  carries, so regional maps add only finer detail (ADR-0090). This is a validated
+  source, not a climate/terrain build or generated parent.
 
 - [World terrain source v2](world/terrain-source-v2.schema.json): metadata embedded
   in a canonical prepared SVG, retaining the world, selected/connected ownership,

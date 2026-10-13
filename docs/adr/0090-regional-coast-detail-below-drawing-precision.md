@@ -33,6 +33,17 @@ tracing corners, so coastal places looked artificial.
 4. Tiles, level parents and windows all use it. The regional tile algorithm
    becomes `planet-blended-tiles-v6`.
 
+## Revision (2026-10-13)
+
+A world may state the detail its coast already carries (`coast_detail_km`,
+optional in the world project): the finest coast wavelength drawn, as in a map
+exported from a planet's refined coast. Its coast is then not smoothed, and
+levels add only the octaves finer than that, each with the noise it has in the
+full sequence. Without it, an exported map got its coarse octaves a second time
+and its coast moved 1–2.4 km from the original drawing's refined coast; with it,
+0.1–0.3 km at every level. Worlds without the field are refined as before, so
+the tile algorithm is unchanged.
+
 ## Consequences
 
 - Regional coasts have bays, headlands, skerries and coves at every zoom, and

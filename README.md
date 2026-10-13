@@ -26,7 +26,8 @@ obsolete features are not supported.
   wherever they overlap.
 - **World authoring:** World workspace in the app. Import and map an SVG world,
   generate geographic context, and author geology and ocean-depth hypotheses
-  ([world guide](docs/terrain-worlds.md)).
+  ([world guide](docs/terrain-worlds.md)). `dmtools world refine-coast` exports the
+  coast as zoomed maps draw it as a new SVG source map.
 - **Local terrain:** Terrain workspace and `dmtools terrain build`. The original
   composed generator and editor for one landmass, with a Float32 DEM, water
   review and headless builds ([builds](docs/terrain-builds.md)).

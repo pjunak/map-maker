@@ -15,6 +15,11 @@ see a refined coast:
 * **Nesting.** A level includes every octave down to a finest wavelength. Finer
   levels only add octaves, so each level refines the coast of the level above,
   and the result depends only on the position, the world and the seed.
+* **Drawn detail.** A world may state that its coast already carries detail down
+  to some wavelength, as a map exported from a planet's refined coast does. Its
+  coast is then not smoothed, and only finer octaves are added, each with the
+  noise it has in the full sequence: such a map is refined the way the drawing
+  it came from is, instead of twice.
 """
 
 from dataclasses import dataclass
@@ -99,10 +104,16 @@ def noise_octaves(top_m: float, amplitude_m: float, finest_m: float) -> list[tup
     return out
 
 
-def displace(xyz: F64, radius_m: float, octaves: list[tuple[float, float]], seed: int) -> F64:
-    """Unit vectors moved along the sphere by rotated noise ``octaves`` (a domain warp)."""
+def displace(
+    xyz: F64, radius_m: float, octaves: list[tuple[float, float]], seed: int, first: int = 0
+) -> F64:
+    """Unit vectors moved along the sphere by rotated noise ``octaves`` (a domain warp).
+
+    ``first`` is the index of the first octave in its full sequence, so leaving
+    out coarser octaves keeps the noise of the rest.
+    """
     offset = np.zeros_like(xyz)
-    for k, (wavelength, amplitude) in enumerate(octaves):
+    for k, (wavelength, amplitude) in enumerate(octaves, start=first):
         p = np.ascontiguousarray((xyz @ _rotation(seed + k)) * (radius_m / wavelength))
         for axis in range(3):
             offset[:, axis] += amplitude * value_noise3(p, seed + 97 * k + axis)
@@ -118,16 +129,24 @@ class Coastline:
     world: WorldMap
     land: BaseGeometry
     unit_m: float
+    drawn_m: float | None = None  # the drawing already carries detail down to this wavelength
 
     def octaves(self, finest_m: float) -> list[tuple[float, float]]:
-        """(wavelength, amplitude) in metres, coarsest first, down to ``finest_m``."""
+        """(wavelength, amplitude) in metres, coarsest first, down to ``finest_m``.
+
+        The list includes the octaves the drawing already carries.
+        """
         return noise_octaves(
             TOP_WAVELENGTH_UNITS * self.unit_m, TOP_AMPLITUDE_UNITS * self.unit_m, finest_m
         )
 
     def displaced(self, xyz: F64, finest_m: float, seed: int) -> F64:
         radius_m = self.world.project.frame.radius_km * 1e3
-        return displace(xyz, radius_m, self.octaves(finest_m), seed)
+        octaves = self.octaves(finest_m)
+        drawn = (
+            0 if self.drawn_m is None else sum(1 for w, _ in octaves if w >= self.drawn_m)
+        )
+        return displace(xyz, radius_m, octaves[drawn:], seed, drawn)
 
     def contains(self, xyz: F64, finest_m: float, master_seed: int) -> B:
         """Land at unit vectors ``xyz`` with coast detail down to ``finest_m`` metres."""
@@ -141,6 +160,13 @@ def coastline(world: WorldMap) -> Coastline:
     """The world's refined coast, built once per world and process."""
     frame = world.project.frame
     components = [c for view in world.land for c in view.components]
+    unit_m = 2 * pi * frame.radius_km * 1e3 / frame.width
+    drawn_km = world.project.coast_detail_km
+    if drawn_km is not None:
+        # A coast drawn with detail has no tracing corners to smooth away.
+        land = unary_union([Polygon(c.exterior, c.holes) for c in components])
+        shapely.prepare(land)
+        return Coastline(world, land, unit_m, drawn_km * 1e3)
     sigma = SMOOTHING_UNITS
     smoothed = unary_union([
         shapely.make_valid(
@@ -156,4 +182,4 @@ def coastline(world: WorldMap) -> Coastline:
     drawn = unary_union([Polygon(c.exterior, c.holes) for c in components])
     land = unary_union([smoothed.intersection(inner), drawn.difference(inner)])
     shapely.prepare(land)
-    return Coastline(world, land, 2 * pi * frame.radius_km * 1e3 / frame.width)
+    return Coastline(world, land, unit_m)

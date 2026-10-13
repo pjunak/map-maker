@@ -123,3 +123,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0092: Fill regional lakes on the regional relief, with refined outlines](0092-regional-lakes-fill-the-regional-relief.md)
 - [ADR-0093: Grow ice sheets from mass balance by shallow-ice flow](0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md)
 - [ADR-0094: Work the planet's polar land in true distance and cover touched poles](0094-planet-polar-land-in-true-distance.md)
+- [ADR-0095: Export the refined coast as a source map](0095-export-the-refined-coast-as-a-source-map.md)

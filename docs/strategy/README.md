@@ -33,7 +33,9 @@ backlog, and [status](../research/status.md) records what works now.
      than cutting parallel gullies.
    - Regional coasts are refined below the drawing's precision, so local maps
      show bays and headlands instead of smooth traced curves (ADR-0090, tile
-     algorithm `planet-blended-tiles-v6`).
+     algorithm `planet-blended-tiles-v6`). A map that already carries that detail
+     (an exported refined coast) states it and gets only finer detail;
+     `world refine-coast` exports that coast as a source map (ADR-0095).
    - Regional lakes fill the regional relief from the parent lake, with outlines
      refined below the parent spacing, so shores lose the parent mesh's straight
      edges; crater lakes are no longer pits (ADR-0092, `planet-blended-tiles-v7`).

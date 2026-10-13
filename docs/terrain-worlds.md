@@ -127,6 +127,11 @@ retained in the source SVG, not encoded as a global raster CRS.
 5. In the **2 Frame** stage, enter your planet radius and the exact projection bounds.
    The SVG `viewBox` supplies an initial suggestion, not proof of that frame.
    Remove page margins, legends and scale bars from the geographic rectangle.
+   Leave **Coast detail already drawn** blank for a hand-drawn map. For a map
+   that already carries refined coast detail, such as one exported from a
+   planet's refined coast, enter the finest detail it carries in km (a
+   `dmtools world refine-coast` export fills it in), so zoomed maps add only finer
+   detail.
 6. Click **Validate world**. Tiny export overflow and narrow border overlaps are
    handled in derived coverage, and shared land within one continent is counted
    once. Review the **Adjustments** stage; selecting a report highlights its original

@@ -4,8 +4,15 @@ from hashlib import sha256
 from pathlib import Path
 
 from dmtools.terrain.adapters.world_project import read_world_project, write_world_project
-from dmtools.terrain.adapters.world_svg import parse_world_svg
+from dmtools.terrain.adapters.world_refined_svg import (
+    DEFAULT_DETAIL_KM,
+    RefinedCoast,
+    refined_coast,
+    refined_coast_svg,
+)
+from dmtools.terrain.adapters.world_svg import drawn_coast_detail_km, parse_world_svg
 from dmtools.terrain.domain.world import WorldAssignment, WorldContinent, WorldProject, WorldSource
+from dmtools.terrain.pipeline.control import CancellationToken, ProgressCallback
 from dmtools.terrain.pipeline.world import WorldMap, prepare_world_map
 
 
@@ -19,6 +26,41 @@ def save_world(project: WorldProject, path: Path) -> WorldMap:
     result = prepare_world_map(project)
     write_world_project(project, path)
     return result
+
+
+def export_refined_coast(
+    world_path: Path,
+    destination: Path,
+    *,
+    master_seed: int,
+    detail_km: float = DEFAULT_DETAIL_KM,
+    progress: ProgressCallback | None = None,
+    cancellation: CancellationToken | None = None,
+) -> RefinedCoast:
+    """Write the world's coast as zoomed maps draw it into a new SVG source map.
+
+    The coast depends on the planet's master seed. The SVG imports as a world
+    whose coast already carries ``detail_km``; the destination must not exist.
+    """
+    if destination.suffix.lower() != ".svg":
+        raise ValueError("Export the refined coast to an .svg file.")
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"Refined coast destination already exists: {destination}")
+    coast = refined_coast(
+        read_world_project(world_path), master_seed, detail_km, progress, cancellation
+    )
+    text = refined_coast_svg(coast, master_seed)
+    # The export is only useful if it imports: check before writing.
+    parse_world_svg(text, destination.name)
+    if drawn_coast_detail_km(text) != coast.detail_km:
+        raise ValueError("The refined coast SVG lost its coast detail declaration.")
+    pending = destination.with_name(f".{destination.name}.pending")
+    pending.write_text(text, encoding="utf-8")
+    if destination.exists():
+        pending.unlink()
+        raise FileExistsError(f"Refined coast destination already exists: {destination}")
+    pending.replace(destination)
+    return coast
 
 
 def continent_from_name(name: str) -> WorldContinent:

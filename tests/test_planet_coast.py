@@ -116,3 +116,26 @@ def test_land_cut_by_the_frame_stays_joined_across_the_seam(world: WorldMap) -> 
     west, east = (coast.contains(side, 1_000.0, SEED) for side in sides)
     assert west.any()
     assert (west == east).mean() > 0.995
+
+
+def test_a_coast_drawn_with_detail_only_gains_finer_detail(world: WorldMap) -> None:
+    from dataclasses import replace
+
+    from dmtools.terrain.pipeline.planet_coast import displace
+
+    full = coastline(world)
+    drawn = coastline(replace(world, project=replace(world.project, coast_detail_km=10.0)))
+    radius = world.project.frame.radius_km * 1e3
+    xyz = _sphere(20_000, 3)
+    # No smoothing, and nothing added down to the detail the drawing carries.
+    assert np.array_equal(drawn.contains(xyz, 10_000.0, SEED), _drawn(world, xyz))
+    # Finer levels add only the finer octaves, with the noise they have in the
+    # full sequence: the coarse ones are already drawn.
+    octaves = full.octaves(1_000.0)
+    coarse = sum(1 for w, _ in octaves if w >= 10_000.0)
+    assert 0 < coarse < len(octaves)
+    assert np.allclose(
+        drawn.displaced(xyz, 1_000.0, 4), displace(xyz, radius, octaves[coarse:], 4, coarse)
+    )
+    shift = radius * np.arccos(np.clip(np.sum(drawn.displaced(xyz, 1_000.0, 4) * xyz, 1), -1, 1))
+    assert shift.max() <= _reach_m(full, 1_000.0, coarsest_m=10_000.0) + 1e-6

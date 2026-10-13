@@ -14,7 +14,7 @@ from shapely.geometry import Point, Polygon
 
 from dmtools.terrain.adapters.world_geology import world_fingerprint
 from dmtools.terrain.adapters.world_project import WORLD_EXTENSION
-from dmtools.terrain.adapters.world_svg import load_world_svg
+from dmtools.terrain.adapters.world_svg import drawn_coast_detail_km, load_world_svg
 from dmtools.terrain.application.planet import (
     PlanetRun,
     export_planet,
@@ -116,6 +116,7 @@ class WorldWorkspace(ttk.Frame):
                 ("y", "0"),
                 ("width", "360"),
                 ("height", "180"),
+                ("coast", ""),
             )
         }
         self.owner = tk.StringVar(self)
@@ -292,6 +293,7 @@ class WorldWorkspace(ttk.Frame):
                 ("y", "Frame top · source units"),
                 ("width", "Frame width · source units"),
                 ("height", "Frame height · source units"),
+                ("coast", "Coast detail already drawn · km (optional)"),
             ),
             start=1,
         ):
@@ -305,9 +307,12 @@ class WorldWorkspace(ttk.Frame):
             frame_page,
             text="This frame represents 360° longitude and 180° latitude. "
             "Confirm its bounds from your map's projection; exclude legends and margins. "
-            "SVG display size is not planetary scale. Enter your planet's radius.",
+            "SVG display size is not planetary scale. Enter your planet's radius. "
+            "Leave coast detail blank for a hand-drawn map: zoomed maps refine its coast. "
+            "For a map exported from DM Tools' refined coast, enter the finest detail it "
+            "carries, so zoomed maps add only finer detail.",
             style="Muted.TLabel",
-        ).grid(row=17, column=0, sticky="ew", pady=12)
+        ).grid(row=19, column=0, sticky="ew", pady=12)
 
     def _build_adjustments(self, page: ttk.Frame) -> None:
         page.columnconfigure(0, weight=1)
@@ -436,12 +441,20 @@ class WorldWorkspace(ttk.Frame):
     def project(self) -> WorldProject:
         if self.source is None:
             raise ValueError("Import or open a world map first.")
+        coast = self.values["coast"].get().strip()
+        try:
+            coast_detail_km = float(coast) if coast else None
+        except ValueError as error:
+            raise ValueError(
+                "Enter the coast detail already drawn as a number of km, or leave it blank."
+            ) from error
         return WorldProject(
             self.values["name"].get().strip(),
             self.source,
             self._frame(),
             self.continents,
             self.assignments,
+            coast_detail_km,
         )
 
     def _bounds(self) -> tuple[float, float, float, float]:
@@ -843,6 +856,7 @@ class WorldWorkspace(ttk.Frame):
         self._redo.clear()
         self._saved_signature = None
         x0, y0, x1, y1 = source.suggested_bounds
+        drawn = drawn_coast_detail_km(source.svg)
         for key, value in (
             ("name", Path(source.name).stem),
             ("radius", ""),
@@ -851,6 +865,7 @@ class WorldWorkspace(ttk.Frame):
             ("y", str(y0)),
             ("width", str(x1 - x0)),
             ("height", str(y1 - y0)),
+            ("coast", "" if drawn is None else f"{drawn:g}"),
         ):
             self.values[key].set(value)
         self._loading = False
@@ -882,6 +897,7 @@ class WorldWorkspace(ttk.Frame):
             ("y", str(frame.bounds[1])),
             ("width", str(frame.width)),
             ("height", str(frame.height)),
+            ("coast", "" if (km := world.project.coast_detail_km) is None else f"{km:g}"),
         ):
             self.values[key].set(value)
         self._loading = False

@@ -59,10 +59,36 @@ the test for drawing a body as a sheet compared thickness with the bed's relief
 between neighbouring nodes, which shrinks on finer meshes. It now uses the bed's
 relief within about 50 km ([ADR-0093 revision](../adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md#revision-2026-10-13)).
 
+## Drawn coast detail
+
+A world project can now state the coast detail its drawing already carries
+(`coast_detail_km`, ADR-0090 revision). With 10 km stated for the refined map,
+its coast is not smoothed, level 1 adds nothing, and levels 2 and 3 add only the
+octaves below 10 km. Mean coast shift from the original drawing's refined coast,
+in 600-pixel windows:
+
+| Window (lon, lat, radius) | Level 1 | Level 2 | Level 3 | Refined twice (level 1) |
+|---|---|---|---|---|
+| −60°, 45°, 150 km | 0.20 km | 0.21 km | 0.22 km | 1.47 km |
+| −124.29°, 35.88°, 40 km | 0.19 km | 0.17 km | 0.17 km | 1.01 km |
+| 74.87°, 65.75°, 40 km | 0.10 km | 0.14 km | 0.16 km | 1.28 km |
+| 105°, 70°, 150 km | 0.24 km | 0.28 km | 0.28 km | 2.37 km |
+
+The remaining shift most likely comes from the export's tracing (0.2-unit cells) and its
+smoothing.
+
+## Export command
+
+`dmtools world refine-coast` now makes such maps (ADR-0095). Unlike the first
+script, it names island groups so the importer keeps their role (the script's
+export came back with 160 of 180 shapes as mainland), and it cuts the traced land
+by the drawn shapes' territories, so Tharkeniss Kel and Oul, and Dra and Veld,
+which share land borders, keep their areas. On Aethelara: 195 shapes (185
+islands), 398,489 points, every continent within 0.2 % of its drawn area except
+Oskarath, which gains the land the planet adds at the south pole; the import
+needs no adjustments.
+
 ## Limits and follow-ups
 
 - Adopting the refined map as Aethelara's source is the author's decision; the
   authored project is unchanged.
-- A source that already holds regional coast detail gets it again at level 1.
-  If refined maps become sources, a project could state the scale its coast is
-  drawn to, so levels add only finer octaves.

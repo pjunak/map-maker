@@ -87,6 +87,12 @@
         }
       }
     },
+    "coast_detail_km": {
+      "description": "Optional. The drawn coast already carries detail down to this wavelength (km); regional maps add only finer coast detail.",
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1000
+    },
     "continents": {
       "type": "array",
       "minItems": 1,

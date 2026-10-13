@@ -12,6 +12,7 @@ type Bounds = tuple[float, float, float, float]
 WORLD_PREPARATION = "bounded-world-v1"
 WORLD_EDGE_TOLERANCE_FRACTION = 1e-5
 WORLD_BORDER_OVERLAP_FRACTION = 1e-4
+MAX_COAST_DETAIL_KM = 1000.0
 
 
 def _name(value: object, label: str) -> None:
@@ -164,9 +165,20 @@ class WorldProject:
     frame: WorldFrame
     continents: tuple[WorldContinent, ...]
     assignments: tuple[WorldAssignment, ...]
+    # The drawn coast already carries detail down to this wavelength (km), as a
+    # map exported from a planet's refined coast does. Regional maps then add
+    # only finer coast detail (ADR-0090). None: refine the drawing in full.
+    coast_detail_km: float | None = None
 
     def __post_init__(self) -> None:
         _name(self.name, "World name")
+        if self.coast_detail_km is not None and not (
+            isfinite(self.coast_detail_km) and 0 < self.coast_detail_km <= MAX_COAST_DETAIL_KM
+        ):
+            raise ValueError(
+                f"Drawn coast detail must be a positive wavelength of at most "
+                f"{MAX_COAST_DETAIL_KM:g} km, or left blank."
+            )
         ids = [c.id for c in self.continents]
         if not ids or len(set(ids)) != len(ids):
             raise ValueError("A world needs continents with unique IDs.")

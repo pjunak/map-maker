@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 94 |
+| Architecture decision records | 95 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **243** |
+| **Total** | **244** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (94)
+## Architecture decision records (95)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -198,6 +198,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0092-regional-lakes-fill-the-regional-relief.md](adr/0092-regional-lakes-fill-the-regional-relief.md) | Regional lakes fill the window relief from the parent lake's core, closed lakes are sinks, tiles hold lakes without young relief, and lake outlines get nested detail. |
 | [docs/adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md](adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md) | Ice sheets grow from snowfall against melt by shallow-ice flow with height, albedo and regional-climate feedbacks; large sheets are drawn with their own surface inside refined margins. |
 | [docs/adr/0094-planet-polar-land-in-true-distance.md](adr/0094-planet-polar-land-in-true-distance.md) | The planet works land poleward of 55° in true distance (opening and closing) and covers a pole that drawn land touches, with a natural cap outline. |
+| [docs/adr/0095-export-the-refined-coast-as-a-source-map.md](adr/0095-export-the-refined-coast-as-a-source-map.md) | `world refine-coast` traces the coast as zoomed maps draw it into a new SVG source map, with ownership by territory and a declared coast detail for the round trip. |
 
 ## Dated research reports (99)
 

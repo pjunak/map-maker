@@ -135,6 +135,17 @@ def create_parser() -> argparse.ArgumentParser:
     inspect_bathymetry.add_argument(
         "result", type=Path, help="Result directory or bathymetry.json.")
     inspect_bathymetry.set_defaults(_handler=_run_world_bathymetry_inspect)
+    refine = world_commands.add_parser(
+        "refine-coast",
+        help="Export the coast as zoomed maps draw it into a new SVG source map.",
+    )
+    refine.add_argument("project", type=Path, help="Portable .dmworld.json project.")
+    refine.add_argument("--output", type=Path, required=True, help="New .svg file.")
+    refine.add_argument("--seed", type=int, default=20261006,
+                        help="The planet's master seed; the coast detail depends on it.")
+    refine.add_argument("--detail-km", type=float, default=10.0,
+                        help="Finest coast wavelength to draw (km).")
+    refine.set_defaults(_handler=_run_world_refine_coast)
     planet = world_commands.add_parser(
         "planet",
         help="Experimental: whole-planet relief by uplift and erosion, with climate and biomes.",
@@ -414,6 +425,29 @@ def _run_world_context(arguments: argparse.Namespace) -> int:
     print(f"Geographic context complete: {path}")
     print("Geography, water connectivity, shore distance and exposure; "
           "climate and terrain follow later.")
+    return 0
+
+
+def _run_world_refine_coast(arguments: argparse.Namespace) -> int:
+    from dmtools.terrain.application.world import export_refined_coast
+
+    def progress(fraction: float, message: str) -> None:
+        print(f"{int(fraction * 100):3d}% {message}", file=sys.stderr, flush=True)
+
+    try:
+        coast = export_refined_coast(
+            arguments.project, arguments.output, master_seed=arguments.seed,
+            detail_km=arguments.detail_km, progress=progress,
+        )
+    except (OSError, ValueError) as error:
+        print(f"Coast export failed: {error}", file=sys.stderr)
+        return 1
+    islands = sum(1 for s in coast.shapes if s.role == "island")
+    print(f"Refined coast written: {arguments.output}")
+    print(f"{len(coast.shapes)} shapes ({islands} islands), {coast.points:,} points, "
+          f"coast detail down to {coast.detail_km:g} km.")
+    print("Import it in the World tab: its coast detail is filled in, so zoomed maps "
+          "add only finer detail.")
     return 0
 
 
