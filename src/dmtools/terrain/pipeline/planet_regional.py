@@ -15,12 +15,14 @@ A circular region is regenerated with finer, physically eroded detail:
   regional relief, smoothed over the parent spacing, match the parent surface.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, partial
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.spatial import KDTree
+from scipy.interpolate import CloughTocher2DInterpolator
+from scipy.spatial import Delaunay, KDTree
 
 from dmtools.terrain.domain.planet import PlanetSettings
 from dmtools.terrain.domain.seeds import stage_seed
@@ -42,7 +44,7 @@ from dmtools.terrain.pipeline.planet_ice import (
 )
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from dmtools.terrain.pipeline.planet_noise import fbm3
-from dmtools.terrain.pipeline.planet_patch import Region, inverse_aeqd
+from dmtools.terrain.pipeline.planet_patch import Region, forward_aeqd, inverse_aeqd
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
 from dmtools.terrain.pipeline.planet_wonders import Wonders
 from dmtools.terrain.pipeline.world import WorldMap
@@ -204,6 +206,37 @@ class RegionalParent:
         """Triangle-linear interpolation of a parent node field at unit vectors."""
         return sample_field(self.mesh, xyz, values)
 
+    def smooth_sampler(self, xyz: F64) -> Callable[[F64], F64]:
+        """Smooth (C1) interpolation of parent node fields at unit vectors ``xyz``.
+
+        Clough-Tocher cubics in a local azimuthal plane equal a field at parent
+        nodes but have no creases along parent triangle edges, which regional
+        relief seeded from triangle-linear fields keeps as straight lines. The
+        plane and its triangulation are built once for every field sampled.
+        Points outside the parent nodes' hull fall back to ``sample``.
+        """
+        mesh = self.mesh
+        centre = xyz.mean(axis=0)
+        centre /= np.linalg.norm(centre)
+        reach = float(np.arccos(np.clip(xyz @ centre, -1, 1)).max())
+        reach += 4 * mesh.spacing_m / mesh.radius_m
+        near = np.flatnonzero(mesh.xyz @ centre >= np.cos(min(reach, np.pi)))
+        if len(near) < 4:
+            return partial(self.sample, xyz)
+        lon = float(np.degrees(np.arctan2(centre[1], centre[0])))
+        lat = float(np.degrees(np.arcsin(np.clip(centre[2], -1, 1))))
+        triangulation = Delaunay(forward_aeqd(mesh.xyz[near], lon, lat, mesh.radius_m))
+        plane = forward_aeqd(xyz, lon, lat, mesh.radius_m)
+
+        def sample(values: F64) -> F64:
+            cubic = np.asarray(CloughTocher2DInterpolator(triangulation, values[near])(plane))
+            outside = ~np.isfinite(cubic)
+            if outside.any():
+                cubic[outside] = self.sample(xyz[outside], values)
+            return cubic
+
+        return sample
+
 
 def parent_inflows(parent: RegionalParent, region: Region) -> F64:
     """Parent rivers crossing into the region become drainage-area sources."""
@@ -252,7 +285,10 @@ def enrich(
     # Volcanoes and craters are drawn on top of the regional relief, not eroded
     # from uplift (erosion would fill a crater).
     young = parent.young_m()
-    target = np.maximum(parent.sample(mesh.xyz, parent.surface_m - young), 0.0)
+    # Fields that seed the relief are interpolated smoothly: triangle-linear ones
+    # leave the parent's triangles as planar facets with straight creases.
+    smoothly = parent.smooth_sampler(mesh.xyz)
+    target = np.maximum(smoothly(parent.surface_m - young), 0.0)
     # Parent lakes are fixed water at their level: regional rivers end in them.
     # The level is held on the same surface without young landforms: windows add
     # a crater back on top, so a crater lake held at its full level would end up
@@ -263,9 +299,14 @@ def enrich(
     level = np.where(
         water, 0.0, np.where(lake, lake_level - parent.sample(mesh.xyz, young), target)
     )
-    steady = parent.sample(mesh.xyz, parent.steady_uplift)
-    pulse = parent.sample(mesh.xyz, parent.pulse_uplift)
-    erodibility = parent.sample(mesh.xyz, parent.erodibility) * np.exp(
+    steady = np.maximum(smoothly(parent.steady_uplift), 0.0)
+    pulse = np.maximum(smoothly(parent.pulse_uplift), 0.0)
+    # Cubics overshoot a little at sharp steps; erodibility stays within the parent's.
+    erodibility = np.clip(
+        smoothly(parent.erodibility),
+        float(parent.erodibility.min()),
+        float(parent.erodibility.max()),
+    ) * np.exp(
         FINE_TEXTURE
         * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / (FINE_TEXTURE_SPACINGS * mesh.spacing_m))
     )
@@ -277,7 +318,7 @@ def enrich(
         erodibility = erodibility * (1 - 0.97 * basin)
     runoff = (
         None if parent.runoff_weight is None
-        else np.maximum(parent.sample(mesh.xyz, parent.runoff_weight), MIN_RUNOFF_WEIGHT)
+        else np.maximum(smoothly(parent.runoff_weight), MIN_RUNOFF_WEIGHT)
     )
     inflow = parent_inflows(parent, region)
     if runoff is not None:

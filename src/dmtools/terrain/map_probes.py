@@ -5,11 +5,12 @@ from math import asin, atan2, cos, degrees, isfinite, radians, sin
 import numpy as np
 from scipy.spatial import KDTree  # pyright: ignore[reportMissingTypeStubs]
 
-from dmtools.terrain.adapters.planet_region import RegionWindow, forward_aeqd
+from dmtools.terrain.adapters.planet_region import RegionWindow
 from dmtools.terrain.domain.wonders import WONDERS
 from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_koppen import KOPPEN, KOPPEN_NAMES
+from dmtools.terrain.pipeline.planet_patch import forward_aeqd
 from dmtools.terrain.pipeline.planet_volcanism import KINDS as VOLCANO_KINDS
 from dmtools.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETTINGS
 from dmtools.terrain.pipeline.planet_volcanism import SHATTERED, TITAN, WONDER

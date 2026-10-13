@@ -6,7 +6,7 @@ from math import isfinite
 from dmtools.terrain.domain.seeds import validate_master_seed
 from dmtools.terrain.domain.wonders import MAX_WONDER_AGE_MYR, WONDER_KINDS, WonderKind
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v26"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v27"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v7"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"
@@ -119,7 +119,7 @@ class PlanetSettings:
         return max(1, round(self.duration_myr * 1e3 / self.step_kyr))
 
 
-REGIONAL_ALGORITHM = "planet-blended-tiles-v7"
+REGIONAL_ALGORITHM = "planet-blended-tiles-v8"
 TILE_STAGE_PREFIX = "planet.tile."
 
 

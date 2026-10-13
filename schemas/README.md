@@ -31,12 +31,12 @@ Only the current formats are supported:
   result hashes. Neither a land DEM nor physical transport/heat capacity.
 
 - [Planet build v1](world/planet-build-v1.schema.json): experimental whole-planet relief
-  (`sphere-mesh-stream-power-v26`), provisional climate and ice sheets
+  (`sphere-mesh-stream-power-v27`), provisional climate and ice sheets
   (`planet-climate-v7`). Node elevation on the sphere mesh is authoritative;
   world-frame GeoTIFF/images are derived. Not a world parent.
 
 - [Planet region v1](world/planet-region-v1.schema.json): experimental regional detail
-  window (`planet-blended-tiles-v7`) from cached tiles of a planet build; local
+  window (`planet-blended-tiles-v8`) from cached tiles of a planet build; local
   azimuthal-equidistant GeoTIFF and previews.
 
 - [Terrain context v1](terrain/context-v1.schema.json): bounded geographic support

@@ -46,6 +46,21 @@ window boundary pins it. ADR-0048 requires overlapping requests to agree.
    - a manifest written last
      ([schema](../../schemas/world/planet-region-v1.schema.json)).
 
+## Revision (2026-10-13)
+
+Tiles were seeded from parent fields interpolated linearly inside each parent
+triangle: the starting surface, the calibration target, uplift, erodibility and
+runoff. Erosion did not erase that start, so province and local maps showed the
+parent's triangles as planar facets with straight creases along their edges.
+These fields are now sampled with Clough-Tocher cubics in the tile's azimuthal
+plane, which equal the parent at its nodes and have no creases (uplift is kept
+non-negative, erodibility within the parent's range; masks stay linear). The
+tile lattice's node jitter rises from 0.2 to 0.35 spacings, as on the planet
+mesh, because steepest descent at 0.2 still followed the lattice's three axes.
+The regional tile algorithm becomes `planet-blended-tiles-v8`, and the relief
+algorithm `sphere-mesh-stream-power-v27`, since wonder aging uses the same
+lattice ([regional facets report](../research/2026-10-13-regional-facets.md)).
+
 ## Consequences
 
 - Detail is reproducible and independent of the requested window. Tiles are

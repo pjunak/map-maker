@@ -126,3 +126,43 @@ The images are local artifacts, not tracked in the repository
   fixed by ADR-0092 ([lake shores](2026-10-12-regional-lake-shores.md)).
 - The mesh kernels still route filled flats along their 1 mm gradient. Their
   tiles showed no such lines here.
+
+## Faceted regional relief — 2026-10-14
+
+Province and local windows of a 3.2 million-node Aethelara build (refined map,
+around 70 °E, 24 °N) showed straight-edged planar facets and seams in the tiles'
+own relief, not only in display detail.
+
+- **Cause: parent triangles.** Overlaid on the shaded tile relief, the facets'
+  edges are the planet mesh's triangle edges. Tiles were seeded from parent
+  fields interpolated linearly inside each parent triangle: the starting
+  surface, the calibration target, uplift, erodibility and runoff. Erosion
+  did not erase that start, so each parent triangle stayed a tilted plane with
+  creases along its edges, and finer levels inherited them.
+- **Not the cause alone: lattice grain.** Tiles erode on a jittered hexagonal
+  lattice. On a gently tilted plane with small roughness, steepest-descent flow
+  azimuths had a six-fold grain (|mean exp(6iθ)|) of 0.20 at the old jitter of
+  0.2 spacings, pulling mean flow up to 5.8° towards the lattice axes. Jitter
+  0.35 (as on the planet mesh) gives 0.02, as do a jittered or plain sunflower
+  spiral (0.02, 0.01) and Poisson-disk points (0.03). Raising the jitter alone
+  changed the fine texture but kept the facets.
+- **Fix.** Seed fields are sampled with Clough-Tocher cubics in the tile's
+  azimuthal plane: equal to the parent at its nodes, without creases. Uplift is
+  kept non-negative and erodibility within the parent's range; basin depth stays
+  linear. The plane and its triangulation are built once per tile: 0.03 s, then
+  0.01–0.2 s per field, against 2 s per field for the linear sampler. Jitter is
+  0.35. Tile algorithm `planet-blended-tiles-v8`; relief algorithm
+  `sphere-mesh-stream-power-v27` (wonder aging uses the same lattice).
+- **Result.** The creased facets are gone from province and local relief; a
+  province escarpment is now cut back by valleys. In the natural-colour atlas
+  the change is subtle, because display detail and uniform desert colour
+  dominate at these zooms. A curvature measure along parent edges did not
+  separate the cases (1.15 to 1.08 at region level, about 1 at province), since
+  gully texture dominates curvature there.
+- **Real straight features stay.** A straight east-west escarpment over 100 km
+  long crossing the province window is in the planet's own relief (a 500 m drop
+  within 30 km at every profile across it), and regional erosion sharpens it.
+
+One local window failed once with `[Errno 22] Invalid argument` while starting
+tile worker processes and succeeded when repeated.
+

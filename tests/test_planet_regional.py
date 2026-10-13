@@ -531,8 +531,8 @@ def test_display_detail_is_world_anchored_and_shrinks_with_finer_levels(
 def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path: Path) -> None:
     from scipy.ndimage import binary_dilation
 
-    from dmtools.terrain.adapters.planet_region import forward_aeqd
     from dmtools.terrain.application.planet_region import region_window
+    from dmtools.terrain.pipeline.planet_patch import forward_aeqd
 
     planet = RegionalParent.from_result(parent)
     lon, lat = _land_centre(parent)
@@ -767,3 +767,30 @@ def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
     assert np.allclose(relief[cover & window.land], np.fmax(relief, window.ice_surface_m)[
         cover & window.land
     ])
+
+
+def test_smooth_parent_sampling_has_no_creases_at_parent_triangle_edges(
+    parent: PlanetResult,
+) -> None:
+    from dmtools.terrain.pipeline.planet_patch import inverse_aeqd
+
+    planet = RegionalParent.from_result(parent)
+    mesh = parent.mesh
+    lon, lat = _land_centre(parent)
+    # A smooth field: equal to it at nodes, closer to it between them, and a
+    # transect across many triangles curves smoothly instead of kinking at edges.
+    field = 1000.0 * np.sin(4.0 * mesh.xyz[:, 0]) * np.cos(3.0 * mesh.xyz[:, 1])
+    node = int(np.argmax(mesh.xyz @ inverse_aeqd(np.zeros(1), np.zeros(1), lon, lat, 1.0)[0]))
+    near = mesh.xyz @ mesh.xyz[node] > np.cos(5 * mesh.spacing_m / mesh.radius_m)
+    assert np.allclose(planet.smooth_sampler(mesh.xyz[near])(field), field[near], atol=1e-6)
+    t = np.linspace(-6, 6, 2401) * mesh.spacing_m
+    line = inverse_aeqd(t, 0.3 * t, lon, lat, mesh.radius_m)
+    exact = 1000.0 * np.sin(4.0 * line[:, 0]) * np.cos(3.0 * line[:, 1])
+    linear, smooth = planet.sample(line, field), planet.smooth_sampler(line)(field)
+    assert np.abs(smooth - exact).mean() < 0.5 * np.abs(linear - exact).mean()
+
+    def kinks(profile: np.ndarray) -> float:
+        bend = np.abs(np.diff(profile, 2))
+        return float(bend.max() / bend.mean())
+
+    assert kinks(smooth) < 0.25 * kinks(linear)

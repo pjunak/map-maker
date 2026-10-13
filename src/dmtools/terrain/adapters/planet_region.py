@@ -152,23 +152,6 @@ class TileStore:
             return TileSurface(mesh, data["elevation_m"].astype(np.float64))
 
 
-def forward_aeqd(xyz: F64, lon0: float, lat0: float, radius_m: float) -> F64:
-    """Unit vectors to local plane metres (x east, y north) about (lon0, lat0)."""
-    centre = inverse_aeqd(np.zeros(1), np.zeros(1), lon0, lat0, 1.0)[0]
-    east = np.cross([0.0, 0.0, 1.0], centre)
-    east = (
-        east / np.linalg.norm(east) if np.linalg.norm(east) > 1e-12 else np.array([0.0, 1.0, 0.0])
-    )
-    north = np.cross(centre, east)
-    distance = radius_m * np.arccos(np.clip(xyz @ centre, -1, 1))
-    tangent = xyz - np.outer(xyz @ centre, centre)
-    norm = np.linalg.norm(tangent, axis=1)
-    norm = np.where(norm > 1e-15, norm, 1.0)
-    return np.stack(
-        (distance * (tangent @ east) / norm, distance * (tangent @ north) / norm), axis=1
-    )
-
-
 @dataclass(frozen=True)
 class RegionWindow:
     centre: tuple[float, float]

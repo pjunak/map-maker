@@ -42,7 +42,10 @@ backlog, and [status](../research/status.md) records what works now.
      Open lakes drain their window basin, so no playa ring lines their shores.
    - Regional plains no longer show straight grid lines: display carving drains
      filled hollows along their thalweg, and ridged detail has no steps
-     ([report](../research/2026-10-12-straight-display-lines.md)).
+     ([report](../research/2026-10-12-straight-display-lines.md)). Tiles are
+     seeded from smooth parent fields on a more irregular lattice, so province
+     and local relief no longer shows the parent's triangles as creased facets
+     (`planet-blended-tiles-v8`).
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`).
