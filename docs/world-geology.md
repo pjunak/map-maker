@@ -1,41 +1,58 @@
 # Authored world geology
 
-The World workspace now has a **Geology…** editor for pre-generation instructions.
-It resolves continent defaults and explicit provinces into inspectable land
-coverage. Optional explicit landform controls now transfer into ordinary terrain
-projects through the World workspace's **Terrain** stage or `world terrain --geology`. These are
-procedural generation instructions, not reconstructed Earth history or implemented
-uplift, erosion, climate or a reviewed global terrain parent.
+The World workspace's **Geology** step holds the pre-generation instructions
+for a world. It resolves continent defaults and explicit provinces into
+inspectable land coverage. The planet turns each region's setting, ages and
+landform into soft height targets and rock hardness ([planet guide](world-planet.md)).
+Explicit landform controls also transfer into ordinary terrain projects through the
+**Local terrain** tool or `world terrain --geology`. These are procedural generation
+instructions, not reconstructed Earth history.
+
+The step is optional: without a recipe, mountain ranges are placed automatically.
 
 ## Try it
 
-1. Open a saved world, or import and validate its source/frame/assignments.
-2. Choose **Geology…**. The world stays fixed while this editor is open.
-3. Select a continent default. Choose a geological setting and optional ages;
-   **Apply** validates the complete coverage. Blank ages mean unknown.
-   In **Landform guidance**, choose plain, hills, plateau or mountains. **Use starting
-   values** fills editable base height, relief, feature size, transition and direction.
-   **Use background terrain** explicitly leaves this region to normal generation.
-4. Choose **Draw province**, click at least three vertices, enter a name and
-   priority, then **Apply / finish polygon** or press Enter on the map.
-   Backspace removes the last vertex; Escape or **Revert / cancel** discards the draft.
+1. Open a saved world, or import one and assign its continents.
+2. Open the **Geology** step and click **Create a geology recipe** (or **Open a
+   recipe…**). The step's map replaces the world map while it is open.
+3. Select a continent default. Choose its **Geological setting**; the line below it
+   says what the setting means, and the key under **Regions** gives its map
+   colour. **Automatic** leaves the region to the generator. **Crust age** and
+   **Time since uplift** are in million years; blank means unknown. Crust older
+   than 1,000 million years erodes more slowly, and older uplift leaves lower,
+   smoother ranges. **Apply changes** validates the complete coverage.
+   Under **Exact landform (optional)**, choose plain, hills, plateau or mountains
+   to set heights directly instead of the setting's usual ones. **Use starting
+   values** fills editable base height, relief, feature size, transition and
+   direction. **Use background terrain** leaves this region to the setting.
+4. Choose **Draw province**, click at least three corners, enter a name and
+   priority, then **Apply changes** or press Enter on the map.
+   Backspace removes the last corner; Escape or **Revert** discards the draft.
 5. Review **Geology coverage** colours, effective land area and numeric hover.
    Use **Source** or an available geographic context layer as the background.
-   **Look** selects the direction for exposure/support backgrounds. The original
-   Context page owns their numeric scales and geographic limitations.
-6. Save a separate **`.dmgeology.json`** recipe. **Open recipe…** restores it against
-   the currently open world. The editor remembers the last saved recipe during
-   the application session and rechecks its file when reopened.
-7. Close the geology editor and open the **5 Terrain** stage. Its recipe selection shows the
-   saved file; **Choose geology recipe…** can select another and **Clear** disables it.
-   Creation rereads and validates the file against the current world.
-8. Generate in the Terrain workspace. Transferred landforms are ordinary editable
-   instructions; editing them and generating again leaves the saved world recipe
-   and earlier output unchanged.
+   **Look** selects the direction for exposure/support backgrounds. The
+   Geographic context page owns their numeric scales and geographic limitations.
+6. **Save** a separate **`.dmgeology.json`** recipe. **Open…** restores one against
+   the currently open world.
+7. **Next** goes to the Generate step, which uses the recipe as it stands in this
+   step, saved or not. An edit that is not applied yet stops generation with a
+   message rather than being left out. **Remove geology** goes back to automatic
+   ranges.
+8. The **Local terrain** tool uses the same recipe. In the Terrain workspace,
+   transferred landforms are ordinary editable instructions; editing them and
+   generating again leaves the world recipe and earlier output unchanged.
+
+Editing the world after making geology (renaming it, changing its radius or
+frame, or reassigning shapes) does not lose the recipe: when you return to the
+Geology step it follows the edited world. Continent defaults stay with their
+continents, new continents start Automatic, and provinces and landmarks stay where
+they were drawn on the map. Save the recipe again to keep that version; the file
+on disk still names the world it was saved with. A recipe drawn on another source
+map is closed when that map is imported.
 
 To use the synthetic example, open
 [`four-shores.dmworld.json`](../examples/world/four-shores.dmworld.json), choose
-**Geology… → Open recipe…**, and open
+**Geology → Open a recipe…**, and open
 [`four-shores.dmgeology.json`](../examples/world/four-shores.dmgeology.json).
 Use Save As for experiments. It has an active belt crossing two continent labels
 and a rift crossing the longitude seam; its old-crust/young-rejuvenation values
@@ -46,9 +63,9 @@ dmtools terrain gui --world examples/world/four-shores.dmworld.json
 dmtools world inspect-geology examples/world/four-shores.dmgeology.json
 ```
 
-Use the tree or click resolved land to select a region. **Redraw** replaces a
-province boundary after validation; **Delete** removes it. Defaults cannot be
-deleted, and continent names/ownership are edited in the World workspace.
+Use the tree or click resolved land to select a region. **Redraw outline** replaces
+a province boundary after validation; **Delete** removes it. Defaults cannot be
+deleted, and continent names/ownership are edited in the Source map step.
 Twenty accepted edits are retained for Undo/Redo during a session. Apply or revert
 an unfinished edit before changing selection or using history. Zoom and pan move
 the view, not the authored geometry. There is no output sculpting.
@@ -57,7 +74,7 @@ the view, not the authored geometry. There is no output sculpting.
 
 Open [landform-world.dmworld.json](../examples/world/landform-world.dmworld.json),
 then load [landform-world.dmgeology.json](../examples/world/landform-world.dmgeology.json)
-in **Geology…**. It contains two contiguous continent labels, plain defaults,
+in the **Geology** step. It contains two contiguous continent labels, plain defaults,
 a western mountain belt, an eastern plateau and a higher-priority lowland inside
 the plateau. The geometry is deliberately simple so its guidance can be inspected.
 
@@ -72,10 +89,12 @@ land are identical with or without the optional recipe.
 
 ## Place wonders by hand
 
-The **Landmarks** tab places [wonders](wonders.md) where you want them. Choose a
-kind; the tab describes it and its size range. Optionally give a name and a size
-(a diameter, a width or a height, depending on the kind; blank uses the usual
-size). An age (**Age Myr**) erodes craters, chasms, cliffs and tepuis ([wonder guide](wonders.md#age)); blank uses the planet's.
+**Landmarks**, at the foot of the Geology step, places [wonders](wonders.md) where
+you want them. Choose a kind; the text below describes it and its size range.
+Optionally give a name and a size in km (a diameter, a width or a height,
+depending on the kind; blank uses the usual size). An **Age** in million years
+erodes craters, chasms, cliffs and tepuis ([wonder guide](wonders.md#age)); blank
+uses the planet's.
 Click **Place on map**, then a point on land. Wonders placed by their two
 ends, such as a chasm, take a second click for the other end. Select a landmark
 in the tree to rename, resize (**Update**) or **Delete** it. Undo and redo cover
@@ -148,8 +167,9 @@ stay background, and established enclave interiors retain their own guidance.
 This is procedural composition, not calibrated geological forcing; large height
 contrasts can still form steep polygon-shaped slopes. See the
 [blending evidence](research/2026-09-27-shared-landform-blending.md).
-Vertex dragging, multipart/holed provinces, polar winding
-conventions, per-field inheritance and rebasing to an edited world are follow-ups.
+Vertex dragging, multipart/holed provinces, polar winding conventions and
+per-field inheritance are follow-ups. An open recipe follows edits of its own world
+(see [Try it](#try-it)); opening a file still requires its exact world.
 
 ## Persistence and cancellation
 
@@ -177,8 +197,9 @@ This guard is not a cross-process filesystem lock.
 Coverage/open jobs run off the Tk thread and support cooperative cancellation
 between bounded geometry operations; an individual GEOS call or SVG parse is
 not interruptible. Cancellation/failure retains applied inputs and the current
-form/draft. Atomic saves finish before closing. Closing or replacing world input
-also checks this editor's unsaved work. Save applies a valid pending edit first;
+form/draft. Geology jobs share the World workspace's status bar and its one job at a
+time. Atomic saves finish before closing. Closing or replacing world input
+also checks the recipe's unsaved work. Save applies a valid pending edit first;
 invalid input cannot disappear through a Save confirmation.
 
 See [ADR-0080](adr/0080-transfer-geological-landform-guidance.md),

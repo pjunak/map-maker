@@ -76,6 +76,7 @@ def test_world_import_assignment_validate_save_and_reopen(
     view.load_world(destination)
     wait_world(app)
     assert not view.dirty and view.values["name"].get() != "Edited"
+    assert view.step == "generate"  # a saved world opens ready for its planet
 
 
 def test_world_assign_exclude_and_rename_retain_identity(
@@ -253,8 +254,9 @@ def test_tolerated_import_adjustments_validate_save_reopen_and_clear(
     wait_world(app)
     assert view.validated is not None
     assert len(view.validated.adjustments) == 3
-    assert "3 import adjustments" in view.summary.get()
-    view.pages.select(view.adjustments_page)
+    assert "3 import adjustments" in view.check.get()
+    view.show_step("planet")
+    assert view.adjustment_box.winfo_manager() == "pack"
     view.adjustment_tree.selection_set("0")
     view._review_adjustment()
     assert set(view.tree.selection()) == set(view.validated.adjustments[0].feature_ids)
@@ -454,7 +456,7 @@ def test_water_connectivity_inspection_shows_pieces_and_finite_links(app: ui.Ter
     assert "gold" in maps.legend.get()
     assert "shared intervals" in view.context_detail.get()
     assert "components match source" in view.context_detail.get()
-    view.pages.select(view.context_page)
+    view.show_step("context")
     app.root.update()
     assert view.context_text.cget("state") == "disabled"
     assert view.context_text.get("1.0", "end-1c") == view.context_detail.get()
@@ -513,3 +515,35 @@ def test_world_frame_keeps_the_coast_detail_a_map_already_carries(
     view.load_svg(EXAMPLES / "coastlines.svg")
     wait_world(app)
     assert view.values["coast"].get() == ""
+
+
+def test_steps_guide_an_import_from_shapes_to_a_checked_world(app: ui.TerrainApp) -> None:
+    view = app.world_workspace
+    rail = view.rail
+    assert view.step == "source" and not rail.enabled("planet") and not rail.enabled("explore")
+    view.load_svg(EXAMPLES / "coastlines.svg")
+    wait_world(app)
+    assert rail.enabled("planet") and rail.enabled("geology") and not rail.enabled("explore")
+    # Earth's radius is the starting value; the detected page is not 2:1, which the
+    # Planet step says and opens the map edges for.
+    assert view.values["radius"].get() == "6371"
+    assert "stretched" in view.scale_text.get() and view.edges_section.expanded
+    # Next waits until every shape has a place, and selects the ones left.
+    view.next_from_source()
+    assert view.step == "source" and len(view.tree.selection()) == 7
+    assert "Assign or exclude the 7" in view.status.get()
+    view.suggest_groups()
+    assert "4 continents" in rail.status("source")
+    view.next_from_source()
+    assert view.step == "planet"
+    for key, value in (("x", "10"), ("y", "10"), ("width", "360"), ("height", "180")):
+        view.values[key].set(value)
+    assert "stretched" not in view.scale_text.get()
+    view.values["radius"].set("bad")
+    assert rail.status("planet") == "Enter a radius"
+    view.values["radius"].set("6371")
+    view.next_from_planet()
+    wait_world(app)
+    assert view.validated is not None and view.step == "geology"
+    assert "The world is valid" in view.check.get()
+    assert view.rail.status("geology") == "Optional · automatic"

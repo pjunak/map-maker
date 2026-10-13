@@ -24,9 +24,11 @@ obsolete features are not supported.
   the app.
   About 5 km detail for part of the planet, from cached tiles that agree
   wherever they overlap.
-- **World authoring:** World workspace in the app. Import and map an SVG world,
-  generate geographic context, and author geology and ocean-depth hypotheses
-  ([world guide](docs/terrain-worlds.md)). `dmtools world refine-coast` exports the
+- **World authoring:** World workspace in the app. Numbered steps take an SVG world
+  from import and continents through planet size, optional geology and generation
+  to exploring the planet; further tools generate geographic context and
+  ocean-depth hypotheses ([world guide](docs/terrain-worlds.md)).
+  `dmtools world refine-coast` exports the
   coast as zoomed maps draw it as a new SVG source map.
 - **Local terrain:** Terrain workspace and `dmtools terrain build`. The original
   composed generator and editor for one landmass, with a Float32 DEM, water

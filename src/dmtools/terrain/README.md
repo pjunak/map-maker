@@ -14,26 +14,28 @@ The window opens with **World** and **Terrain** tabs. World retains complete SVG
 source maps, continental ownership and an explicit spherical geographic frame.
 Read the [world guide](../../../docs/terrain-worlds.md), or try
 `dmtools terrain gui --world examples/world/four-shores.dmworld.json`.
-Its stages run down the left (Shapes, Frame, Adjustments, Context, Planet, Terrain)
-beside one map view that shows source, context and planet maps in any projection, with
-drill-down to regional detail ([planet guide](../../../docs/world-planet.md)). Long jobs
-show progress and **Cancel** in the status bar.
-The **Context** stage generates spherical coverage, connected water and resolution
-support, shared-edge openings, separate water-piece links, shore distance and exposure,
-with verified saved-context inspection; see
-[geographic context](../../../docs/world-context.md). **Geology…** opens the
-[province/default input editor](../../../docs/world-geology.md), with its own
-recipe saves and source/context backgrounds. Explicit landform controls and matching
-geographic context can affect experimental rough terrain; geology ages do not.
-**Bathymetry…** opens a separate
+Its guided steps run down the left (Source map, Planet, Geology, Generate, Explore;
+see [the steps](../../../docs/terrain-worlds.md#the-steps)) beside one map view that
+shows source, context and planet maps in any projection, with drill-down to regional
+detail ([planet guide](../../../docs/world-planet.md)). Long jobs show progress and
+**Cancel** in the status bar. The optional **Geology** step edits the
+[province/default recipe](../../../docs/world-geology.md) in place, with its own
+recipe saves, landmarks and source/context backgrounds; the planet uses it as it
+stands.
+
+**More tools** follow the steps. **Geographic context** generates spherical coverage,
+connected water and resolution support, shared-edge openings, separate water-piece
+links, shore distance and exposure, with verified saved-context inspection; see
+[geographic context](../../../docs/world-context.md). **Ocean floor** opens a separate
 [ocean-floor workflow](../../../docs/world-bathymetry.md) from matching context,
 with explicit ocean selection, shelf/slope/basin inputs, numerical error/support
-views and independent saves/results. The **Terrain** stage selects a continent and
+views and independent saves/results. **Local terrain** selects a continent and
 creates a local terrain project with connected neighbours, retained world identity
-and fixed projected scale. When context is currently generated or opened, Terrain
-embeds bounded immutable samples and labels the coastal consumer experimental. It
-opens in Terrain ready for the workflow below. Climate, runoff, aging, bathymetry
-coupling and accepted world-parent generation remain planned.
+and fixed projected scale. Explicit landform controls and matching geographic
+context can affect that experimental rough terrain; geology ages do not. When
+context is currently generated or opened, Terrain embeds bounded immutable samples
+and labels the coastal consumer experimental. It opens in Terrain ready for the
+workflow below.
 
 `--project` opens a local terrain file directly in that tab.
 

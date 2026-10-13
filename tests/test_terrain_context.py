@@ -259,7 +259,7 @@ def test_distance_bounds_are_continuous_across_both_sampling_stencils(control: C
 def test_matching_geology_is_bound_and_mismatched_geology_rejected(
     control: Control, tmp_path: Path,
 ) -> None:
-    from dmtools.terrain.adapters.world_geology import write_geology
+    from dmtools.terrain.adapters.world_geology import read_geology, write_geology
     from dmtools.terrain.domain.world_geology import blank_geology
 
     run, source, _bound = control
@@ -268,7 +268,7 @@ def test_matching_geology_is_bound_and_mismatched_geology_rejected(
     digest = write_geology(recipe, path, None)
     created = create_world_terrain_project(source.world, source.world.continents[0].id,
                                            tmp_path / "with-geology", context=run,
-                                           geology_path=path)
+                                           geology=read_geology(path)[0])
     assert created.loaded.project.world_context is not None
     assert created.loaded.project.world_context.geology_sha256 is not None
     assert load_terrain_project(created.loaded.path).project == created.loaded.project
@@ -276,5 +276,6 @@ def test_matching_geology_is_bound_and_mismatched_geology_rejected(
     write_geology(blank_geology(mismatch), path, digest)
     with pytest.raises(ValueError, match="world"):
         create_world_terrain_project(source.world, source.world.continents[0].id,
-                                     tmp_path / "bad-geology", context=run, geology_path=path)
+                                     tmp_path / "bad-geology", context=run,
+                                     geology=read_geology(path)[0])
     assert not (tmp_path / "bad-geology").exists()

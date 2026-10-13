@@ -989,7 +989,9 @@ Priorities remain conditional on the current strategy's prerequisites.
 
 WC0's source/mapping workspace and WC1 geographic preview/export/reopening and
 shared-edge water, water-piece connectivity, shore-distance and exposure measurements are
-delivered, together with independent geology and bathymetry input editors.
+delivered, together with geology and bathymetry input editors. The World workspace
+guides creation through numbered steps with explained defaults, and geology is a
+step whose recipe follows world edits ([ADR-0096](docs/adr/0096-guided-world-steps.md)).
 M1-M4 include the minimum working stage controls, result comparison and failure/
 resolution feedback for the integrated experiment. Do not wait for M5 scientific
 acceptance to make that workflow testable; retain its experimental label. A control

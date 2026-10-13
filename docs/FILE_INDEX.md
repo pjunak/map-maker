@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**229 Markdown files + 1 legal notice = 230 documentation files.**
+**244 Markdown files + 1 legal notice = 245 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 95 |
+| Architecture decision records | 96 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **244** |
+| **Total** | **245** |
 
 ## Project entry and guidance (4)
 
@@ -199,6 +199,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md](adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md) | Ice sheets grow from snowfall against melt by shallow-ice flow with height, albedo and regional-climate feedbacks; large sheets are drawn with their own surface inside refined margins. |
 | [docs/adr/0094-planet-polar-land-in-true-distance.md](adr/0094-planet-polar-land-in-true-distance.md) | The planet works land poleward of 55° in true distance (opening and closing) and covers a pole that drawn land touches, with a natural cap outline. |
 | [docs/adr/0095-export-the-refined-coast-as-a-source-map.md](adr/0095-export-the-refined-coast-as-a-source-map.md) | `world refine-coast` traces the coast as zoomed maps draw it into a new SVG source map, with ownership by territory and a declared coast detail for the round trip. |
+| [docs/adr/0096-guided-world-steps.md](adr/0096-guided-world-steps.md) | The World workspace guides creation through five numbered steps with explained defaults; geology is a step in the main window, generation uses its recipe, and the recipe follows world edits. |
 
 ## Dated research reports (99)
 

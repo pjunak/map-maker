@@ -20,6 +20,7 @@ from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_
 from dmtools.terrain.adapters.world_geology import (
     geology_document,
     geology_from_bytes,
+    read_geology,
     write_geology,
 )
 from dmtools.terrain.adapters.world_project import write_world_project
@@ -77,7 +78,7 @@ def create(tmp_path: Path, value: WorldGeologyRecipe, name: str = "terrain") -> 
     write_geology(value, path, None)
     return create_world_terrain_project(
         value.world, value.world.continents[0].id, tmp_path / name,
-        settings=SETTINGS, geology_path=path,
+        settings=SETTINGS, geology=read_geology(path)[0],
     )
 
 
@@ -201,7 +202,7 @@ def test_invalid_or_cancelled_transfer_never_publishes(tmp_path: Path, reason: s
     with pytest.raises((ValueError, GenerationCancelled)):
         create_world_terrain_project(
             source, source.continents[0].id, tmp_path / "terrain", settings=SETTINGS,
-            geology_path=path, cancellation=token, progress=progress,
+            geology=read_geology(path)[0], cancellation=token, progress=progress,
         )
     assert not (tmp_path / "terrain").exists()
 
@@ -257,6 +258,6 @@ def test_reordered_world_records_reuse_the_same_canonical_recipe(tmp_path: Path)
     reordered = replace(source, continents=tuple(reversed(source.continents)),
                         assignments=tuple(reversed(source.assignments)))
     made = create_world_terrain_project(
-        reordered, source.continents[0].id, tmp_path / "terrain", geology_path=path,
+        reordered, source.continents[0].id, tmp_path / "terrain", geology=read_geology(path)[0],
     )
     assert len(regions(made)) == 1

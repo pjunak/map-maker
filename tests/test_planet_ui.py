@@ -68,7 +68,7 @@ def planet_app(app: ui.TerrainApp) -> None:
     view = app.world_workspace
     view.load_world(EXAMPLES / "four-shores.dmworld.json")
     wait(app)
-    view.generate_planet(SMALL, None)
+    view.generate_planet(SMALL)
     wait(app)
     assert view.planet_run is not None
 
@@ -81,20 +81,22 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     view = app.world_workspace
     view.load_world(EXAMPLES / "four-shores.dmworld.json")
     wait(app)
-    panel, maps = view.planet_panel, view.map_view
+    panel, maps = view.result_panel, view.map_view
     assert str(panel.export_button["state"]) == "disabled"
+    assert not view.rail.enabled("explore")
     assert str(maps.group_choice.buttons["Planet"]["state"]) == "disabled"
-    view.generate_planet(SMALL, None)
+    view.generate_planet(SMALL)
     assert view.busy and view.status_bar.cancel_button.winfo_manager() == "grid"
     wait(app)
     run = view.planet_run
     assert run is not None and panel.run is run and maps.probe is not None
+    # A new planet opens the Explore step, whose actions now work.
+    assert view.step == "explore" and view.rail.enabled("explore")
+    assert str(panel.zoom_button["state"]) == "normal"
     assert set(run.previews) == set(PREVIEW_LAYERS)
     assert maps.display_layer.get() == "Planet atlas" and maps.group.get() == "Planet"
     assert tuple(maps.layer_input.cget("values")) == PREVIEW_LAYERS
-    assert "nodes" in panel.detail.get() and f"{len(THEMES)} of {len(THEMES)}" in (
-        panel.detail.get()
-    )
+    assert "points about" in panel.detail.get() and "need climate" not in panel.detail.get()
     for theme in THEMES:
         maps.set_layer(theme.label)
         maps.draw_now()
@@ -148,17 +150,18 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     app.root.update()
     assert view.planet_run is None and maps.display_layer.get() == "Source"
     assert maps.planet_run is None and str(panel.export_button["state"]) == "disabled"
+    assert view.step == "generate" and not view.rail.enabled("explore")
 
 
 def test_planet_cancel_and_changed_inputs_never_install_results(app: ui.TerrainApp) -> None:
     view = app.world_workspace
     view.load_world(EXAMPLES / "four-shores.dmworld.json")
     wait(app)
-    view.generate_planet(SMALL, None)
+    view.generate_planet(SMALL)
     view.cancel_job()
     wait(app)
     assert view.planet_run is None and "cancelled" in view.status.get()
-    view.generate_planet(SMALL, None)
+    view.generate_planet(SMALL)
     view.values["name"].set("Changed while generating")
     wait(app)
     assert view.planet_run is None
@@ -170,7 +173,7 @@ def test_planet_panel_rejects_an_invalid_seed(app: ui.TerrainApp) -> None:
     panel = app.world_workspace.planet_panel
     panel.seed.set("not a number")
     panel.request_generate()
-    assert "Seed" in panel.detail.get()
+    assert "Seed" in panel.message.get()
     assert not app.world_workspace.busy
 
 
@@ -180,6 +183,10 @@ def test_planet_panel_chooses_wonder_kinds(app: ui.TerrainApp) -> None:
     panel.wonders["chasm"].set(True)
     panel.wonders["titan"].set(True)
     assert panel.settings().wonders == ("titan", "chasm")  # catalog order
+    panel._wonders_changed()
+    assert panel.wonder_section.title == "Wonders · 2 chosen"
+    panel.new_seed()
+    assert 0 <= panel.settings().seed <= 0xFFFFFFFF
     panel.set_busy(True)
     assert all(str(check["state"]) == "disabled" for check in panel.wonder_inputs)
     panel.set_busy(False)
@@ -250,7 +257,7 @@ def test_zoom_to_region_drills_down_in_the_map_and_reuses_cached_tiles(
     level = maps.levels[0]
     assert level.run.window.tiles and abs(level.run.window.radius_m - 600e3) < 1
     assert maps.display_layer.get() == "Planet atlas"
-    assert str(maps.projection_choice.buttons["globe"]["state"]) == "disabled"
+    assert str(maps.projection_input["state"]) == "disabled"
     maps.draw_now()
     assert maps.photo is not None
     assert "of centre" in maps.describe_at(0.5, 0.5)

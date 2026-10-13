@@ -68,12 +68,21 @@ def edit(app: ui.TerrainApp) -> BathymetryEditor:
     return editor
 
 
-def test_requires_current_geography_and_reuses_window(app: ui.TerrainApp) -> None:
-    app.world_workspace.edit_bathymetry()
-    assert app.world_workspace.bathymetry_editor is None
-    editor = edit(app)
-    app.world_workspace.edit_bathymetry()
-    assert app.world_workspace.bathymetry_editor is editor
+def test_generates_missing_context_and_reuses_window(app: ui.TerrainApp) -> None:
+    workspace = app.world_workspace
+    workspace.context_rows.set("8")
+    workspace.edit_bathymetry()
+    assert workspace.bathymetry_editor is None and workspace.busy  # context comes first
+    deadline = time.monotonic() + 10
+    while workspace.bathymetry_editor is None and time.monotonic() < deadline:
+        app.root.update()
+        time.sleep(0.01)
+    editor = workspace.bathymetry_editor
+    assert editor is not None and workspace.context_run is not None
+    assert workspace.step == "ocean"
+    wait(editor)
+    workspace.edit_bathymetry()
+    assert workspace.bathymetry_editor is editor
     assert editor.inputs().ocean_ids == (1,)
     assert not editor.dirty
 

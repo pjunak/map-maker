@@ -68,8 +68,9 @@ class JobRunner:
     """One long job at a time (generation, export, opening files) on a worker thread.
 
     ``work`` receives a progress reporter and a cancellation token; ``done`` runs on
-    the Tk thread with its result. Cancellation and errors go to the runner's
-    handlers, so a failed or cancelled job never installs a result.
+    the Tk thread with its result. Cancellation and errors go to the job's own
+    handlers if it has them, else to the runner's, so a failed or cancelled job never
+    installs a result. Several screens can share one runner, and so one status bar.
     """
 
     def __init__(
@@ -103,8 +104,12 @@ class JobRunner:
         done: Callable[[T], None],
         *,
         cancellable: bool = True,
+        failed: Callable[[Exception], None] | None = None,
+        cancelled: Callable[[], None] | None = None,
     ) -> bool:
         """Start ``work``; returns False (and does nothing) while another job runs."""
+        on_error = failed or self._on_error
+        on_cancelled = cancelled or self._on_cancelled
         if self.busy or self._pump.closed:
             return False
         token = CancellationToken()
@@ -132,12 +137,12 @@ class JobRunner:
             try:
                 value = work(report, token)
             except GenerationCancelled:
-                finish(self._on_cancelled)
+                finish(on_cancelled)
             except Exception as error:
-                finish(lambda error=error: self._on_error(error))
+                finish(lambda error=error: on_error(error))
             else:
                 if token.is_cancelled:
-                    finish(self._on_cancelled)
+                    finish(on_cancelled)
                 else:
                     finish(lambda: done(value))
 

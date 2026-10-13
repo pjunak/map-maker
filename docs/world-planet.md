@@ -33,46 +33,54 @@ evidence for [relief](research/2026-10-06-whole-planet-erosion-relief.md) and
 
 ## In the desktop app
 
-Open or import a world in the **World** tab. The stages run down the left
-(Shapes, Frame, Context, Planet, Terrain); the map is on the right.
+Open or import a world in the **World** tab and work through its steps down the
+left (Source map, Planet, Geology, Generate, Explore; see the
+[world guide](terrain-worlds.md#the-steps)). The map is on the right.
 
-1. **Open the 4 Planet stage and choose the detail.**
-   - Quick: 50k nodes, about 100 km apart.
-   - Standard: 200k nodes, about 50 km.
-   - Detailed: 800k nodes, about 25 km.
-   - Fine: 3.2M nodes, about 12 km.
-2. **Set the features.**
-   - Keep **Climate, lakes and biomes** on for the atlas, climate zone, rainfall
-     and temperature maps.
+1. **Open the Generate step and choose the detail.** Each choice says how far
+   apart the mesh points are and roughly how long it takes on a desktop:
+   - Quick: 50k points, about 100 km apart; under a minute.
+   - Standard (the default): 200k points, about 50 km; a minute or two.
+   - Detailed: 800k points, about 25 km; a few minutes.
+   - Fine: 3.2M points, about 12 km; ten minutes or more.
+2. **Set the variation and features.**
+   - The **Seed** picks one of many planets for the same world; **New seed** draws
+     a random one. The same seed and inputs always give the same planet.
+   - Keep **Climate, rivers, lakes and ice** on for the atlas, climate zone,
+     rainfall and temperature maps.
    - **Volcanic islands** and the [wonders](wonders.md) are optional.
-   - Optionally choose a geology recipe. A recipe saved from the Geology editor is
-     picked up automatically.
+   - The **Geology** line says what the planet uses: the recipe in the Geology
+     step, saved or not, or automatic mountain ranges when there is none.
 3. **Click Generate planet.** The status bar under the map shows progress.
    **Cancel** stops at the next checkpoint without installing a result. The app
-   stays responsive while it works.
+   stays responsive while it works. When it finishes, the **Explore** step opens
+   with a summary of the planet.
 4. **Choose what the map shows** with the bar above it:
    - **Source · Context · Planet** picks the data.
    - The list beside it picks the map: every theme the planet rendered, such as
      atlas, relief, climate zones, topographic, parchment, plates, sea-floor age,
      drainage basins and geology.
-   - **Flat world · Globe · North polar · South polar** picks the projection.
-     **Grid** draws latitude and longitude every 30°.
+   - The projection list picks **Flat world**, **Globe**, **North polar** or
+     **South polar**. **Grid** draws latitude and longitude every 30°.
 
    On a flat map, drag to pan, use the wheel to zoom and press F to fit. On a globe,
    drag to turn it; on a polar view the wheel also zooms. Below the map:
    - the legend explains the current map;
    - **Under the cursor** reads out the ground height, lake, river discharge,
      temperature, rainfall, Köppen zone and any volcano.
-5. **Save image…** writes what is shown as a PNG: a flat planet map at its full
-   width, or the current globe or polar view at 2,048 px.
-6. **Click Export planet build…** to write the same build folder as the command line.
+5. **Save image…** above the map (or **Save the shown map as an image…** in
+   Explore) writes what is shown as a PNG: a flat planet map at its full width, or
+   the current globe or polar view at 2,048 px.
+6. **Click Export planet build…** in Explore to write the same build folder as the
+   command line.
 
-Editing the world (names, frame, assignments) discards the generated planet, so
-a stale planet is never shown as current.
+Editing the world (names, frame, assignments) discards the generated planet and
+returns to the Generate step, so a stale planet is never shown as current.
 
 ### Zoom into regional, province and local detail
 
-With a planet shown, click **Zoom to region** above the map:
+With a planet shown, click **Zoom to region** above the map, or **Pick a region
+on the map** in Explore:
 1. Choose a radius, or keep **Auto**. Auto takes about half the visible width,
    from 150 to 1,200 km.
 2. Click the map, flat or globe. A circle shows the area before you click; Esc
@@ -97,7 +105,7 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   ([ADR-0090](adr/0090-regional-coast-detail-below-drawing-precision.md)). If
   your map already carries that detail, for example one exported from a planet's
   refined coast, enter the finest detail it carries as **Coast detail already
-  drawn** in the World frame: zoomed maps then keep its coast unsmoothed and add
+  drawn** in the Planet step: zoomed maps then keep its coast unsmoothed and add
   only finer detail. `dmtools world refine-coast` makes such a map: see
   [The refined coast as a source map](#the-refined-coast-as-a-source-map).
 - Volcanoes, impact craters and chasms are drawn sharply, chasm outlines down to
@@ -155,9 +163,9 @@ leaves no `manifest.json`, so it never looks complete.
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
-| `--wonder-age` | 0 | Erode the wonders for this many million years (0 keeps them fresh); see the [wonder guide](wonders.md#age). Also **Age** on the Planet page. |
-| `--wonders` | none | Wonder kinds placed at random: a comma-separated list such as `titan,chasm`, or `all`. See the [wonder guide](wonders.md). Also checkboxes on the Planet page. |
-| `--volcanic-islands` | off | Let young volcanoes at sea rise as islands: hotspot chains of shield islands and island arcs behind ocean trenches. **Adds land beyond your coastline.** Also a checkbox on the Planet page. |
+| `--wonder-age` | 0 | Erode the wonders for this many million years (0 keeps them fresh); see the [wonder guide](wonders.md#age). Also **Age** under Wonders in the Generate step. |
+| `--wonders` | none | Wonder kinds placed at random: a comma-separated list such as `titan,chasm`, or `all`. See the [wonder guide](wonders.md). Also checkboxes under Wonders in the Generate step. |
+| `--volcanic-islands` | off | Let young volcanoes at sea rise as islands: hotspot chains of shield islands and island arcs behind ocean trenches. **Adds land beyond your coastline.** Also a checkbox in the Generate step. |
 | `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
 | `--process-km2` | 600 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys; keep it at least a few mesh cells. |
 | `--duration-myr` | 30 | Simulated history length. |

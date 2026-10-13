@@ -22,20 +22,20 @@ dmtools world inspect examples/world/four-shores.dmworld.json
 The explicit full-sphere frame is (10, 10)..(370, 190), central meridian 0°,
 radius 6,500 km. Its SVG display size intentionally differs from source units.
 The [world guide](../docs/terrain-worlds.md) explains importing the raw SVG,
-confirming ownership/frame. Use **Context → Generate context** or the
+confirming ownership/frame. Use **Geographic context → Generate context** or the
 [context command](../docs/world-context.md) to inspect this example's spherical
 coverage, connected exterior water, inland hole and seam-island support.
 
 The separate [`four-shores.dmgeology.json`](world/four-shores.dmgeology.json)
 recipe adds invented stable-interior defaults, a cross-continent active belt and
-an explicit seam-crossing rift. Open it with **World → Geology… → Open recipe…**
+an explicit seam-crossing rift. Open it with **World → Geology → Open a recipe…**
 or inspect with `dmtools world inspect-geology examples/world/four-shores.dmgeology.json`.
 The [geology guide](../docs/world-geology.md) explains priorities and age/duration
 semantics. It does not run erosion or change the source coastlines.
 
 The separate [`four-shores.dmbathy.json`](world/four-shores.dmbathy.json) selects
 Water 1 with an illustrative 100 km / 200 m shelf, 200 km slope and 4,000 m basin,
-at 90 latitude rows. Open it with **World → Bathymetry… → Open inputs…** after
+at 90 latitude rows. Open it with **World → Ocean floor → Open the ocean-floor editor… → Open inputs…** after
 matching context is available, or run
 `dmtools world bathymetry examples/world/four-shores.dmbathy.json --output artifacts/four-shores-ocean`.
 See the [bathymetry guide](../docs/world-bathymetry.md) for numerical limits and

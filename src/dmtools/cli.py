@@ -220,6 +220,7 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def _run_world_terrain(arguments: argparse.Namespace) -> int:
+    from dmtools.terrain.adapters.world_geology import read_geology
     from dmtools.terrain.adapters.world_project import read_world_project
     from dmtools.terrain.application.world_context import open_context
     from dmtools.terrain.application.world_terrain import create_world_terrain_project
@@ -236,7 +237,8 @@ def _run_world_terrain(arguments: argparse.Namespace) -> int:
         created = create_world_terrain_project(
             world, matching[0].id, arguments.output,
             settings=TerrainSettings(seed=arguments.seed, resolution_px=arguments.resolution),
-            geology_path=arguments.geology,
+            geology=None if arguments.geology is None
+            else read_geology(arguments.geology)[0],
             context=None if arguments.context is None else open_context(arguments.context),
         )
     except (OSError, ValueError, RuntimeError) as error:

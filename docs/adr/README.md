@@ -124,3 +124,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0093: Grow ice sheets from mass balance by shallow-ice flow](0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md)
 - [ADR-0094: Work the planet's polar land in true distance and cover touched poles](0094-planet-polar-land-in-true-distance.md)
 - [ADR-0095: Export the refined coast as a source map](0095-export-the-refined-coast-as-a-source-map.md)
+- [ADR-0096: Guide world creation through numbered steps, with geology in the main window](0096-guided-world-steps.md)

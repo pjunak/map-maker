@@ -69,8 +69,8 @@ REGION_RADII_KM = ((150, 300, 600, 1200), (30, 75, 150, 300), (6, 15, 30, 60))
 SAVE_PIXELS = 2048
 
 SOURCE_LEGEND = (
-    "Your source geography: continent colours show assignments. Generate context or a "
-    "planet in the sidebar to see more maps."
+    "Your drawn map. Each continent has its own colour; grey shapes are not assigned yet "
+    "and dark ones are excluded. Selected shapes have a gold outline."
 )
 CONTEXT_LEGENDS: dict[str, str] = {
     "Land coverage": "Green = land; blue = water. Mixed colours retain fractional "
@@ -94,6 +94,7 @@ CONTEXT_LEGENDS: dict[str, str] = {
     "coastal cells. This flags unresolved geography; it is not an error bound.",
 }
 HINTS = {
+    "source": "Click a shape to select it (Ctrl adds) · drag to pan · wheel to zoom · F fits",
     "flat": "Drag to pan · wheel to zoom · F fits the map",
     "globe": "Drag to turn the globe",
     "polar": "Drag to turn · wheel to zoom",
@@ -159,6 +160,7 @@ class WorldMapView(ttk.Frame):
         request_region: Callable[[float, float, float, int], None],
         export_region: Callable[[RegionRun, Path], None],
         status: Callable[[str], None],
+        show_excluded: tk.BooleanVar | None = None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
         self._worker = worker
@@ -182,8 +184,10 @@ class WorldMapView(ttk.Frame):
         self.display_layer = tk.StringVar(self, value=SOURCE)
         self.group = tk.StringVar(self, value=SOURCE)
         self.projection = tk.StringVar(self, value=FLAT)
+        self.projection_label = tk.StringVar(self, value=PROJECTION_LABELS[FLAT])
         self.graticule = tk.BooleanVar(self, value=True)
-        self.show_excluded = tk.BooleanVar(self, value=True)
+        # Whether excluded source shapes are drawn; the workspace offers the choice.
+        self.show_excluded = show_excluded or tk.BooleanVar(self, value=True)
         self.exposure_bearing = tk.StringVar(self, value=EXPOSURE_BEARINGS[0])
         self.picking = tk.BooleanVar(self, value=False)
         self.region_radius = tk.StringVar(self, value=AUTO_RADIUS)
@@ -220,7 +224,6 @@ class WorldMapView(ttk.Frame):
             command=self._picking_changed, takefocus=False,
         )
         self.pick_button.pack(side="right", padx=(GAP, 0))
-        ttk.Button(tools, text="Fit", style="Small.TButton", command=self.fit).pack(side="right")
 
         layers = ttk.Frame(self, style="Toolbar.TFrame", padding=GAP)
         layers.grid(row=1, column=0, sticky="ew")
@@ -229,7 +232,7 @@ class WorldMapView(ttk.Frame):
         )
         self.group_choice.pack(side="left")
         self.layer_input = ttk.Combobox(
-            layers, textvariable=self.display_layer, state="readonly", width=24
+            layers, textvariable=self.display_layer, state="readonly", width=20
         )
         self.layer_input.pack(side="left", padx=(GAP, 0))
         self.layer_input.bind("<<ComboboxSelected>>", lambda _e: self.set_layer())
@@ -238,18 +241,20 @@ class WorldMapView(ttk.Frame):
             state="readonly", width=4,
         )
         self.bearing_input.bind("<<ComboboxSelected>>", lambda _e: self.set_layer())
-        self.excluded_toggle = ttk.Checkbutton(
-            layers, text="Excluded shapes", variable=self.show_excluded, command=self.refresh
+        ttk.Button(layers, text="Fit", style="Small.TButton", command=self.fit, width=4).pack(
+            side="right", padx=(GAP, 0)
         )
         self.grid_toggle = ttk.Checkbutton(
             layers, text="Grid", variable=self.graticule, command=self.refresh
         )
         self.grid_toggle.pack(side="right", padx=(GAP, 0))
-        self.projection_choice = SegmentedChoice(
-            layers, self.projection, [(kind, PROJECTION_LABELS[kind]) for kind in PROJECTIONS],
-            self.refresh,
+        self.projection_input = ttk.Combobox(
+            layers, textvariable=self.projection_label, state="readonly", width=11,
+            values=tuple(PROJECTION_LABELS[kind] for kind in PROJECTIONS),
         )
-        self.projection_choice.pack(side="right")
+        self.projection_input.pack(side="right")
+        self.projection_input.bind("<<ComboboxSelected>>", lambda _e: self._projection_chosen())
+        self.projection.trace_add("write", self._projection_changed)
         self._layer_bar = layers
 
         stage = ttk.Frame(self, style="Panel.TFrame")
@@ -453,23 +458,18 @@ class WorldMapView(ttk.Frame):
         layers = self.layers_for(self.group.get())
         self.layer_input.configure(values=layers, state="readonly" if layers else "disabled")
         planet_world = world and self.group.get() == PLANET
-        for kind in PROJECTIONS:
-            self.projection_choice.set_enabled(kind, planet_world)
+        self.projection_input.configure(state="readonly" if planet_world else "disabled")
         if world:
             self.grid_toggle.pack(side="right", padx=(GAP, 0))
-            self.projection_choice.pack(side="right")
+            self.projection_input.pack(side="right")
         else:
-            self.projection_choice.pack_forget()
+            self.projection_input.pack_forget()
             self.grid_toggle.pack_forget()
         layer = self.display_layer.get()
         if world and layer in EXPOSURE_LAYERS and self.context_run is not None:
             self.bearing_input.pack(side="left", padx=(GAP, 0))
         else:
             self.bearing_input.pack_forget()
-        if world and self.group.get() == SOURCE and self.scene is not None:
-            self.excluded_toggle.pack(side="left", padx=(GAP, 0))
-        else:
-            self.excluded_toggle.pack_forget()
         deepest = self.level >= len(REGION_LEVEL_NAMES)
         can_pick = self.planet_run is not None and not busy and not deepest
         if not can_pick and self.picking.get():
@@ -503,7 +503,7 @@ class WorldMapView(ttk.Frame):
             return HINTS["region"]
         if self._uses_globe():
             return HINTS["globe" if self.projection.get() == "globe" else "polar"]
-        return HINTS["flat"]
+        return HINTS["source" if self.group.get() == SOURCE and self.scene else "flat"]
 
     def _update_legend(self) -> None:
         layer = self.display_layer.get()
@@ -521,6 +521,15 @@ class WorldMapView(ttk.Frame):
         else:
             self.legend.set(SOURCE_LEGEND)
 
+    def _projection_chosen(self) -> None:
+        kind = next(k for k in PROJECTIONS if PROJECTION_LABELS[k] == self.projection_label.get())
+        if kind != self.projection.get():
+            self.projection.set(kind)
+            self.refresh()
+
+    def _projection_changed(self, *_args: str) -> None:
+        self.projection_label.set(PROJECTION_LABELS[self.projection.get()])
+
     def _picking_changed(self) -> None:
         self._pick_at = None
         cursor = "crosshair" if self.picking.get() else ""
@@ -528,6 +537,13 @@ class WorldMapView(ttk.Frame):
         self.globe.configure(cursor=cursor)
         self.inspection.set(self._hint())
         self.flat.draw_overlay()
+
+    def start_picking(self) -> None:
+        """Wait for a click on the map to zoom into the next detail level there."""
+        if str(self.pick_button["state"]) == "normal" and not self.picking.get():
+            self.picking.set(True)
+            self._picking_changed()
+            (self.globe if self._uses_globe() else self.flat).focus_set()
 
     def escape(self) -> bool:
         """Leave region picking; returns True if there was something to cancel."""

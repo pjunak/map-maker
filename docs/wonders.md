@@ -3,11 +3,11 @@
 Wonders are fantastical landmarks beyond Earth's extremes. They are opt-in: a
 planet has none unless you choose some.
 
-- **At random.** Tick the kinds under **Wonders** on the Planet page, or pass
+- **At random.** Tick the kinds under **Wonders** in the Generate step, or pass
   `--wonders` to `dmtools world planet` with a comma-separated list of kinds or
   `all`. Random wonders land in the same places at every mesh resolution, so a
   quick preview shows where the final build puts them.
-- **By hand.** Place them in the geology editor's **Landmarks** tab
+- **By hand.** Place them under **Landmarks** in the Geology step
   ([geology guide](world-geology.md#place-wonders-by-hand)). Placed wonders of a
   kind replace the random ones of that kind.
 
@@ -36,10 +36,10 @@ cut gullies into their walls, creep rounds their rims and their floors fill with
 sediment. A crater 10 million years old keeps its shape with a worn, gullied
 rim; at 60 million years it is a faint ring, as Earth's oldest craters are.
 
-- **For the whole planet:** choose **Age** under **Wonders** on the Planet page
+- **For the whole planet:** choose **Age** under **Wonders** in the Generate step
   (fresh, weathered, old or ancient) or pass `--wonder-age` in million years.
-- **For one landmark:** set **Age Myr** in the Landmarks tab; blank uses the
-  planet's age.
+- **For one landmark:** set its **Age** (million years) under Landmarks in the
+  Geology step; blank uses the planet's age.
 
 Craters, chasms, great cliffs and tepuis age; volcanoes, oases and rivers stay
 young; tepuis and great cliffs wear slowly, as a hard caprock does. Each aged

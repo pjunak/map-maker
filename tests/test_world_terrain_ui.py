@@ -53,8 +53,8 @@ def test_create_button_opens_saved_project_with_fixed_world_scale(
 ) -> None:
     view = app.world_workspace
     panel = view.terrain_panel
-    view.pages.select(panel)
-    assert view.pages.select() == str(panel)
+    view.show_step("terrain")
+    assert view.step == "terrain" and view.rail.enabled("terrain")
     panel.continent.set("Southmere")
     target = tmp_path / "terrain"
     monkeypatch.setattr(world_terrain_ui.filedialog, "asksaveasfilename", reply(str(target)))
@@ -136,7 +136,7 @@ def test_open_prepared_reloads_latest_saved_instructions(
     assert app._read_settings().seed == 784
 
 
-def test_selected_geology_is_reloaded_at_creation(
+def test_geology_step_landforms_reach_the_terrain_project(
     app: ui.TerrainApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from dmtools.terrain.adapters.world_geology import write_geology
@@ -145,17 +145,17 @@ def test_selected_geology_is_reloaded_at_creation(
 
     view = app.world_workspace
     panel = view.terrain_panel
+    assert "no recipe" in panel.geology_label.get()
     value = blank_geology(view.project())
-    path = tmp_path / "recipe.dmgeology.json"
-    digest = write_geology(value, path, None)
-    monkeypatch.setattr(world_terrain_ui.filedialog, "askopenfilename", reply(str(path)))
-    panel.geology_button.invoke()
-    assert panel.geology_path == path
-    # Edits made after choosing the file must be included.
     value = replace(value, defaults=tuple(replace(
         d, profile=GeologyProfile(landform=landform_preset("plateau")),
     ) for d in value.defaults))
-    write_geology(value, path, digest)
+    path = tmp_path / "recipe.dmgeology.json"
+    write_geology(value, path, None)
+    view.start_geology(path)
+    wait(app)
+    assert view.geology is not None and "From the Geology step" in panel.geology_label.get()
+    view.show_step("terrain")
     panel.continent.set("Southmere")
     monkeypatch.setattr(world_terrain_ui.filedialog, "asksaveasfilename",
                         reply(str(tmp_path / "terrain")))
@@ -165,8 +165,6 @@ def test_selected_geology_is_reloaded_at_creation(
     assert app._constraints
     assert all(isinstance(c, TerrainRegion) and c.settings.character == "plateau"
                for c in app._constraints)
-    panel.clear_geology_button.invoke()
-    assert panel.geology_path is None
     assert panel.created.source.geology is not None
 
 

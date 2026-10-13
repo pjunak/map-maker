@@ -14,8 +14,11 @@ bundle is geographic input, not a generated terrain parent.
 
 1. Open a current `.dmworld.json`, or import and assign a world using the
    [world-source guide](terrain-worlds.md). Confirm its established frame and radius.
-2. Open the **3 Context** stage. Choose **90**, **180** or **360** latitude cells. Longitude
-   uses twice as many columns: 2°, 1° or 0.5° angular cells respectively.
+2. Open **Geographic context** under **More tools**. Choose the grid: **Coarse**,
+   **Standard** or **Fine** have 90, 180 or 360 latitude rows. Longitude uses twice
+   as many columns: 2°, 1° or 0.5° angular cells respectively. The planet does not
+   need context; the Geology step offers it as a background, and the Ocean floor
+   and Local terrain tools use it.
 3. Click **Generate context**. The worker validates the current inputs and shows
    row progress in the status bar. **Cancel** stops at a checkpoint. Individual SVG/GEOS
    operations cannot be interrupted mid-call; cancellation is cooperative.
@@ -60,7 +63,7 @@ regeneration. No stochastic stage or seed is involved in this geographic analysi
 
 ## Bind context to rough terrain
 
-In the World workspace, generate or open context before using the **Terrain** stage; the
+In the World workspace, generate or open context before using the **Local terrain** tool; the
 current matching context is passed automatically. The CLI accepts a completed
 manifest or its directory:
 

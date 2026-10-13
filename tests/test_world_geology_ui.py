@@ -56,10 +56,16 @@ def app() -> Iterator[ui.TerrainApp]:
         application._close()
 
 
-def edit(app: ui.TerrainApp) -> GeologyEditor:
-    app.world_workspace.edit_geology()
-    editor = app.world_workspace.geology_editor
-    assert editor is not None
+def edit(app: ui.TerrainApp, path: Path | None = None) -> GeologyEditor:
+    """Open the Geology step with a new recipe, or the one at ``path``."""
+    view = app.world_workspace
+    view.start_geology(path)
+    deadline = time.monotonic() + 8
+    while (view.busy or view.geology is None) and time.monotonic() < deadline:
+        app.root.update()
+        time.sleep(0.01)
+    editor = view.geology
+    assert editor is not None and view.step == "geology"
     wait(editor)
     return editor
 
@@ -110,8 +116,10 @@ def test_defaults_province_edit_history_and_roundtrip(
     wait(editor)
     assert editor.file is not None and editor.file.path == path and not editor.dirty
     assert open_geology(path).coverage.recipe.provinces == editor.recipe.provinces
-    editor.close()
-    reopened = edit(app)
+    view = app.world_workspace
+    view.stop_geology()  # saved, so it closes without asking
+    assert view.geology is None and editor._closed
+    reopened = edit(app, path)
     assert reopened.file is not None and reopened.file.path == path
     assert reopened.recipe.provinces == before_delete.provinces
     assert file_sha256(EXAMPLES / "four-shores.dmworld.json") == original_source
@@ -200,8 +208,9 @@ def test_world_guard_includes_geology_unsaved_changes(
     assert not continued and not editor._closed
     monkeypatch.setattr(world_geology_ui.messagebox, "askyesnocancel", reply(False))
     app.world_workspace.guard(lambda: continued.append(True))
-    assert continued == [True] and editor._closed
-    assert app.world_workspace.geology_editor is None
+    # Continuing without saving keeps the recipe in its step.
+    assert continued == [True] and app.world_workspace.geology is editor
+    assert not editor._closed and editor.form_dirty
 
 
 def test_recipe_open_retains_source_and_context_and_rejects_foreign_identity(
@@ -249,11 +258,10 @@ def test_external_file_change_blocks_save_including_save_as_same_path(
 
 def test_canvas_drawing_unwraps_the_seam_and_preserves_zoom(app: ui.TerrainApp) -> None:
     app.root.deiconify()
+    app.root.geometry("1160x760")
     editor = edit(app)
-    app.root.deiconify()
-    editor.deiconify()
-    editor.geometry("1050x740")
-    editor.update()
+    app.root.update()
+    assert editor.map.winfo_ismapped() and not app.world_workspace.map_view.winfo_ismapped()
     editor.start_drawing()
     frame = editor.world.project.frame
     for x, y in ((365, 92), (15, 92), (15, 113), (365, 113)):
@@ -277,7 +285,7 @@ def test_canvas_drawing_unwraps_the_seam_and_preserves_zoom(app: ui.TerrainApp) 
     assert len(editor.recipe.provinces) == 1 and editor.viewport.zoom == 2
 
 
-def test_save_on_parent_close_applies_form_then_saves_before_closing(
+def test_save_on_parent_close_applies_form_then_saves_before_continuing(
     app: ui.TerrainApp,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -293,7 +301,7 @@ def test_save_on_parent_close_applies_form_then_saves_before_closing(
     while not continued and time.monotonic() < deadline:
         app.root.update()
         time.sleep(0.01)
-    assert continued == [True] and editor._closed
+    assert continued == [True] and not editor.dirty
     assert open_geology(target).coverage.recipe.defaults[0].profile.rejuvenation_age_ma == 0.125
 
 
@@ -302,8 +310,8 @@ def test_explicit_landforms_are_guarded_saved_and_exposed_to_terrain(
 ) -> None:
     editor = edit(app)
     panel = editor.landform_form
-    assert panel.read() is None
-    editor.form_tabs.select(panel)
+    assert panel.read() is None and not editor.landform_section.expanded
+    editor.landform_section.toggle()
     panel.character.set("mountains")
     panel.set_busy(False)
     panel.preset_button.invoke()
@@ -324,18 +332,14 @@ def test_explicit_landforms_are_guarded_saved_and_exposed_to_terrain(
     wait(editor)
     assert not editor.dirty
     assert open_geology(path).coverage.recipe.defaults[0].profile.landform == accepted
-    # Inspect the actual laid-out minimum window: all controls and actions fit.
+    # At the smallest window the step page scrolls to every control.
     app.root.deiconify()
-    editor.deiconify()
-    editor.geometry("1050x740")
-    editor.update()
+    app.root.geometry("1160x760")
+    app.root.update()
     assert panel.preset_button.winfo_ismapped()
-    assert panel.preset_button.winfo_rooty() + panel.preset_button.winfo_height() < (
-        editor.winfo_rooty() + editor.winfo_height()
-    )
-    editor.close()
-    assert app.world_workspace.terrain_panel.geology_path == path
-    assert "landforms.dmgeology.json" in app.world_workspace.terrain_panel.geology_label.get()
+    page = app.world_workspace.pages["geology"]
+    assert page.body.winfo_reqheight() > page.canvas.winfo_height()
+    assert "From the Geology step" in app.world_workspace.terrain_panel.geology_label.get()
 
 
 def test_invalid_landform_keeps_pending_form_and_busy_controls_lock(app: ui.TerrainApp) -> None:
@@ -407,3 +411,77 @@ def test_a_chasm_is_placed_with_two_clicks(app: ui.TerrainApp) -> None:
     editor._click((0.40, 0.50), tk.Event())  # type: ignore[arg-type]
     editor.revert()
     assert not editor._placing and editor._line_start is None
+
+
+def test_geology_follows_world_edits_and_feeds_the_planet(
+    app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from hashlib import sha256
+
+    from dmtools.terrain import world_ui
+    from dmtools.terrain.adapters.build import canonical_json
+    from dmtools.terrain.adapters.world_geology import geology_document
+    from dmtools.terrain.domain.planet import PlanetSettings
+
+    view = app.world_workspace
+    editor = edit(app, EXAMPLES / "four-shores.dmgeology.json")
+    provinces = editor.recipe.provinces
+    assert len(provinces) == 2 and not editor.dirty
+    # Renaming the world used to orphan its recipe; now the recipe follows it.
+    view.show_step("planet")
+    view.values["name"].set("Renamed shores")
+    view.show_step("geology")
+    wait(editor)
+    assert editor.world.project.name == "Renamed shores"
+    assert editor.recipe.world == view.project() and editor.recipe.provinces == provinces
+    assert editor.dirty and "unsaved" in view.rail.status("geology")
+    # An unapplied edit is not silently left out of a planet.
+    errors: list[str] = []
+
+    def show_error(_title: str, message: str, **_kwargs: object) -> None:
+        errors.append(message)
+
+    monkeypatch.setattr(world_ui.messagebox, "showerror", show_error)
+    editor.values["crust"].set("2000")
+    view.generate_planet(PlanetSettings(nodes=6_000, duration_myr=4.0, step_kyr=250.0,
+                                        climate_passes=0))
+    assert errors and "not applied" in errors[0] and not view.busy
+    editor.revert()
+    # The planet uses the recipe as it stands in the step, saved or not.
+    view.generate_planet(PlanetSettings(nodes=6_000, duration_myr=4.0, step_kyr=250.0,
+                                        climate_passes=0))
+    deadline = time.monotonic() + 120
+    while view.busy and time.monotonic() < deadline:
+        app.root.update()
+        time.sleep(0.02)
+    assert view.planet_run is not None
+    expected = sha256(canonical_json(geology_document(editor.recipe))).hexdigest()
+    assert view.planet_run.inputs["geology_sha256"] == expected
+    assert "From the Geology step: 2 provinces" in view.planet_panel.geology_label.get()
+    assert view.result_panel.outdated.get() == ""
+    # A later geology edit says the planet was made with older geology.
+    editor.values["crust"].set("2000")
+    editor.apply()
+    wait(editor)
+    assert "geology changed" in view.rail.status("generate")
+    assert "Generate again" in view.result_panel.outdated.get()
+    # Removing geology goes back to automatic ranges.
+    monkeypatch.setattr(world_geology_ui.messagebox, "askyesnocancel", reply(False))
+    view.stop_geology()
+    assert view.geology is None and view.rail.status("geology") == "Optional · automatic"
+    assert view.geology_empty.winfo_manager() == "pack"
+
+
+def test_geology_closes_when_another_source_map_opens(app: ui.TerrainApp) -> None:
+    from dmtools.terrain.adapters.world_svg import parse_world_svg
+
+    view = app.world_workspace
+    editor = edit(app)
+    view.accept_world(open_world(EXAMPLES / "four-shores.dmworld.json"),
+                      EXAMPLES / "four-shores.dmworld.json")
+    assert view.geology is editor  # the same drawing keeps its geology
+    view.accept_source(parse_world_svg(
+        '<svg viewBox="0 0 360 180"><g id="North"><path id="land" d="M10 10 H30 V30 H10 Z"/>'
+        '</g></svg>', "other.svg",
+    ))
+    assert view.geology is None and editor._closed

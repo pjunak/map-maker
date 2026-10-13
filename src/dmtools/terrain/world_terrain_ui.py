@@ -1,4 +1,4 @@
-"""World-to-terrain controls, separate from source editing and projection."""
+"""The World tab's Local terrain tool: a continent as a local terrain project."""
 
 import tkinter as tk
 from collections.abc import Callable
@@ -7,61 +7,51 @@ from tkinter import filedialog, ttk
 
 from dmtools.terrain.application.world_terrain import WorldTerrainCreated
 from dmtools.terrain.domain.world import WorldContinent
+from dmtools.terrain.ui_components import WrappingLabel, hint, page_title, section
+from dmtools.terrain.ui_style import GAP
 
 
 class WorldTerrainPanel(ttk.Frame):
     def __init__(
-        self, parent: tk.Misc, create: Callable[[str, Path, Path | None], None],
+        self, parent: tk.Misc, create: Callable[[str, Path], None],
         open_project: Callable[[WorldTerrainCreated], None],
     ) -> None:
-        super().__init__(parent, style="Panel.TFrame", padding=12)
+        super().__init__(parent, style="Panel.TFrame")
         self._create = create
         self._open = open_project
         self._continents: tuple[WorldContinent, ...] = ()
         self.created: WorldTerrainCreated | None = None
         self.continent = tk.StringVar(self)
-        self.geology_path: Path | None = None
-        self.geology_label = tk.StringVar(self, value="Background terrain · no geology recipe")
-        self.detail = tk.StringVar(self, value="Choose a continent from the imported world.")
-        ttk.Label(self, text="Generate terrain from your world", style="Value.TLabel",
-                  wraplength=340).pack(anchor="w", pady=(0, 12))
-        ttk.Label(self, text="Continent", style="Body.TLabel").pack(anchor="w")
-        self.selection = ttk.Combobox(self, textvariable=self.continent, state="readonly")
-        self.selection.pack(fill="x", pady=(4, 12))
-        ttk.Label(
-            self, text="Creates a terrain project at the world's physical scale. "
-            "The continent's islands and any connected neighbouring land are included "
-            "to keep land borders from becoming coastlines.",
-            style="Body.TLabel", wraplength=340,
-        ).pack(anchor="w", pady=(0, 12))
-        ttk.Label(
-            self, text="Start at 257 pixels, then adjust terrain settings and generate in "
-            "the Terrain workspace. Generate or open context first to include "
-            "spherical coastal support. Climate and aging are not applied yet.",
-            style="Muted.TLabel", wraplength=340,
-        ).pack(anchor="w", pady=(0, 16))
-        ttk.Label(self, textvariable=self.geology_label, wraplength=340,
-                  style="Body.TLabel").pack(anchor="w", pady=(0, 4))
-        geology_buttons = ttk.Frame(self, style="Panel.TFrame")
-        geology_buttons.pack(fill="x", pady=(0, 12))
-        self.geology_button = ttk.Button(
-            geology_buttons, text="Choose geology recipe…", command=self.choose_geology,
+        self.geology_label = tk.StringVar(self)
+        self.detail = tk.StringVar(self, value="No project prepared yet.")
+        page_title(
+            self, "Local terrain",
+            "Turn one continent into a project for the Terrain tab, where you can paint "
+            "heights, ridges, valleys and lakes by hand on a flat local map.",
         )
-        self.geology_button.pack(side="left")
-        self.clear_geology_button = ttk.Button(
-            geology_buttons, text="Clear", command=lambda: self.set_geology(None),
+        choice = section(self, "Continent")
+        self.selection = ttk.Combobox(choice, textvariable=self.continent, state="readonly")
+        self.selection.pack(fill="x")
+        hint(choice, "The project keeps the world's real scale. The continent's islands and any "
+             "land joined to it come along, so land borders do not turn into coastlines.")
+        guidance = section(self, "Landform guidance")
+        WrappingLabel(guidance, textvariable=self.geology_label, style="Body.TLabel").pack(
+            fill="x"
         )
-        self.clear_geology_button.pack(side="left", padx=6)
+        hint(guidance, "Exact landforms set in the Geology step become editable regions in "
+             "the project. If geographic context is open, coastal relief follows it too.")
         self.create_button = ttk.Button(self, text="Create terrain project…",
-                                       style="Accent.TButton", command=self.choose_folder)
-        self.create_button.pack(fill="x")
-        ttk.Separator(self).pack(fill="x", pady=12)
-        ttk.Label(self, textvariable=self.detail, wraplength=340,
-                  style="Muted.TLabel").pack(anchor="w")
-        self.open_button = ttk.Button(self, text="Open prepared project",
+                                        style="Accent.TButton", command=self.choose_folder)
+        self.create_button.pack(fill="x", pady=(2 * GAP, 0))
+        hint(self, "Choose a new, empty folder. The project opens in the Terrain tab, ready "
+             "to generate at a quick 257 px; climate and aging are not applied there.")
+        result = section(self, "Prepared project")
+        WrappingLabel(result, textvariable=self.detail, style="Muted.TLabel").pack(fill="x")
+        self.open_button = ttk.Button(result, text="Open it in the Terrain tab",
                                       command=self.open_created, state="disabled",
                                       style="Quiet.TButton")
-        self.open_button.pack(fill="x", pady=12)
+        self.open_button.pack(fill="x", pady=(GAP, 0))
+        self.set_geology(None)
         self.set_busy(False)
 
     def set_continents(self, continents: tuple[WorldContinent, ...]) -> None:
@@ -74,29 +64,16 @@ class WorldTerrainPanel(ttk.Frame):
 
     def set_busy(self, busy: bool) -> None:
         self.selection.configure(state="disabled" if busy else "readonly")
-        self.geology_button.configure(state="disabled" if busy else "normal")
-        self.clear_geology_button.configure(
-            state="normal" if self.geology_path is not None and not busy else "disabled",
-        )
         self.create_button.configure(state="normal" if self._continents and not busy
                                      else "disabled")
         self.open_button.configure(state="normal" if self.created and not busy else "disabled")
 
-    def set_geology(self, path: Path | None) -> None:
-        self.geology_path = path
+    def set_geology(self, summary: str | None) -> None:
+        """Say which geology the project will take: ``None`` when there is none."""
         self.geology_label.set(
-            f"Landform guidance: {path.name}\n{path.parent}" if path else
-            "Background terrain · no geology recipe"
+            "None: the Geology step has no recipe." if summary is None
+            else f"From the Geology step: {summary}."
         )
-        self.set_busy(False)
-
-    def choose_geology(self) -> None:
-        selected = filedialog.askopenfilename(
-            parent=self, title="Choose saved landform guidance for this world",
-            filetypes=[("World geology recipe", "*.dmgeology.json")],
-        )
-        if selected:
-            self.set_geology(Path(selected))
 
     def choose_folder(self) -> None:
         selected = next((c for c in self._continents if c.name == self.continent.get()), None)
@@ -108,7 +85,7 @@ class WorldTerrainPanel(ttk.Frame):
             initialfile="terrain-" + slug,
         )
         if folder:
-            self._create(selected.id, Path(folder), self.geology_path)
+            self._create(selected.id, Path(folder))
 
     def show_created(self, created: WorldTerrainCreated) -> None:
         self.created = created
@@ -117,13 +94,13 @@ class WorldTerrainPanel(ttk.Frame):
                           if c.id in source.included_continent_ids)
         stretch = source.projection.maximum_transverse_scale - 1
         self.detail.set(
-            f"Prepared land: {names}\n"
-            f"Longest projected extent: {source.object_scale_km:,.1f} km\n"
-            f"Maximum sampled projection stretch: {stretch:.1%}\n\n"
+            f"Land: {names}\n"
+            f"Longest extent: {source.object_scale_km:,.1f} km\n"
+            f"Largest map stretch: {stretch:.1%}\n"
             f"Landform regions: {len(created.loaded.project.constraints)}\n"
-            + ("Context: coastal relief connected (experimental)\n"
-               if created.loaded.project.world_context else "Context: not supplied\n")
-            + f"Saved in: {created.loaded.path.parent}\n"
+            + ("Coastal relief follows the geographic context (experimental)\n"
+               if created.loaded.project.world_context else "No geographic context\n")
+            + f"Folder: {created.loaded.path.parent}\n"
             "Keep coastline.svg with terrain.dmterrain.json when moving the project."
         )
         self.set_busy(False)

@@ -1,5 +1,10 @@
 # pyright: reportUnknownMemberType=false
-"""Pre-generation geology authoring over a retained world and read-only context."""
+"""The World workspace's Geology step: authored geology over the retained world.
+
+The editor is a sidebar page (this frame) plus its own map (``self.map``), which the
+workspace shows in place of the world map while the step is open. Its work runs on
+the workspace's job runner, so it shares one status bar and one job at a time.
+"""
 
 from __future__ import annotations
 
@@ -30,6 +35,7 @@ from dmtools.terrain.domain.world_context import EXPOSURE_BEARINGS
 from dmtools.terrain.domain.world_geology import (
     GEOLOGICAL_SETTINGS,
     MAX_PROVINCE_VERTICES,
+    SETTING_TEXT,
     ContinentGeology,
     GeologicalSetting,
     GeologyLandmark,
@@ -37,58 +43,74 @@ from dmtools.terrain.domain.world_geology import (
     GeologyProvince,
     WorldGeologyRecipe,
     blank_geology,
+    follow_world,
 )
 from dmtools.terrain.map_canvas import FlatMapCanvas, Rect
 from dmtools.terrain.pipeline.control import CancellationToken
 from dmtools.terrain.pipeline.world import WorldMap
 from dmtools.terrain.pipeline.world_geology import GeologyCoverage, resolve_geology
-from dmtools.terrain.ui_components import MapInfoStrip, StatusBar, WrappingLabel
-from dmtools.terrain.ui_jobs import JobRunner, JobState, Report, TkPump
-from dmtools.terrain.ui_style import GAP, MAP_FRAME, MAP_HIGHLIGHT, MAP_TEXT, PAPER
+from dmtools.terrain.ui_components import (
+    Collapsible,
+    MapInfoStrip,
+    WrappingLabel,
+    button_row,
+    field,
+    hint,
+    section,
+)
+from dmtools.terrain.ui_jobs import JobRunner, Report
+from dmtools.terrain.ui_style import GAP, MAP_FRAME, MAP_HIGHLIGHT, MAP_TEXT
 from dmtools.terrain.viewport import MapViewport
 from dmtools.terrain.world_landform_ui import WorldLandformForm
 from dmtools.terrain.world_view import CONTEXT_LEGENDS
 
 KIND_BY_LABEL: dict[str, WonderKind] = {WONDERS[kind].label: kind for kind in WONDER_KINDS}
+SETTING_BY_LABEL: dict[str, GeologicalSetting] = {
+    SETTING_TEXT[setting][0]: setting for setting in GEOLOGICAL_SETTINGS
+}
 
 COVERAGE = "Geology coverage"
 SOURCE = "Source"
 LEGENDS = {
     COVERAGE: "Colours show each region's geological setting (key in the sidebar). Dashed "
     "outlines are provinces; the selected one is bold.",
-    SOURCE: "Your source geography, for placing provinces.",
+    SOURCE: "Your source map, for placing provinces.",
     **CONTEXT_LEGENDS,
 }
 HINT = "Drag to pan · wheel to zoom · F fits · click a region to select it"
-DRAW_HINT = "Click to add vertices · Enter finishes · Backspace removes · Escape cancels"
+DRAW_HINT = "Click to add corners · Enter finishes · Backspace removes · Escape cancels"
 
 
 @dataclass(frozen=True)
 class _Result:
     coverage: GeologyCoverage
-    mode: Literal["initial", "edit", "open", "save"]
+    mode: Literal["initial", "edit", "open", "save", "follow"]
     file: GeologyFile | None = None
 
 
-class GeologyEditor(tk.Toplevel):
+class GeologyEditor(ttk.Frame):
     def __init__(
         self,
         parent: tk.Misc,
+        map_parent: tk.Misc,
         world: WorldMap,
         context: WorldContextRun | None = None,
         *,
-        on_close: Callable[[GeologyFile | None], None] | None = None,
-        saved: GeologyFile | None = None,
+        jobs: JobRunner,
+        status: tk.StringVar,
+        on_change: Callable[[], None] = lambda: None,
+        recipe: WorldGeologyRecipe | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.configure(background=PAPER)
+        super().__init__(parent, style="Panel.TFrame")
         self.world = world
         self.context = context
-        self.on_close = on_close
-        self.file = saved
-        self.recipe = saved.coverage.recipe if saved else blank_geology(world.project)
-        self.coverage: GeologyCoverage | None = saved.coverage if saved else None
-        self._saved_recipe = self.recipe
+        self.jobs = jobs
+        self.status = status
+        self.on_change = on_change
+        self.file: GeologyFile | None = None
+        self.recipe = recipe or blank_geology(world.project)
+        self.coverage: GeologyCoverage | None = None
+        self._saved_recipe: WorldGeologyRecipe | None = None
         self._undo: list[GeologyCoverage] = []
         self._redo: list[GeologyCoverage] = []
         self._controls: list[tuple[ttk.Widget, str]] = []
@@ -99,13 +121,12 @@ class GeologyEditor(tk.Toplevel):
         self._draft_id: str | None = None
         self._loaded_form: tuple[str, ...] = ()
         self._closed = False
-        self._was_busy = False
-        self.pump = TkPump(self)
-        self.jobs = JobRunner(self.pump, self._job_state, self._job_failed, self._job_cancelled)
         self.values = {
             key: tk.StringVar(self)
             for key in ("name", "priority", "setting", "crust", "rejuvenation", "duration")
         }
+        self.setting_label = tk.StringVar(self)
+        self.setting_help = tk.StringVar(self)
         self.landmark = {
             "name": tk.StringVar(self),
             "kind": tk.StringVar(self, value=WONDERS["crater"].label),
@@ -118,34 +139,30 @@ class GeologyEditor(tk.Toplevel):
         self._line_start: Point2D | None = None  # a line wonder's first click
         self.layer = tk.StringVar(self, value=COVERAGE)
         self.bearing = tk.StringVar(self, value="N")
-        self.status = tk.StringVar(self, value="Select a continent default or draw a province.")
+        self.file_label = tk.StringVar(self)
+        self.region_title = tk.StringVar(self)
         self.detail = tk.StringVar(self)
         self.legend = tk.StringVar(self, value=LEGENDS[COVERAGE])
         self.inspection = tk.StringVar(self, value=HINT)
-        self.title("Geology inputs — " + world.project.name)
-        self.geometry("1320x850")
-        self.minsize(1050, 740)
-        self.transient(parent.winfo_toplevel())
-        self.protocol("WM_DELETE_WINDOW", lambda: self.guard(self.close))
         self._build()
+        self.map = self._build_map(map_parent)
+        self.values["setting"].trace_add("write", self._setting_changed)
+        self.setting_label.trace_add("write", self._setting_chosen)
         self._populate()
         self._load_form()
-        self.bind("<Control-s>", lambda _e: self._key(self.save))
-        self.bind("<Control-Shift-S>", lambda _e: self._key(lambda: self.save(save_as=True)))
-        self.bind("<Control-o>", lambda _e: self._key(self.choose_open))
+        self._show_file()
         self.canvas.bind("<Return>", lambda _e: self._key(self.apply))
         self.canvas.bind("<Escape>", lambda _e: self._key(self.revert))
         self.canvas.bind("<BackSpace>", lambda _e: self._key(self.remove_vertex))
         self.canvas.bind("f", lambda _e: self._key(self.fit))
-        self.grab_set()
-        if saved is not None:
-            self.load(saved.path)
-        else:
-            recipe = self.recipe
-            self._work(
-                "Resolving continent defaults",
-                lambda token: _Result(resolve_geology(world, recipe, token), "initial"),
-            )
+
+    def start(self) -> None:
+        """Resolve the starting recipe; until then the map shows no coverage."""
+        recipe, world = self.recipe, self.world
+        self._work(
+            "Resolving continent defaults",
+            lambda token: _Result(resolve_geology(world, recipe, token), "initial"),
+        )
 
     @staticmethod
     def _key(action: Callable[[], None]) -> str:
@@ -165,64 +182,61 @@ class GeologyEditor(tk.Toplevel):
         return self._form() != self._loaded_form
 
     @property
+    def editing(self) -> bool:
+        """An unapplied form edit, an unfinished outline or a landmark being placed."""
+        return self.form_dirty or self._draft is not None or self._placing
+
+    @property
     def dirty(self) -> bool:
-        return self.recipe != self._saved_recipe or self.form_dirty or self._draft is not None
+        return self.recipe != self._saved_recipe or self.editing
+
+    def summary(self) -> str:
+        """One line on what this recipe sets, for the step list and other steps."""
+        provinces, landmarks = len(self.recipe.provinces), len(self.recipe.landmarks)
+        parts = [f"{provinces} province{'s' * (provinces != 1)}"]
+        if landmarks:
+            parts.append(f"{landmarks} landmark{'s' * (landmarks != 1)}")
+        if self.dirty:
+            parts.append("unsaved")
+        return " · ".join(parts)
 
     def _button(
         self, parent: tk.Misc, text: str, command: Callable[[], None], *, style: str = "Quiet"
     ) -> ttk.Button:
-        button = ttk.Button(parent, text=text, command=command, style=f"{style}.TButton")
+        # Small buttons fit their text, so a row of them fits the sidebar.
+        width: int | Literal[""] = len(text) + 2 if style == "Small" else ""
+        button = ttk.Button(parent, text=text, command=command, style=f"{style}.TButton",
+                            width=width)
         self._controls.append((button, "normal"))
         return button
 
     # Layout
 
     def _build(self) -> None:
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=1)
-        head = ttk.Frame(self, style="Paper.TFrame", padding=(14, 10))
-        head.grid(row=0, column=0, sticky="ew")
-        ttk.Label(head, text="Geology inputs", style="Header.TLabel").pack(side="left")
+        recipe = button_row(self, pady=(0, 0))
+        WrappingLabel(recipe, textvariable=self.file_label, style="Body.TLabel").pack(fill="x")
+        files = button_row(self, pady=(GAP // 2, 0))
         for text, command in (
-            ("Open recipe…", self.choose_open),
+            ("Open…", self.choose_open),
             ("Save", self.save),
             ("Save As…", lambda: self.save(save_as=True)),
-            ("Undo", self.undo),
-            ("Redo", self.redo),
         ):
-            self._button(head, text, command).pack(side="left", padx=(GAP, 0))
-        main = ttk.Frame(self, style="Paper.TFrame", padding=(14, 0))
-        main.grid(row=1, column=0, sticky="nsew")
-        main.columnconfigure(1, weight=1)
-        main.rowconfigure(0, weight=1)
-        self._build_sidebar(main)
-        self._build_map(main)
-        foot = ttk.Frame(self, style="Paper.TFrame", padding=(14, GAP))
-        foot.grid(row=2, column=0, sticky="ew")
-        foot.columnconfigure(0, weight=1)
-        ttk.Label(
-            foot,
-            text="Save this recipe, then choose it in the Planet or Terrain stage. Geological "
-            "ages remain hypotheses; climate and aging are not applied.",
-            style="Eyebrow.TLabel",
-        ).grid(row=0, column=0, sticky="w")
-        self.status_bar = StatusBar(foot, self.status, self.cancel)
-        self.status_bar.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+            self._button(files, text, command, style="Small").pack(side="left", padx=(0, 4))
+        for text, command in (("Redo", self.redo), ("Undo", self.undo)):
+            self._button(files, text, command, style="Small").pack(side="right", padx=(4, 0))
+        self._build_regions()
+        self._build_region_form()
+        self._build_landmarks()
 
-    def _build_sidebar(self, main: ttk.Frame) -> None:
-        side = ttk.Frame(main, style="Panel.TFrame", padding=10, width=340)
-        side.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        side.columnconfigure(0, weight=1)
-        side.rowconfigure(1, weight=1)
-        ttk.Label(side, text="Continent defaults and provinces", style="Section.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(0, 6)
-        )
-        tree_frame = ttk.Frame(side, style="Panel.TFrame")
-        tree_frame.grid(row=1, column=0, sticky="nsew")
-        tree_frame.rowconfigure(0, weight=1)
+    def _build_regions(self) -> None:
+        box = section(self, "Regions")
+        hint(box, "Every continent has a default. Draw provinces to give part of the land "
+             "its own geology; where provinces overlap, the higher priority wins.")
+        tree_frame = ttk.Frame(box, style="Panel.TFrame")
+        tree_frame.pack(fill="x", pady=(GAP // 2, 0))
         tree_frame.columnconfigure(0, weight=1)
-        self.tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse", height=7)
-        self.tree.column("#0", width=300)
+        self.tree = ttk.Treeview(tree_frame, show="tree", selectmode="browse", height=8)
+        self.tree.column("#0", width=260)
         self.tree.grid(row=0, column=0, sticky="nsew")
 
         def scroll_tree(*args: str) -> None:
@@ -232,113 +246,124 @@ class GeologyEditor(tk.Toplevel):
         bar.grid(row=0, column=1, sticky="ns")
         self.tree.configure(yscrollcommand=bar.set)
         self.tree.bind("<<TreeviewSelect>>", self._selection)
-        tools = ttk.Frame(side, style="Panel.TFrame")
-        tools.grid(row=2, column=0, sticky="ew", pady=GAP)
+        tools = button_row(box, pady=(GAP // 2, 0))
         for text, action in (
             ("Draw province", self.start_drawing),
-            ("Redraw", lambda: self.start_drawing(redraw=True)),
+            ("Redraw outline", lambda: self.start_drawing(redraw=True)),
             ("Delete", self.delete),
         ):
-            self._button(tools, text, action).pack(side="left", padx=(0, 4))
-        self.form_tabs = ttk.Notebook(side)
-        self.form_tabs.grid(row=3, column=0, sticky="ew")
-        form = ttk.Frame(self.form_tabs, style="Panel.TFrame", padding=6)
-        self.form_tabs.add(form, text="Geological history")
-        self.landform_form = WorldLandformForm(self.form_tabs)
-        self.form_tabs.add(self.landform_form, text="Landform guidance")
-        self._build_landmarks()
-        form.columnconfigure(1, weight=1)
-        for row, (key, label) in enumerate(
-            (
-                ("name", "Name"),
-                ("priority", "Priority (0-100)"),
-                ("setting", "Setting"),
-                ("crust", "Crust age (Ma)"),
-                ("rejuvenation", "Rejuvenation (Ma)"),
-                ("duration", "Simulation span (Ma)"),
-            )
-        ):
-            ttk.Label(form, text=label, style="Body.TLabel").grid(
-                row=row, column=0, sticky="w", padx=(0, GAP), pady=3
-            )
-            widget = (
-                ttk.Combobox(
-                    form, textvariable=self.values[key], values=GEOLOGICAL_SETTINGS, width=19,
-                    state="readonly",
-                )
-                if key == "setting"
-                else ttk.Entry(form, textvariable=self.values[key], width=21)
-            )
-            widget.grid(row=row, column=1, sticky="ew", pady=3)
-            self._field_widgets[key] = widget
-            self._controls.append((widget, "readonly" if key == "setting" else "normal"))
-        actions = ttk.Frame(side, style="Panel.TFrame")
-        actions.grid(row=4, column=0, sticky="ew", pady=GAP)
-        actions.columnconfigure((0, 1), weight=1)
-        self._button(actions, "Apply / finish polygon", self.apply, style="Accent").grid(
-            row=0, column=0, sticky="ew", padx=(0, 3)
-        )
-        self._button(actions, "Revert / cancel", self.revert).grid(
-            row=0, column=1, sticky="ew", padx=(3, 0)
-        )
-        WrappingLabel(
-            side,
-            text="Ma = million years. Ages are before one common present. "
-            "Simulation span is a duration. Blank = unknown. "
-            "A province replaces the entire default, including blanks.",
-            style="Muted.TLabel",
-        ).grid(row=5, column=0, sticky="ew", pady=(0, GAP))
-        WrappingLabel(side, textvariable=self.detail, style="Body.TLabel").grid(
-            row=6, column=0, sticky="ew", pady=(0, GAP)
-        )
-        key = ttk.Frame(side, style="Panel.TFrame")
-        key.grid(row=7, column=0, sticky="ew")
+            self._button(tools, text, action, style="Small").pack(side="left", padx=(0, 4))
+        key = ttk.Frame(box, style="Panel.TFrame")
+        key.pack(fill="x", pady=(GAP, 0))
         for row, (setting, colour) in enumerate(SETTING_COLOURS.items()):
             tk.Label(key, background=colour, width=2).grid(
                 row=row // 2, column=row % 2 * 2, padx=(0, 5), pady=1
             )
-            ttk.Label(key, text=setting, style="Body.TLabel").grid(
+            ttk.Label(key, text=SETTING_TEXT[setting][0], style="Help.TLabel").grid(
                 row=row // 2, column=row % 2 * 2 + 1, sticky="w", padx=(0, 7)
             )
 
+    def _build_region_form(self) -> None:
+        ttk.Label(self, textvariable=self.region_title, style="Section.TLabel").pack(
+            anchor="w", pady=(2 * GAP, 0)
+        )
+        self.detail_label = WrappingLabel(self, textvariable=self.detail, style="Help.TLabel")
+        self.detail_label.pack(fill="x")
+        self.identity = ttk.Frame(self, style="Panel.TFrame")
+        self.identity.pack(fill="x")
+        for key, label, help_text in (
+            ("name", "Province name", ""),
+            ("priority", "Priority", "0-100. Where provinces overlap, the higher one wins."),
+        ):
+            entry = field(self.identity, label, self.values[key], width=24 if key == "name" else 6,
+                          help=help_text)
+            self._field_widgets[key] = entry
+            self._controls.append((entry, "normal"))
+        box = ttk.Frame(self, style="Panel.TFrame")
+        box.pack(fill="x", pady=(GAP, 0))
+        ttk.Label(box, text="Geological setting", style="Body.TLabel").pack(anchor="w")
+        setting = ttk.Combobox(
+            box, textvariable=self.setting_label, state="readonly", width=24,
+            values=tuple(SETTING_TEXT[s][0] for s in GEOLOGICAL_SETTINGS),
+        )
+        setting.pack(anchor="w", pady=(2, 0))
+        self._field_widgets["setting"] = setting
+        self._controls.append((setting, "readonly"))
+        hint(box, textvariable=self.setting_help)
+        for key, label, help_text in (
+            ("crust", "Crust age",
+             "How old the rock is. Crust older than 1,000 million years is harder and "
+             "erodes more slowly. Blank: unknown."),
+            ("rejuvenation", "Time since uplift",
+             "When its mountains last rose. Older ranges are lower and smoother; "
+             "0 means still rising. Blank: unknown."),
+        ):
+            entry = field(self, label, self.values[key], unit="million years", width=10,
+                          help=help_text)
+            self._field_widgets[key] = entry
+            self._controls.append((entry, "normal"))
+        landform = Collapsible(self, "Exact landform (optional)")
+        landform.pack(fill="x", pady=(GAP, 0))
+        hint(landform.body, "Sets heights directly instead of the setting's usual ones.")
+        self.landform_form = WorldLandformForm(landform.body)
+        self.landform_form.pack(fill="x")
+        self.landform_section = landform
+        more = Collapsible(self, "Recorded only")
+        more.pack(fill="x", pady=(GAP // 2, 0))
+        entry = field(more.body, "Simulation span", self.values["duration"],
+                      unit="million years", width=10,
+                      help="Kept with the recipe for later tools; generation does not use it.")
+        self._field_widgets["duration"] = entry
+        self._controls.append((entry, "normal"))
+        actions = button_row(self)
+        actions.columnconfigure((0, 1), weight=1)
+        self._button(actions, "Apply changes", self.apply, style="Accent").grid(
+            row=0, column=0, sticky="ew", padx=(0, 3)
+        )
+        self._button(actions, "Revert", self.revert).grid(
+            row=0, column=1, sticky="ew", padx=(3, 0)
+        )
+
     def _build_landmarks(self) -> None:
-        """Hand-placed wonders from the catalog (``domain.wonders``), in a tab."""
-        box = ttk.Frame(self.form_tabs, style="Panel.TFrame", padding=6)
-        self.form_tabs.add(box, text="Landmarks")
-        self.landmark_tab = box
-        box.columnconfigure(1, weight=1)
-        ttk.Label(box, text="Name", style="Body.TLabel").grid(row=1, column=0, sticky="w")
-        name = ttk.Entry(box, textvariable=self.landmark["name"], width=16)
-        name.grid(row=1, column=1, columnspan=3, sticky="ew", pady=2)
+        """Hand-placed wonders from the catalog (``domain.wonders``)."""
+        box = section(self, "Landmarks")
+        hint(box, "Wonders placed exactly where you want them. Placed wonders replace "
+             "random ones of their kind.")
+        grid = ttk.Frame(box, style="Panel.TFrame")
+        grid.pack(fill="x", pady=(GAP // 2, 0))
+        grid.columnconfigure(1, weight=1)
         kind = ttk.Combobox(
-            box, textvariable=self.landmark["kind"], values=tuple(KIND_BY_LABEL),
-            state="readonly", width=18,
+            grid, textvariable=self.landmark["kind"], values=tuple(KIND_BY_LABEL),
+            state="readonly", width=20,
         )
-        kind.grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Label(box, text="Size km", style="Body.TLabel").grid(
-            row=2, column=1, sticky="e", padx=(GAP, 4)
+        ttk.Label(grid, text="Kind", style="Body.TLabel").grid(row=0, column=0, sticky="w")
+        kind.grid(row=0, column=1, sticky="w", pady=2)
+        name = ttk.Entry(grid, textvariable=self.landmark["name"], width=22)
+        ttk.Label(grid, text="Name", style="Body.TLabel").grid(row=1, column=0, sticky="w")
+        name.grid(row=1, column=1, sticky="w", pady=2)
+        size = ttk.Entry(grid, textvariable=self.landmark["size"], width=8)
+        ttk.Label(grid, text="Size", style="Body.TLabel").grid(row=2, column=0, sticky="w")
+        size.grid(row=2, column=1, sticky="w", pady=2)
+        ttk.Label(grid, text="km", style="Body.TLabel").grid(row=2, column=1, padx=(70, 0),
+                                                              sticky="w")
+        age = ttk.Entry(grid, textvariable=self.landmark["age"], width=8)
+        ttk.Label(grid, text="Age", style="Body.TLabel").grid(row=3, column=0, sticky="w",
+                                                               padx=(0, GAP))
+        age.grid(row=3, column=1, sticky="w", pady=2)
+        ttk.Label(grid, text="million years", style="Body.TLabel").grid(
+            row=3, column=1, padx=(70, 0), sticky="w"
         )
-        size = ttk.Entry(box, textvariable=self.landmark["size"], width=7)
-        size.grid(row=2, column=2, sticky="w", pady=2)
-        ttk.Label(box, text="Age Myr", style="Body.TLabel").grid(
-            row=2, column=3, sticky="e", padx=(GAP, 4)
-        )
-        age = ttk.Entry(box, textvariable=self.landmark["age"], width=6)
-        age.grid(row=2, column=4, sticky="w", pady=2)
         self._controls.extend(
             ((name, "normal"), (kind, "readonly"), (size, "normal"), (age, "normal"))
         )
-        buttons = ttk.Frame(box, style="Panel.TFrame")
-        buttons.grid(row=3, column=0, columnspan=4, sticky="ew", pady=(2, 0))
+        hint(box, textvariable=self.landmark_help)
+        buttons = button_row(box)
         for text, action in (
             ("Place on map", self.place_landmark),
             ("Update", self.update_landmark),
             ("Delete", self.delete_landmark),
         ):
-            self._button(buttons, text, action).pack(side="left", padx=(0, 4))
-        WrappingLabel(box, textvariable=self.landmark_help, style="Muted.TLabel").grid(
-            row=4, column=0, columnspan=4, sticky="ew", pady=(2, 0)
-        )
+            self._button(buttons, text, action, style="Small").pack(side="left", padx=(0, 4))
         self.landmark["kind"].trace_add("write", self._describe_landmark)
         self._describe_landmark()
 
@@ -348,58 +373,89 @@ class GeologyEditor(tk.Toplevel):
     def _describe_landmark(self, *_args: str) -> None:
         spec = WONDERS[self._landmark_kind()]
         if spec.size_km is None:
-            size = " Leave the size blank."
+            size = " It has no size."
         else:
             low, high, usual = spec.size_km
             size = f" Size is its {spec.size}, {low:g}-{high:g} km; blank uses {usual:g} km."
         clicks = " Place it with two clicks, one per end." if spec.line else ""
         age = (
-            " Age in Myr erodes it (blank uses the planet's)." if spec.ages
-            else " Leave the age blank."
+            " Age erodes it; blank uses the planet's wonder age." if spec.ages
+            else " It does not age."
         )
-        self.landmark_help.set(
-            f"{spec.summary}{size}{clicks}{age} Placed wonders replace random ones of their kind."
-        )
+        self.landmark_help.set(f"{spec.summary}{size}{clicks}{age}")
 
-    def _build_map(self, main: ttk.Frame) -> None:
-        right = ttk.Frame(main, style="Panel.TFrame")
-        right.grid(row=0, column=1, sticky="nsew")
-        right.columnconfigure(0, weight=1)
-        right.rowconfigure(1, weight=1)
-        view_tools = ttk.Frame(right, style="Toolbar.TFrame", padding=GAP)
+    def _build_map(self, parent: tk.Misc) -> ttk.Frame:
+        frame_widget = ttk.Frame(parent, style="Panel.TFrame")
+        frame_widget.columnconfigure(0, weight=1)
+        frame_widget.rowconfigure(1, weight=1)
+        view_tools = ttk.Frame(frame_widget, style="Toolbar.TFrame", padding=GAP)
         view_tools.grid(row=0, column=0, sticky="ew")
+        ttk.Label(view_tools, text="Geology", style="Section.TLabel").pack(side="left")
+        self.layer_input = ttk.Combobox(
+            view_tools, textvariable=self.layer, state="readonly", width=24
+        )
+        self.layer_input.pack(side="left", padx=GAP)
+        self.layer_input.bind("<<ComboboxSelected>>", lambda _e: self._layer_changed())
+        self.look_label = ttk.Label(view_tools, text="Look", style="Body.TLabel")
+        self.bearing_input = ttk.Combobox(
+            view_tools, textvariable=self.bearing, values=EXPOSURE_BEARINGS,
+            state="readonly", width=4,
+        )
+        self.bearing_input.bind("<<ComboboxSelected>>", lambda _e: self.canvas.redraw())
         ttk.Button(view_tools, text="Fit", style="Small.TButton", command=self.fit).pack(
-            side="left"
+            side="right"
         )
-        layers = (COVERAGE, SOURCE, *(CONTEXT_LAYERS if self.context else ()))
-        selector = ttk.Combobox(
-            view_tools, textvariable=self.layer, values=layers, state="readonly", width=24
-        )
-        selector.pack(side="left", padx=GAP)
-        selector.bind("<<ComboboxSelected>>", lambda _e: self._layer_changed())
-        if self.context:
-            ttk.Label(view_tools, text="Look", style="Body.TLabel").pack(side="left")
-            bearing = ttk.Combobox(
-                view_tools, textvariable=self.bearing, values=EXPOSURE_BEARINGS,
-                state="readonly", width=4,
-            )
-            bearing.pack(side="left", padx=4)
-            bearing.bind("<<ComboboxSelected>>", lambda _e: self.canvas.redraw())
         frame = self.world.project.frame
         self.canvas = FlatMapCanvas(
-            right, background=OCEAN, on_click=self._click, on_hover=self._hover
+            frame_widget, background=OCEAN, on_click=self._click, on_hover=self._hover
         )
         self.canvas.configure(takefocus=True)
         self.canvas.overlay = self._overlay
         self.canvas.show(self._render, (frame.width, frame.height))
         self.canvas.grid(row=1, column=0, sticky="nsew")
-        MapInfoStrip(right, self.legend, self.inspection).grid(row=2, column=0, sticky="ew")
+        MapInfoStrip(frame_widget, self.legend, self.inspection).grid(
+            row=2, column=0, sticky="ew"
+        )
+        self._sync_layers()
+        return frame_widget
+
+    def _sync_layers(self) -> None:
+        self.layer_input.configure(
+            values=(COVERAGE, SOURCE, *(CONTEXT_LAYERS if self.context else ()))
+        )
+        if self.context is None and self.layer.get() not in (COVERAGE, SOURCE):
+            self.layer.set(COVERAGE)
+        if self.context is not None:
+            self.look_label.pack(side="left")
+            self.bearing_input.pack(side="left", padx=4)
+        else:
+            self.look_label.pack_forget()
+            self.bearing_input.pack_forget()
+        self._layer_changed()
+
+    def set_context(self, context: WorldContextRun | None) -> None:
+        """Offer the world's current geographic context as backgrounds."""
+        self.context = context
+        self._sync_layers()
 
     def _layer_changed(self) -> None:
         self.legend.set(LEGENDS.get(self.layer.get(), ""))
         self.canvas.redraw()
 
     # Form and selection
+
+    def _setting_changed(self, *_args: str) -> None:
+        setting = cast(GeologicalSetting, self.values["setting"].get())
+        if setting in SETTING_TEXT:
+            label, meaning = SETTING_TEXT[setting]
+            if self.setting_label.get() != label:
+                self.setting_label.set(label)
+            self.setting_help.set(meaning)
+
+    def _setting_chosen(self, *_args: str) -> None:
+        setting = SETTING_BY_LABEL.get(self.setting_label.get())
+        if setting is not None and self.values["setting"].get() != setting:
+            self.values["setting"].set(setting)
 
     def _form(self) -> tuple[str, ...]:
         return (*tuple(v.get() for v in self.values.values()), *self.landform_form.snapshot())
@@ -414,7 +470,7 @@ class GeologyEditor(tk.Toplevel):
             self.tree.insert("defaults", "end", iid="continent:" + c.id, text=c.name)
         for p in sorted(self.recipe.provinces, key=lambda p: (-p.priority, p.name)):
             self.tree.insert("provinces", "end", iid=p.id, text=f"{p.name} · priority {p.priority}")
-        self.tree.insert("", "end", iid="landmarks", text="Landmarks · wonders", open=True)
+        self.tree.insert("", "end", iid="landmarks", text="Landmarks", open=True)
         for m in sorted(self.recipe.landmarks, key=lambda m: m.name):
             self.tree.insert(
                 "landmarks", "end", iid=m.id,
@@ -451,7 +507,18 @@ class GeologyEditor(tk.Toplevel):
         ):
             self.values[key].set(value)
         self.landform_form.load(profile.landform)
+        if profile.landform is not None and not self.landform_section.expanded:
+            self.landform_section.toggle()
         self._loaded_form = self._form()
+        is_default = self._selected.startswith("continent:") and self._draft is None
+        self.region_title.set(
+            f"{name} · continent default" if is_default
+            else f"New province: {name}" if province is None else f"Province: {name}"
+        )
+        if is_default:
+            self.identity.pack_forget()
+        else:
+            self.identity.pack(fill="x", after=self.detail_label)
         self._lock_identity_fields()
         region = (
             next((r for r in self.coverage.regions if r.id == self._selected), None)
@@ -459,10 +526,13 @@ class GeologyEditor(tk.Toplevel):
             else None
         )
         self.detail.set(
-            f"Effective land: {region.area_km2:,.0f} km². "
-            + ("Province override." if region.province else "Remaining default coverage.")
+            f"Covers {region.area_km2:,.0f} km² of land"
+            + (" (this province wins there)." if region.province
+               else " not claimed by a province.")
             if region
-            else "Draw a polygon with at least three vertices."
+            else "Click at least three corners on the map, then Apply changes."
+            if self._draft is not None
+            else ""
         )
 
     def _lock_identity_fields(self) -> None:
@@ -492,7 +562,6 @@ class GeologyEditor(tk.Toplevel):
             self.landmark["kind"].set(WONDERS[landmark.kind].label)
             self.landmark["size"].set("" if landmark.size_km is None else f"{landmark.size_km:g}")
             self.landmark["age"].set("" if landmark.age_myr is None else f"{landmark.age_myr:g}")
-            self.form_tabs.select(self.landmark_tab)
             self.canvas.redraw()
             return
         self._landmark_selected = None
@@ -502,9 +571,13 @@ class GeologyEditor(tk.Toplevel):
 
     def _profile(self) -> GeologyProfile:
         values = [self.values[key].get().strip() for key in ("crust", "rejuvenation", "duration")]
+        try:
+            ages = [float(value) if value else None for value in values]
+        except ValueError as error:
+            raise ValueError("Ages are numbers of million years, or blank.") from error
         return GeologyProfile(
             cast(GeologicalSetting, self.values["setting"].get()),
-            *(float(value) if value else None for value in values),
+            *ages,
             landform=self.landform_form.read(),
         )
 
@@ -512,6 +585,10 @@ class GeologyEditor(tk.Toplevel):
         profile = self._profile()
         if self._draft is not None or not self._selected.startswith("continent:"):
             current = next((p for p in self.recipe.provinces if p.id == self._selected), None)
+            try:
+                priority = int(self.values["priority"].get())
+            except ValueError as error:
+                raise ValueError("Priority is a whole number from 0 to 100.") from error
             province = GeologyProvince(
                 self._draft_id or self._selected,
                 self.values["name"].get().strip(),
@@ -520,7 +597,7 @@ class GeologyEditor(tk.Toplevel):
                 else current.vertices
                 if current
                 else (),
-                int(self.values["priority"].get()),
+                priority,
                 profile,
             )
             self._next_selected = province.id
@@ -533,7 +610,7 @@ class GeologyEditor(tk.Toplevel):
             or self.values["priority"].get() != "0"
         ):
             raise ValueError(
-                "Rename continents in the World workspace; priorities apply to provinces."
+                "Rename continents in the Source map step; priorities apply to provinces."
             )
         owner = self._selected.removeprefix("continent:")
         self._next_selected = self._selected
@@ -567,7 +644,7 @@ class GeologyEditor(tk.Toplevel):
             self.status.set("Apply or revert the current edit before drawing.")
             return
         if redraw and self._selected.startswith("continent:"):
-            self.status.set("Select a province to redraw its boundary.")
+            self.status.set("Select a province to redraw its outline.")
             return
         self._draft = []
         self._draft_id = self._selected if redraw else "province-" + uuid4().hex
@@ -581,8 +658,8 @@ class GeologyEditor(tk.Toplevel):
                 number += 1
             self.values["name"].set(f"Province {number}")
         self.status.set(
-            "Click polygon vertices. Enter: finish · Backspace: remove vertex · "
-            "Escape: cancel. Seam crossings follow the shorter longitude interval."
+            "Click the province's corners on the map. Enter: finish · Backspace: remove the "
+            "last corner · Escape: cancel. An outline may cross the map's left/right edge."
         )
         self.inspection.set(DRAW_HINT)
         self.canvas.configure(cursor="crosshair")
@@ -617,7 +694,7 @@ class GeologyEditor(tk.Toplevel):
             self.status.set("Apply or revert the current edit before deleting.")
             return
         if self._selected.startswith("continent:"):
-            self.status.set("Continent defaults cannot be deleted; use unspecified / blank values.")
+            self.status.set("Continent defaults cannot be deleted; choose Automatic instead.")
             return
         candidate = replace(
             self.recipe, provinces=tuple(p for p in self.recipe.provinces if p.id != self._selected)
@@ -636,7 +713,7 @@ class GeologyEditor(tk.Toplevel):
         try:
             return float(text) if text else None
         except ValueError as error:
-            raise ValueError("Landmark age must be a number of Myr, or blank.") from error
+            raise ValueError("Landmark age must be a number of million years, or blank.") from error
 
     def _landmark_values(self, kind_default: int) -> tuple[str, WonderKind, float | None]:
         kind = self._landmark_kind()
@@ -678,7 +755,6 @@ class GeologyEditor(tk.Toplevel):
         self._line_start = None
         self.canvas.configure(cursor="crosshair")
         self.canvas.focus_set()
-        self.form_tabs.select(self.landmark_tab)
         spec = WONDERS[self._landmark_kind()]
         self.status.set(
             f"Click one end of the {spec.label.lower()} on the map." if spec.line
@@ -751,14 +827,55 @@ class GeologyEditor(tk.Toplevel):
                 self._selected = "continent:" + self.world.continents[0].id
             self._populate()
             self._load_form()
-            self.status.set("Edit undone." if undo else "Edit restored.")
+            self.status.set("Geology edit undone." if undo else "Geology edit restored.")
             self.canvas.redraw()
+            self._changed()
 
     def undo(self) -> None:
         self._history(True)
 
     def redo(self) -> None:
         self._history(False)
+
+    # The world it belongs to
+
+    def follow(self, world: WorldMap) -> None:
+        """Carry the recipe over to an edited version of its world (same source map)."""
+        if self.busy:
+            return
+        try:
+            candidate = follow_world(self.recipe, world.project)
+        except ValueError as error:
+            self.status.set(f"Geology cannot follow the edited world: {error}")
+            return
+
+        def work(token: CancellationToken) -> _Result:
+            return _Result(resolve_geology(world, candidate, token), "follow")
+
+        def failed(error: Exception) -> None:
+            self.status.set(
+                f"Geology no longer fits the edited world: {error} Undo the world edit, or "
+                "remove geology to continue without it."
+            )
+
+        self._end_draft()
+        self.jobs.start(
+            "Moving geology to the edited world",
+            lambda _report, token: work(token),
+            lambda result: self._followed(world, result),
+            failed=failed, cancelled=self._job_cancelled,
+        )
+
+    def _followed(self, world: WorldMap, result: _Result) -> None:
+        self.world = world
+        self._undo.clear()
+        self._redo.clear()
+        known = {"continent:" + c.id for c in world.continents}
+        if self._selected.startswith("continent:") and self._selected not in known:
+            self._selected = "continent:" + world.continents[0].id
+        self._finished(result, None)
+        frame = world.project.frame
+        self.canvas.show(self._render, (frame.width, frame.height))
 
     # Jobs
 
@@ -774,14 +891,10 @@ class GeologyEditor(tk.Toplevel):
             return action(token)
 
         self.jobs.start(label, work, lambda result: self._finished(result, after),
-                        cancellable=cancellable)
+                        cancellable=cancellable, failed=self._job_failed,
+                        cancelled=self._job_cancelled)
 
-    def _job_state(self, state: JobState | None) -> None:
-        self.status_bar.show(state)
-        busy = state is not None
-        if busy == self._was_busy:
-            return
-        self._was_busy = busy
+    def set_busy(self, busy: bool) -> None:
         self.landform_form.set_busy(busy)
         for widget, normal in self._controls:
             widget["state"] = "disabled" if busy else normal
@@ -791,7 +904,7 @@ class GeologyEditor(tk.Toplevel):
         self.status.set(str(error))
 
     def _job_cancelled(self) -> None:
-        self.status.set("Cancelled; previous recipe retained.")
+        self.status.set("Cancelled; previous geology retained.")
 
     def _finished(self, event: _Result, after: Callable[[], None] | None) -> None:
         if event.mode == "edit" and self.coverage and event.coverage.recipe != self.recipe:
@@ -811,19 +924,41 @@ class GeologyEditor(tk.Toplevel):
         self._end_draft()
         self._populate()
         self._load_form()
+        self._show_file()
         self.status.set(
-            f"{len(self.recipe.provinces)} provinces · "
-            f"{sum(r.area_km2 for r in self.coverage.regions):,.0f} km² land covered. "
+            f"Geology: {len(self.recipe.provinces)} provinces cover "
+            f"{sum(r.area_km2 for r in self.coverage.regions):,.0f} km² of land. "
             + (
                 f"Saved {self.file.path.name}."
                 if event.mode == "save" and self.file
-                else "Coverage verified. Inputs remain geological hypotheses."
+                else "Opened " + self.file.path.name + "."
+                if event.mode == "open" and self.file
+                else "Moved to the edited world; save the recipe to keep it."
+                if event.mode == "follow"
+                else "Every continent starts as Automatic: choose its setting, or draw "
+                "provinces."
+                if event.mode == "initial"
+                else "Applied."
             )
         )
         self.inspection.set(HINT)
         self.canvas.redraw()
+        self._changed()
         if after:
             after()
+
+    def _changed(self) -> None:
+        self._show_file()
+        self.on_change()
+
+    def _show_file(self) -> None:
+        if self.file is None:
+            self.file_label.set("Recipe not saved yet. Save it to reuse it in another session.")
+        else:
+            self.file_label.set(
+                f"Recipe: {self.file.path.name}"
+                + (" · unsaved changes" if self.dirty else " · saved")
+            )
 
     def cancel(self) -> None:
         self.jobs.cancel()
@@ -834,7 +969,7 @@ class GeologyEditor(tk.Toplevel):
         def choose() -> None:
             path = filedialog.askopenfilename(
                 parent=self,
-                title="Open geology inputs",
+                title="Open a geology recipe",
                 filetypes=[("Geology recipe", "*.dmgeology.json")],
             )
             if path:
@@ -849,7 +984,7 @@ class GeologyEditor(tk.Toplevel):
             result = open_geology(path, world, token)
             return _Result(result.coverage, "open", result)
 
-        self._work("Opening and checking retained geology inputs", operation)
+        self._work("Opening and checking the geology recipe", operation)
 
     def save(self, *, save_as: bool = False, after: Callable[[], None] | None = None) -> None:
         if self.busy:
@@ -864,7 +999,7 @@ class GeologyEditor(tk.Toplevel):
         if path is None or save_as:
             name = filedialog.asksaveasfilename(
                 parent=self,
-                title="Save geology inputs",
+                title="Save the geology recipe",
                 defaultextension=GEOLOGY_EXTENSION,
                 initialfile=path.name if path else "world.dmgeology.json",
                 filetypes=[("Geology recipe", "*.dmgeology.json")],
@@ -886,21 +1021,20 @@ class GeologyEditor(tk.Toplevel):
             return _Result(result.coverage, "save", result)
 
         self._work(
-            "Validating and saving portable geology recipe", operation, after, cancellable=False
+            "Validating and saving the geology recipe", operation, after, cancellable=False
         )
 
     def guard(self, action: Callable[[], None]) -> None:
         if self.busy:
             self.status.set("Finish or cancel the current job before continuing.")
-            self.lift()
             return
         if not self.dirty:
             action()
             return
         answer = messagebox.askyesnocancel(
-            "Save geology inputs?",
-            "Save the recipe before continuing? Unfinished or invalid polygons must be fixed "
-            "or cancelled before saving.",
+            "Save the geology recipe?",
+            "Save the geology recipe before continuing? Unfinished or invalid provinces must "
+            "be fixed or cancelled before saving.",
             parent=self,
         )
         if answer is True:
@@ -927,7 +1061,7 @@ class GeologyEditor(tk.Toplevel):
             return
         if self._draft is not None:
             if len(self._draft) >= MAX_PROVINCE_VERTICES:
-                self.status.set(f"Province vertex limit: {MAX_PROVINCE_VERTICES}.")
+                self.status.set(f"A province has at most {MAX_PROVINCE_VERTICES} corners.")
                 return
             if self._draft:
                 width = self.world.project.frame.width
@@ -937,8 +1071,8 @@ class GeologyEditor(tk.Toplevel):
                 )
             self._draft.append(position)
             self.status.set(
-                f"{len(self._draft)} vertices · Enter or Apply to finish. "
-                "Backspace removes the last vertex; Escape cancels."
+                f"{len(self._draft)} corners · Enter or Apply changes finishes. "
+                "Backspace removes the last corner; Escape cancels."
             )
             self.canvas.draw_overlay()
         elif self.coverage and not self.form_dirty:
@@ -954,18 +1088,17 @@ class GeologyEditor(tk.Toplevel):
         region = self.coverage.at(position)
         longitude, latitude = self.world.project.frame.source_to_lonlat(position)
         if region is None:
-            text = "Water · land geology does not apply"
+            text = "Water · geology applies to land"
         else:
             p = region.profile
             ages = " · ".join(
-                f"{label}: {value:g} Ma" if value is not None else f"{label}: unknown"
+                f"{label} {value:g} Ma" if value is not None else f"{label} unknown"
                 for label, value in (
                     ("crust", p.crust_age_ma),
-                    ("rejuvenation", p.rejuvenation_age_ma),
-                    ("simulation", p.evolution_duration_ma),
+                    ("uplift", p.rejuvenation_age_ma),
                 )
             )
-            text = f"{region.name} · {p.setting} · {ages}"
+            text = f"{region.name} · {SETTING_TEXT[p.setting][0]} · {ages}"
         self.inspection.set(f"{latitude:.2f}°, {longitude:.2f}° · {text}")
 
     def _render(self, viewport: MapViewport, size: tuple[int, int]) -> Image.Image:
@@ -1105,9 +1238,5 @@ class GeologyEditor(tk.Toplevel):
         if self._closed:
             return
         self._closed = True
-        self.jobs.close()
-        self.pump.close()
-        self.grab_release()
-        if self.on_close:
-            self.on_close(self.file)
+        self.map.destroy()
         self.destroy()

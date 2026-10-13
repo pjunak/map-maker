@@ -25,6 +25,24 @@ GEOLOGICAL_SETTINGS: tuple[GeologicalSetting, ...] = (
     "volcanic",
     "sedimentary-basin",
 )
+# Names and one-line meanings shown in the app; ``pipeline.planet_forcing`` owns
+# the heights and erodibility each setting asks for.
+SETTING_TEXT: dict[GeologicalSetting, tuple[str, str]] = {
+    "unspecified": (
+        "Automatic", "No preference: ranges are placed as they would be without geology."
+    ),
+    "stable-interior": (
+        "Stable interior", "An old, quiet continental core: low plains and broad plateaus."
+    ),
+    "active-belt": (
+        "Active mountain belt", "Young ranges still rising, like the Andes or the Himalaya."
+    ),
+    "rift": ("Rift", "Land pulling apart: hills, fault scarps and deep lake basins."),
+    "volcanic": ("Volcanic", "Volcanic highlands crowned by large cones."),
+    "sedimentary-basin": (
+        "Sedimentary basin", "Sinking lowland filled with soft sediment: flat, easily eroded."
+    ),
+}
 MAX_PROVINCES = 128
 MAX_PROVINCE_VERTICES = 256
 MAX_LANDMARKS = 32
@@ -214,3 +232,23 @@ class WorldGeologyRecipe:
 
 def blank_geology(world: WorldProject) -> WorldGeologyRecipe:
     return WorldGeologyRecipe(world, tuple(ContinentGeology(c.id) for c in world.continents))
+
+
+def follow_world(recipe: WorldGeologyRecipe, world: WorldProject) -> WorldGeologyRecipe:
+    """The recipe for an edited version of its world, drawn from the same source map.
+
+    Renaming, rescaling or reassigning shapes keeps the geology: continent defaults
+    follow their continents, new continents start unspecified and removed ones drop
+    out. Provinces and landmarks stay where they were drawn on the source map, so
+    they must still fit the edited frame.
+    """
+    if world.source.sha256 != recipe.world.source.sha256:
+        raise ValueError("This geology was drawn on another source map; it cannot follow it.")
+    profiles = {d.continent_id: d.profile for d in recipe.defaults}
+    return WorldGeologyRecipe(
+        world,
+        tuple(ContinentGeology(c.id, profiles.get(c.id, GeologyProfile()))
+              for c in world.continents),
+        recipe.provinces,
+        recipe.landmarks,
+    )

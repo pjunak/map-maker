@@ -7,8 +7,11 @@ change land terrain, drainage, climate or erosion.
 
 ## Try it in the workbench
 
-1. Open a world in **World**, then generate or open matching **Context** geography.
-2. Choose **Bathymetry…** in the World header. The largest connected water region
+1. Open a world in **World**. The planet makes its own sea floor; this tool is a
+   hand-tuned alternative.
+2. Open **Ocean floor** under **More tools** and click **Open the ocean-floor
+   editor…**. It works on geographic context: if none is open, the tool generates
+   it first at the Geographic context page's grid. The largest connected water region
    is initially selected as a suggestion. Review it; Ctrl/Shift selects several.
    Connected regions are not automatically classified as oceans or lakes.
 3. Set the latitude rows, shelf width/depth, slope width and basin depth. Starting

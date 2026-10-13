@@ -9,11 +9,12 @@ LANDFORM_STAGE_ID = "terrain.landforms"
 LOCAL_DETAIL_STAGE_ID = "terrain.local-detail"
 _SEED_DOMAIN = b"dmtools.terrain-stage-seed@1\x00"
 _STAGE_NAME = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*", re.ASCII)
+MAX_MASTER_SEED = 0xFFFFFFFF
 
 
 def validate_master_seed(seed: object) -> None:
-    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= 0xFFFFFFFF:
-        raise ValueError("Seed must be an integer between 0 and 4,294,967,295.")
+    if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed <= MAX_MASTER_SEED:
+        raise ValueError(f"Seed must be an integer between 0 and {MAX_MASTER_SEED:,}.")
 
 
 def stage_seed(master_seed: int, stage_id: str) -> int:

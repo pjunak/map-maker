@@ -1,13 +1,29 @@
 # Import and review a world map
 
-The **World** workspace implements WC0: retain an authored world, confirm its
-geographic frame, assign continents and islands, inspect it and save a portable
-source project. [Geographic context](world-context.md) now generates spherical
-coverage, connected water and resolution support. Matching context can be bound to
-experimental rough terrain; climate, runoff, aging and regional history remain
-planned. The **5 Terrain** stage transfers a
-selected continent and connected land into a local metric terrain project,
-ready to use in the **Terrain** workspace.
+The **World** workspace retains an authored world, assigns its continents and
+islands, sets its planet and frame, and saves a portable source project. From
+there it builds a whole planet ([planet guide](world-planet.md)).
+[Geographic context](world-context.md) generates spherical coverage, connected water
+and resolution support. The **Local terrain** tool transfers a selected continent
+and connected land into a local metric terrain project, ready to use in the
+**Terrain** workspace.
+
+## The steps
+
+The World workspace guides you through numbered steps down its left side. Each
+shows a status line, and **Next** at the foot of a page moves on:
+
+1. **Source map**: import the SVG and assign each shape to a continent.
+2. **Planet**: name the world, set its radius and check how the map wraps the
+   globe. **Next** checks the world.
+3. **Geology** (optional): continent settings, provinces and landmarks
+   ([geology guide](world-geology.md)). Skip it for automatic mountain ranges.
+4. **Generate**: detail, seed and features; then **Generate planet**.
+5. **Explore**: maps, projections, regional zoom and export.
+
+**More tools** follow: [Geographic context](world-context.md),
+[Ocean floor](world-bathymetry.md) and **Local terrain** (below). The map on the
+right follows the open step; in the Geology step it shows the geology map.
 
 ## Try the public example
 
@@ -34,19 +50,19 @@ remain available in the same window, with separate documents and dirty states.
 
 ## Create terrain from the world
 
-1. Open or import your world and confirm its frame, radius and assignments.
-2. Generate context or open a completed matching context bundle. Optionally author
-   and save [Geology inputs](world-geology.md), including explicit **Landform guidance**.
-   Open the **5 Terrain** stage and choose a continent. The panel displays
-   the saved geology recipe; choose another or clear it as needed. The currently
-   generated/opened context is passed automatically.
+1. Open or import your world and confirm its planet, frame and continents.
+2. Optionally generate context, or open a completed matching context bundle, and
+   set exact landforms in the [Geology step](world-geology.md).
+   Open **Local terrain** under **More tools** and choose a continent. The page
+   says which geology it takes from the Geology step. The currently generated or
+   opened context is passed automatically.
 3. Click **Create terrain project…** and choose a **new folder name**. The current
    world inputs are validated and retained; saving the world separately first is
    optional. The source drawing and any existing terrain work remain protected.
 4. The new project opens in **Terrain**, initially at 257 pixels. Add mountain,
    valley, height or landform instructions, adjust generator settings, and click
    **Generate terrain**. The object scale is fixed by the world projection.
-5. Save instructions normally. Use **Open prepared project** in World to reopen
+5. Save instructions normally. Use **Open it in the Terrain tab** in World to reopen
    the latest saved version; declining an unsaved-work prompt leaves the created
    folder available for later use.
 
@@ -109,10 +125,10 @@ retained in the source SVG, not encoded as a global raster CRS.
 1. Export a UTF-8 SVG with explicit vector shapes and a numeric `viewBox` from
    your drawing application. Native Affinity documents and raster maps are not
    accepted. Exporting a copy leaves your drawing document untouched.
-2. In **World**, choose **Import SVG**. The original SVG text, element IDs,
+2. In **World**, choose **Import SVG map…**. The original SVG text, element IDs,
    transforms and group hierarchy are retained in an embedded snapshot. Import
    does not move geometry or infer planet size from display pixels.
-3. Review the shape list. **Suggest from groups** proposes continent names and
+3. Review the shape list. **Suggest from SVG groups** proposes continent names and
    ownership; it is an explicit, undoable action. It recognises `Land Shapes`,
    `islands` and `Map Furniture`. Affinity's original layer labels take precedence
    over generated IDs such as `Land-Shapes1`; anonymous transform wrappers do not
@@ -120,29 +136,36 @@ retained in the source SVG, not encoded as a global raster CRS.
    land layers exist, other thematic layers are proposed as excluded. The summary
    reports exclusions explicitly. Inspect all proposals before accepting them.
 4. Select shapes in the list or click the map. Use Ctrl-click or the list's
-   extended selection for several shapes. Choose or enter a **Continent name**,
-   select **Mainland**, **Island** or **Exclude**, then **Assign selected shapes**.
-   Every source shape needs one assignment or explicit exclusion before saving.
-   Ungrouped or invalid shapes are not guessed into a continent.
-5. In the **2 Frame** stage, enter your planet radius and the exact projection bounds.
-   The SVG `viewBox` supplies an initial suggestion, not proof of that frame.
-   Remove page margins, legends and scale bars from the geographic rectangle.
-   Leave **Coast detail already drawn** blank for a hand-drawn map. For a map
+   extended selection for several shapes. Choose a **Continent** or type a new
+   name, choose **Mainland** or **Island**, then **Assign**; **Exclude** keeps a
+   shape out of the world. Every source shape needs one assignment or explicit
+   exclusion: **Next** selects any that are left. Ungrouped or invalid shapes are
+   not guessed into a continent.
+5. In the **Planet** step, set the planet radius. It starts at Earth's 6,371 km;
+   **Earth**, **Mars** and **Large** fill in common sizes. The line below says how
+   many km one SVG unit is, and warns when the map edges are not twice as wide as
+   tall. **Map edges** holds the exact projection bounds. The SVG `viewBox`
+   supplies them as a suggestion, not proof of the frame: remove page margins,
+   legends and scale bars from the geographic rectangle. The section opens by
+   itself when the suggestion is not 2:1. Under **Coast detail · advanced**,
+   leave **Coast detail already drawn** blank for a hand-drawn map. For a map
    that already carries refined coast detail, such as one exported from a
    planet's refined coast, enter the finest detail it carries in km (a
    `dmtools world refine-coast` export fills it in), so zoomed maps add only finer
    detail.
-6. Click **Validate world**. Tiny export overflow and narrow border overlaps are
-   handled in derived coverage, and shared land within one continent is counted
-   once. Review the **Adjustments** stage; selecting a report highlights its original
-   source shapes. Larger cross-continent conflicts, invalid shapes, unassigned
-   objects and substantial out-of-frame land still require correction.
+6. Click **Next** (or **Check now**). Tiny export overflow and narrow border
+   overlaps are handled in derived coverage, and shared land within one continent
+   is counted once. The **World check** lists continent areas and any import
+   adjustments; selecting one highlights its original source shapes. Larger
+   cross-continent conflicts, invalid shapes, unassigned objects and substantial
+   out-of-frame land still require correction; the check then returns to the
+   Source map step with those shapes selected.
 7. **Save As** a `.dmworld.json` file. Reopen it to review the same source and
    membership. Save rechecks the original snapshot and geometry before replacing
    an existing file atomically. Failed validation leaves the existing file intact.
 
 For the public raw SVG, the world frame is left **10**, top **10**, width **360**,
-height **180**, radius **6500 km**, central meridian **0°**. The full page is
+height **180**, radius **6500 km**, longitude at the map's centre **0°**. The full page is
 380 by 210 source units, with furniture outside the world frame. These values
 are specific to the example; use your own map's established scale and projection.
 The seam island's group suggestion initially uses Mainland; select `seam-island`
@@ -150,7 +173,7 @@ and assign **Island** to match the saved example's intended role.
 
 A continent is a semantic owner. It can have multiple land pieces and can touch
 another continent. Islands keep their chosen owner, not their nearest mainland.
-**Rename assigned continent** preserves its ID and all membership. Assigning a
+**Rename continent…** preserves its ID and all membership. Assigning a
 continent's last shape elsewhere removes that now-unused owner; Undo can restore it.
 
 ## Navigation and document handling
@@ -167,22 +190,24 @@ continent's last shape elsewhere removes that now-unused owner; Undo can restore
 - Selecting a shape shows its source group path, exact ID and any import issue.
   Import problems are marked **Needs attention**, counted in the summary and
   selected after import. Validation selects out-of-frame or overlapping shapes
-  and reports their group paths, IDs and bounds/overlap areas. Successful validation,
-  opening and saving populate **Adjustments** with bounded preparation changes.
-  Editing inputs clears that report until the next validation. **Show excluded
-  shapes** affects only the preview, never assignments or validation.
+  and reports their group paths, IDs and bounds/overlap areas. A successful check,
+  opening and saving fill the **World check** with bounded preparation changes.
+  Editing inputs clears that report until the next check. **Show excluded shapes
+  on the map** affects only the preview, never assignments or validation.
 - **Ctrl+O**, **Ctrl+S**, **Ctrl+Shift+S**, **Ctrl+Z**, **Ctrl+Y**, **F** and
-  **Ctrl+Enter** act on the active workspace. In World, Ctrl+Enter validates.
-  Native editing shortcuts still apply inside text fields.
+  **Ctrl+Enter** act on the active workspace. In World, Ctrl+Enter runs the open
+  step's main action (**Next**, **Generate planet** or **Generate context**). In
+  the Geology step, Ctrl+S saves and Ctrl+Z/Ctrl+Y undo and redo the geology recipe
+  instead of the world. Native editing shortcuts still apply inside text fields.
 - Ownership assignments and renames have Undo/Redo. Frame text uses normal text
   editing; it is not part of the ownership undo stack.
 - Open/import/close guard unsaved changes. Both documents are checked on exit.
   Saving an incomplete world requires resolving its assignments/frame first;
   there is no partial-draft file format in this batch.
 - Import, open, validation and saving use a background worker. Input controls
-  lock during a job; wait for it to finish before closing. World jobs have no
-  cancellation command yet. Context generation/export has its own Cancel button;
-  existing Terrain generation still supports Cancel.
+  lock during a job; wait for it to finish before closing. Long jobs (context,
+  planet, regions, geology checks) show progress and **Cancel** in the status bar;
+  import, open, check and save are short and cannot be cancelled.
 
 ## Geographic and source contract
 
@@ -276,10 +301,10 @@ and [ADR-0072](adr/0072-bound-world-source-imperfections.md) record these identi
 
 The [Context page](world-context.md) now implements spherical coverage, connected
 water, shared-edge openings, shoreline distance, directional exposure, resolution
-support and verified bundle reopening. **Geology…** opens the separate
-[geology-input editor](world-geology.md) for continent defaults and drawable
-provinces over source/context backgrounds. Save those hypotheses as their own
-recipe. **Bathymetry…** opens the separate [ocean-depth workflow](world-bathymetry.md)
+support and verified bundle reopening. The **Geology** step holds the
+[geology inputs](world-geology.md): continent defaults, drawable provinces and
+landmarks over source/context backgrounds, saved as their own recipe. The
+**Ocean floor** tool opens the separate [ocean-depth workflow](world-bathymetry.md)
 from matching geographic context: select oceans, author a margin profile, generate
 and inspect depth/error/support, then export or reopen a verified result.
 The [WC1](strategy/world-context.md) graph now retains separate water pieces and

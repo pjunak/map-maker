@@ -13,9 +13,10 @@ from dmtools.terrain.adapters.world_landforms import compile_landforms
 from dmtools.terrain.adapters.world_projection import project_landmass
 from dmtools.terrain.adapters.world_terrain_source import MAX_SOURCE_BYTES, source_svg
 from dmtools.terrain.application.world_context import WorldContextRun
-from dmtools.terrain.application.world_geology import open_geology
+from dmtools.terrain.application.world_geology import resolve_for_world
 from dmtools.terrain.domain import TerrainProject, TerrainSettings
 from dmtools.terrain.domain.world import WorldProject
+from dmtools.terrain.domain.world_geology import WorldGeologyRecipe
 from dmtools.terrain.domain.world_terrain import WorldTerrainSource
 from dmtools.terrain.pipeline.control import CancellationToken, ProgressCallback, check_cancelled
 from dmtools.terrain.pipeline.world import prepare_world_map
@@ -34,7 +35,7 @@ def create_world_terrain_project(
     output: Path,
     *,
     settings: TerrainSettings | None = None,
-    geology_path: Path | None = None,
+    geology: WorldGeologyRecipe | None = None,
     context: WorldContextRun | None = None,
     cancellation: CancellationToken | None = None,
     progress: ProgressCallback | None = None,
@@ -60,9 +61,9 @@ def create_world_terrain_project(
         settings or TerrainSettings(resolution_px=257), object_scale_km=source.object_scale_km
     )
     constraints = ()
-    if geology_path is not None:
+    if geology is not None:
         report(0.65, "Transferring geological landform guidance…")
-        coverage = open_geology(geology_path, prepared, cancellation).coverage
+        coverage = resolve_for_world(geology, prepared, cancellation)
         constraints = compile_landforms(
             coverage, land, source, maximum_elevation_m=settings.maximum_elevation_m,
             cancellation=cancellation,

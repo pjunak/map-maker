@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dmtools.terrain.adapters.world_geology import read_geology, world_fingerprint, write_geology
 from dmtools.terrain.adapters.world_svg import parse_world_svg
+from dmtools.terrain.domain.world_geology import WorldGeologyRecipe
 from dmtools.terrain.pipeline.control import CancellationToken, check_cancelled
 from dmtools.terrain.pipeline.world import WorldMap, prepare_world_map
 from dmtools.terrain.pipeline.world_geology import GeologyCoverage, resolve_geology
@@ -26,12 +27,18 @@ def open_geology(
     check_cancelled(cancellation)
     if world is None:
         world = prepare_world_map(recipe.world)
-    elif world_fingerprint(world.project) != world_fingerprint(recipe.world):
+    return GeologyFile(resolve_for_world(recipe, world, cancellation), path, digest)
+
+
+def resolve_for_world(
+    recipe: WorldGeologyRecipe, world: WorldMap, cancellation: CancellationToken | None = None,
+) -> GeologyCoverage:
+    """Resolve a recipe on the prepared world it was made for."""
+    if world_fingerprint(world.project) != world_fingerprint(recipe.world):
         raise ValueError(
             "Recipe uses a different world source, frame or ownership; open its world."
         )
-    recipe = replace(recipe, world=world.project)
-    return GeologyFile(resolve_geology(world, recipe, cancellation), path, digest)
+    return resolve_geology(world, replace(recipe, world=world.project), cancellation)
 
 
 def save_geology(

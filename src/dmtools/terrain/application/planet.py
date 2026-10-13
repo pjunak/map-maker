@@ -66,7 +66,7 @@ def user_tile_cache() -> Path:
 
 def generate_planet_run(
     project: WorldProject,
-    geology_path: Path | None,
+    geology: WorldGeologyRecipe | None,
     settings: PlanetSettings,
     progress: ProgressCallback | None = None,
     *,
@@ -78,20 +78,17 @@ def generate_planet_run(
     runtime = runtime_identity()
     if parse_world_svg(project.source.svg, project.source.name) != project.source:
         raise ValueError("World source snapshot and geometry disagree; import again.")
-    recipe = None
-    if geology_path is not None:
-        recipe, _ = read_geology(geology_path)
-        if recipe.world != project:
-            raise ValueError("The geology recipe belongs to a different world; open its world.")
+    if geology is not None and geology.world != project:
+        raise ValueError("The geology recipe belongs to a different world; open its world.")
     world = prepare_world_map(project)
-    result = generate_planet(world, settings, recipe, progress, cancellation=cancellation)
+    result = generate_planet(world, settings, geology, progress, cancellation=cancellation)
     if progress is not None and preview_width:
         progress(1.0, "Drawing the maps")
     previews = render_previews(result, preview_width, river_km2) if preview_width else {}
     if runtime_identity() != runtime:
         raise ValueError("Software changed during planet generation; generate again.")
     check_cancelled(cancellation)
-    return PlanetRun(result, runtime, input_identity(project, recipe), previews)
+    return PlanetRun(result, runtime, input_identity(project, geology), previews)
 
 
 def export_planet(
@@ -139,7 +136,9 @@ def build_planet(
         path: file_sha256(path) for path in (world_path, geology_path) if path is not None
     }
     run = generate_planet_run(
-        read_world_project(world_path), geology_path, settings or PlanetSettings(), progress,
+        read_world_project(world_path),
+        None if geology_path is None else read_geology(geology_path)[0],
+        settings or PlanetSettings(), progress,
         preview_width=0, river_km2=river_km2, cancellation=cancellation,
     )
     for path, digest in files.items():

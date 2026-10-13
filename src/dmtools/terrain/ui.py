@@ -1895,7 +1895,7 @@ class TerrainApp:
             name = world.path.name if world.path else world.values["name"].get()
         else:
             name = self._project_path.name if self._project_path else "Local terrain"
-        marker = "* " if self._document_is_dirty() or self.world_workspace.dirty else ""
+        marker = "* " if self._document_is_dirty() or self.world_workspace.unsaved else ""
         self.root.title(f"{marker}{name} — DM Tools Map Workbench")
 
     def _set_busy(self, busy: bool) -> None:
@@ -1983,12 +1983,14 @@ class TerrainApp:
         if self._world_active():
             world = self.world_workspace
             actions = {
-                self._choose_project: world.choose_world, self._save_project: world.save,
-                self._undo_constraint: world.undo, self._redo_constraint: world.redo,
-                self._fit_view: world.fit, self._generate: world.validate,
+                self._choose_project: world.choose_world,
+                self._save_project: world.save_current,
+                self._undo_constraint: world.undo_current,
+                self._redo_constraint: world.redo_current,
+                self._fit_view: world.fit, self._generate: world.primary_action,
             }
             if isinstance(command, partial) and command.func == self._save_project:
-                world.save(save_as=True)
+                world.save_current(save_as=True)
             elif command in actions:
                 actions[command]()
         elif not self._busy:
