@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Refined world map — 2026-10-13](2026-10-13-refined-world-map.md) builds Aethelara from
+  its planet land traced back into vector form: the same geography with cleaner coasts,
+  whose level-1 coast detail regional levels add a second time.
+
 - [Polar land — 2026-10-13](2026-10-13-polar-land.md) works the planet's polar land in true
   distance and covers a pole the drawn land touches, so the south polar ice sheet domes over
   the pole instead of ending in a spike.

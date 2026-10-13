@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 93 |
-| Dated research reports | 97 |
+| Architecture decision records | 94 |
+| Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **240** |
+| **Total** | **243** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (93)
+## Architecture decision records (94)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -199,13 +199,14 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md](adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md) | Ice sheets grow from snowfall against melt by shallow-ice flow with height, albedo and regional-climate feedbacks; large sheets are drawn with their own surface inside refined margins. |
 | [docs/adr/0094-planet-polar-land-in-true-distance.md](adr/0094-planet-polar-land-in-true-distance.md) | The planet works land poleward of 55° in true distance (opening and closing) and covers a pole that drawn land touches, with a natural cap outline. |
 
-## Dated research reports (97)
+## Dated research reports (99)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-13-refined-world-map.md](research/2026-10-13-refined-world-map.md) | The planet's refined land exported as a source map: import, planet comparison with the original drawing, coast detail added twice, and the ice-sheet drawing fix it exposed. |
 | [docs/research/2026-10-13-polar-land.md](research/2026-10-13-polar-land.md) | Polar land in true distance: the pole wedge and traced streaks, smoothing and cap trials, and Aethelara's covered south pole. |
 | [docs/research/2026-10-13-ice-sheets.md](research/2026-10-13-ice-sheets.md) | Ice sheets: causes of the latitude-line ice edge, mass balance and shallow-ice trials, sheet versus glacier drawing, margins and Aethelara results. |
 | [docs/research/2026-10-12-regional-lake-shores.md](research/2026-10-12-regional-lake-shores.md) | Straight regional lake shores: causes, the relief flood, crater lakes held in the tiles' frame, refined outlines, open-lake playa rings and Aethelara measurements. |
