@@ -6,8 +6,8 @@ from math import isfinite
 from dmtools.terrain.domain.seeds import validate_master_seed
 from dmtools.terrain.domain.wonders import MAX_WONDER_AGE_MYR, WONDER_KINDS, WonderKind
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v24"
-PLANET_CLIMATE_ALGORITHM = "planet-climate-v6"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v25"
+PLANET_CLIMATE_ALGORITHM = "planet-climate-v7"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"
 PLANET_INITIAL_STAGE_ID = "planet.initial"

@@ -727,3 +727,43 @@ def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult)
     # With the hollow added back, the lake stands at its level, not 400 m below it.
     assert np.allclose(result.elevation_m[held] + young[held], level[held])
     assert np.median(young[held]) < -390.0
+
+
+def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    from dmtools.terrain.adapters.planet_region import display_relief, window_ice_cover
+    from dmtools.terrain.application.planet_region import region_window
+    from dmtools.terrain.pipeline.planet_ice import IceSheets
+
+    lon, lat = _land_centre(parent)
+    centre = inverse_aeqd(np.zeros(1), np.zeros(1), lon, lat, 1.0)[0]
+    distance = parent.mesh.radius_m * np.arccos(np.clip(parent.mesh.xyz @ centre, -1, 1))
+    # A dome 2.5 km thick over the land within 600 km: snow piles up on top and
+    # melts towards its margin.
+    share = np.clip(1 - distance / 600e3, 0, 1)
+    sheet = parent.land & (share > 0)
+    ice = IceSheets(
+        np.where(sheet, 2500.0 * np.sqrt(share), 0.0), np.where(parent.land, 0.6 * share - 0.4, 0.0)
+    )
+    planet = replace(RegionalParent.from_result(parent), ice=ice)
+    window = region_window(
+        planet, "i" * 64, tmp_path, (lon, lat), 300.0, levels=TINY_LEVELS, pixels=160,
+        workers=1, river_km2=500.0,
+    ).window
+    assert window.ice_surface_m is not None and window.ice_balance_m is not None
+    relief = display_relief(window)
+    cover = window_ice_cover(window, relief) > 0.5
+    middle = (slice(60, 100), slice(60, 100))
+    assert cover[middle].all()
+    # The ice buries the relief and holds no rivers or open water.
+    iced = np.nan_to_num(window.ice_surface_m, nan=-1e9) > np.nan_to_num(window.elevation_m)
+    assert iced[middle].all()
+    assert not window.rivers[iced].any() and not window.lakes[iced].any()
+    assert not window.playa[iced].any()
+    # The shown relief stands on the ice surface wherever ice covers it.
+    assert np.allclose(relief[cover & window.land], np.fmax(relief, window.ice_surface_m)[
+        cover & window.land
+    ])

@@ -16,6 +16,7 @@ A circular region is regenerated with finer, physically eroded detail:
 """
 
 from dataclasses import dataclass
+from functools import cached_property
 
 import numpy as np
 from numpy.typing import NDArray
@@ -33,6 +34,12 @@ from dmtools.terrain.pipeline.planet_coast import (
 )
 from dmtools.terrain.pipeline.planet_evolution import EvolutionRun, evolve
 from dmtools.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
+from dmtools.terrain.pipeline.planet_ice import (
+    IceSheets,
+    ice_sheet_nodes,
+    margin_distance,
+    sample_ice,
+)
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from dmtools.terrain.pipeline.planet_noise import fbm3
 from dmtools.terrain.pipeline.planet_patch import Region, inverse_aeqd
@@ -93,7 +100,9 @@ class RegionalParent:
     wind_north: F64 | None = None
     wonder_m: F64 | None = None  # height change the mesh carries from craters and chasms
     wonders: Wonders | None = None
-    lake_mesh: SphereMesh | None = None  # the mesh `lake` is on, if not `mesh` (the planet's)
+    planet_mesh: SphereMesh | None = None  # the mesh lakes and ice are on, if not `mesh`
+    ice: IceSheets | None = None  # on the planet mesh
+    ice_margin: F64 | None = None  # signed margin distance on the planet mesh; computed if None
 
     def young_m(self) -> F64:
         """Height that volcanoes and wonders added on land after erosion and climate."""
@@ -134,6 +143,7 @@ class RegionalParent:
             None if climate is None else climate.wind_north,
             result.wonder_m,
             result.wonders,
+            ice=result.ice if climate is not None else None,
         )
 
     def lakes_at(self, xyz: F64, detail_m: float) -> tuple[F64, F64, B]:
@@ -147,7 +157,7 @@ class RegionalParent:
         if self.lake is None or self.lake_level_m is None or not np.any(self.lake >= 0):
             n = len(xyz)
             return np.zeros(n), np.full(n, -np.inf), np.zeros(n, dtype=bool)
-        mesh = self.mesh if self.lake_mesh is None else self.lake_mesh
+        mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
         spacing = mesh.spacing_m
         moved = displace(
             xyz, mesh.radius_m,
@@ -164,6 +174,32 @@ class RegionalParent:
             else self.lake_endorheic[ids].astype(bool)
         )
         return cover, self.lake_level_m[ids].astype(np.float64), closed
+
+    @cached_property
+    def ice_margin_m(self) -> F64 | None:
+        """Signed distance (m) to the ice-sheet margin on the planet mesh, positive on ice."""
+        if self.ice is None:
+            return None
+        if self.ice_margin is not None:
+            return self.ice_margin
+        # Only the planet's own parent holds ice on its mesh; level parents carry
+        # the planet's margin.
+        assert self.planet_mesh is None
+        return margin_distance(
+            self.mesh, ice_sheet_nodes(self.mesh, self.ice.thickness_m, self.surface_m)
+        )
+
+    def ice_at(self, xyz: F64, detail_m: float) -> tuple[F64, F64, F64] | None:
+        """Ice margin distance, thickness and mass balance with margins refined to ``detail_m``.
+
+        Like lakes, ice stays on the planet mesh, so every level refines the same
+        margins. None where the planet has no ice sheets.
+        """
+        margin = self.ice_margin_m
+        if self.ice is None or margin is None or not np.any(self.ice.thickness_m > 0):
+            return None
+        mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
+        return sample_ice(mesh, self.ice, margin, xyz, detail_m, self.settings.seed)
 
     def sample(self, xyz: F64, values: F64) -> F64:
         """Triangle-linear interpolation of a parent node field at unit vectors."""

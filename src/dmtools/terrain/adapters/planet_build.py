@@ -359,6 +359,8 @@ def write_planet_build(
             "precipitation_warm_half_mm": climate.precip_warm_mm.astype("<f4"),
             "precipitation_cold_half_mm": climate.precip_cold_mm.astype("<f4"),
             "koppen": climate.koppen.astype("i1"),
+            "ice_m": result.ice.thickness_m.astype("<f4"),
+            "ice_balance_m": result.ice.balance_m.astype("<f4"),
         }
     with (target / "planet.npz").open("xb") as stream:
         np.savez_compressed(stream, allow_pickle=False, **arrays)
@@ -492,6 +494,7 @@ def _climate_summary(result: PlanetResult) -> dict[str, object]:
         "settings": asdict(result.settings.climate),
         "land_mean_precipitation_mm": float(np.sum(climate.precipitation_mm * weight) / total),
         "land_mean_runoff_mm": float(np.sum(climate.runoff_mm * weight) / total),
+        "ice_sheet_share": round(float(weight[result.ice.thickness_m > 0].sum() / total), 4),
         "biome_share": {
             name: float(weight[climate.biome == k].sum() / total)
             for k, name in enumerate(BIOMES)

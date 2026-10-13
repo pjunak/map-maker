@@ -93,7 +93,9 @@ def level_parent(
         wind_north=sample(planet.wind_north),
         wonder_m=sample(planet.wonder_m),
         wonders=planet.wonders,
-        lake_mesh=planet.mesh if planet.lake_mesh is None else planet.lake_mesh,
+        planet_mesh=planet.mesh if planet.planet_mesh is None else planet.planet_mesh,
+        ice=planet.ice,
+        ice_margin=planet.ice_margin_m,
     )
     # Coarser tiles leave out volcanoes and wonders, which windows redraw sharply
     # from the planet's lists. The patch carries them as young relief on top of

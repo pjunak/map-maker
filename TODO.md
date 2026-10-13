@@ -21,6 +21,8 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
   - [ ] Use the bathymetry product as the ocean floor, or record why not.
 - [ ] **M3 climate:** monthly outputs, below-sea-level basins and an energy-balance check.
+  - [ ] Ice shelves in cold embayments and seasonal sea ice; mountain glaciers
+    below the mesh spacing ([ice report](docs/research/2026-10-13-ice-sheets.md)).
 - [ ] **M4 workflow:** compare and regenerate in the World tab.
 - [ ] **M5 adoption:**
   - [ ] Reference-world quality gates and an accepted planet parent.

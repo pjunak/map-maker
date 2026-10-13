@@ -31,7 +31,6 @@ from dmtools.terrain.pipeline.world import WorldMap
 type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
 
-ICE_BIOME = 1
 SECONDS_PER_YEAR = 365.25 * 86400
 
 
@@ -154,11 +153,8 @@ def scalar_image(
 
 
 def ice_covered(result: PlanetResult) -> B:
-    """Nodes under permanent ice (no surface rivers or lakes are drawn there)."""
-    climate = result.climate
-    if climate is None:
-        return np.zeros(result.mesh.size, dtype=bool)
-    return climate.biome == ICE_BIOME
+    """Nodes under an ice sheet (no surface rivers or lakes are drawn there)."""
+    return result.ice.thickness_m > 0
 
 
 def river_threshold_m3_s(result: PlanetResult, area_km2: float) -> float:

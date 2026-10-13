@@ -55,6 +55,7 @@ from dmtools.terrain.pipeline.planet_forcing import (
     land_on_mesh,
     ocean_floor,
 )
+from dmtools.terrain.pipeline.planet_ice import IceSheets, ice_sheets
 from dmtools.terrain.pipeline.planet_kernels import accumulate
 from dmtools.terrain.pipeline.planet_lakes import Lakes, balance_lakes, young_depressions
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_field
@@ -133,6 +134,7 @@ class PlanetResult:
     islands: B  # water nodes standing above sea level as volcanic islands (opt-in)
     wonders: Wonders  # opt-in or hand-placed craters and chasms
     wonder_m: F64  # height change each node took from craters and chasms (display)
+    ice: IceSheets  # ice sheets on land (ADR-0093); none without climate
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
 
@@ -417,9 +419,17 @@ def generate_planet(
         wonder_m = np.where(land, wonder_relief(mesh.xyz, mesh.radius_m, wonders), 0.0)
         levelled = level_crater_floors(mesh, evolved, craters)
         evolved = np.where(land, np.maximum(levelled + wonder_m, 1.0), evolved)
+    ice = IceSheets.none(mesh.size)
+    if climate is not None:
+        say(0.95, "Growing ice sheets")
+        ice = ice_sheets(
+            mesh, land, evolved, np.where(land, result.run.elevation, 0.0), climate.warm_c,
+            climate.precipitation_mm, settings.climate.lapse_c_per_km, settings.seed,
+            partial(check_cancelled, cancellation),
+        )
     depressions = young_depressions(
-        mesh, land, coast, regions, None if climate is None else climate.warm_c, evolved,
-        seeds[PLANET_FORCING_STAGE_ID],
+        mesh, land, coast, regions, None if climate is None else climate.warm_c,
+        ice.thickness_m, evolved, seeds[PLANET_FORCING_STAGE_ID],
     )
     # Land stays at least 1 m above sea level (no below-sea-level basins yet).
     lakes = balance_lakes(
@@ -526,6 +536,6 @@ def generate_planet(
     return PlanetResult(
         world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
         regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, wonders,
-        wonder_m, seeds, metrics,
+        wonder_m, ice, seeds, metrics,
     )
 

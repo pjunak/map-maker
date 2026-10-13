@@ -1,6 +1,6 @@
 # Terrain method decisions and failed experiments
 
-Updated 2026-09-28 through T18 continuous context-distance bounds.
+Updated 2026-10-13 through T19 ice-sheet extent as a fixed point.
 This is the living record of
 material generation approaches that were rejected, constrained or retained only
 as references. A failed method does not remove its desired feature from the plan.
@@ -494,6 +494,29 @@ a false zero-height strip near coarse support. Revisit only if tighter continuou
 bounds have a measured terrain benefit and preserve the same proof, edge continuity
 and source-coast zero behavior. See the
 [M1 report](2026-09-28-context-bound-rough-terrain.md).
+
+## T19 - Find ice extent as a fixed point of balance flux and a plastic profile
+
+**Hypothesis.** Ice lies where accumulation routed down its surface outlasts melt,
+on Nye's perfectly plastic profile from the resulting margin; iterating the two
+reaches a self-consistent extent without time stepping.
+
+**Control and inputs.** Aethelara 800k nodes, the planet's climate and relief, the
+same mass balance later adopted (Ohmura melt, lapse, drying, albedo share).
+
+**Outcome.** No fixed point. About 345 margin nodes flipped every iteration as
+routing changed with the surface. A monotone growth phase settled after 95
+iterations at 8,164 nodes; trimming unsupported nodes then removed 587, 364, 172,
+107, 77, 62, 46, 43, 41 and 35 nodes in turn without stopping.
+
+**Diagnosed cause.** Extent is binary while flux, surface and routing respond
+continuously: removing a margin node lowers its neighbours' plastic surface and
+their balance, which unsupports the next ring.
+
+**Disposition.** Replaced by shallow-ice time stepping, which converges by time
+([ADR-0093](../adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md),
+[report](2026-10-13-ice-sheets.md)). Revisit only for a steady-state solver with a
+continuous margin (for example a level set) that is cheaper than time stepping.
 
 ## What the failures change
 

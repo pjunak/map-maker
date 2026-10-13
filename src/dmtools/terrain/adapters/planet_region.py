@@ -5,7 +5,7 @@
 import json
 import os
 from dataclasses import asdict, dataclass
-from functools import cache
+from functools import cache, partial
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
@@ -21,6 +21,7 @@ from scipy.ndimage import (
     distance_transform_edt,
     gaussian_filter,
     label,
+    map_coordinates,
     maximum,
     minimum_position,
 )
@@ -30,12 +31,17 @@ from dmtools.terrain.adapters.map_parchment import parchment_image
 from dmtools.terrain.adapters.map_topographic import topographic_image
 from dmtools.terrain.adapters.planet_natural import (
     HYPSOMETRIC,
+    ICE_SMOOTHING_SPACINGS,
+    ICE_UNDULATION_FINEST_M,
     LAKE,
     REGION_FALLS_SLOPE,
     RIVER,
     SALT_FLAT,
+    IcePixels,
     PixelClimate,
     erg_cover,
+    ice_surface,
+    ice_undulation,
     land_colour,
     paint_falls,
     parchment_inputs,
@@ -185,6 +191,8 @@ class RegionWindow:
     detail_spacing_m: float = 5000.0  # node spacing of the detail level shown
     seed: int = 0  # planet master seed: display detail belongs to the world
     cover: WonderCover | None = None  # lava, ash and glow of the wonders
+    ice_surface_m: F64 | None = None  # ice-sheet surface (ADR-0093); NaN off the ice
+    ice_balance_m: F64 | None = None  # its surface mass balance (m of ice a year)
 
     @property
     def pixel_m(self) -> float:
@@ -269,6 +277,12 @@ def crop_window(window: RegionWindow, extra: int, pixels: int) -> RegionWindow:
         window.detail_spacing_m,
         window.seed,
         None if window.cover is None else window.cover.crop(rows),
+        (
+            None
+            if window.ice_surface_m is None
+            else np.where(circle, cut(window.ice_surface_m), np.nan)
+        ),
+        None if window.ice_balance_m is None else cut(window.ice_balance_m),
     )
 
 
@@ -326,6 +340,7 @@ def _compose(
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
     pixel_m = 2 * radius_m / pixels
+    ice_surface, ice_balance = window_ice(parent, points, elevation, land, pixel_m, spacing_m)
     flow = window_flow(parent, points, elevation, land, inside, pixel_m)
     # Lakes fill the regional relief up to the parent lake level, so shores
     # follow the fine terrain (and a crater's sharp trough) instead of the
@@ -364,6 +379,11 @@ def _compose(
         # An erupting vent holds molten rock, never water.
         molten = cover.glow > 0.2
         lakes, salt, playa = lakes & ~molten, salt & ~molten, playa & ~molten
+    if ice_surface is not None:
+        # Ice sheets hold no open water; their meltwater runs beneath them.
+        iced = ice_surface > elevation
+        lakes, salt, playa = lakes & ~iced, salt & ~iced, playa & ~iced
+        coverage = np.where(iced, 0.0, coverage)
     coverage = np.where(land & ~lakes, coverage, 0.0)
     return RegionWindow(
         centre,
@@ -397,7 +417,50 @@ def _compose(
         spacing_m,
         parent.settings.seed,
         cover,
+        ice_surface,
+        ice_balance,
     )
+
+
+def window_ice(
+    parent: RegionalParent, points: F64, elevation: F64, land: B, pixel_m: float, spacing_m: float
+) -> tuple[F64 | None, F64 | None]:
+    """Ice-sheet surface (NaN off the ice) and mass balance of a window, or Nones.
+
+    The planet's ice rests on the window's bed smoothed over the planet's mesh
+    spacing: thick ice does not follow small bed relief. Its margin is refined
+    down to the level's detail, like lake outlines.
+    """
+    found = parent.ice_at(points, level_finest_m(spacing_m))
+    if found is None:
+        return None, None
+    shape = elevation.shape
+    margin, thickness, balance = (v.reshape(shape) for v in found)
+    if not np.any(land & (margin > 0)):
+        return None, None
+    mesh = parent.mesh if parent.planet_mesh is None else parent.planet_mesh
+    sigma = ICE_SMOOTHING_SPACINGS * mesh.spacing_m / pixel_m
+    bed = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0)
+    waves = ice_undulation(
+        points, mesh.radius_m, max(2 * pixel_m, ICE_UNDULATION_FINEST_M)
+    ).reshape(shape)
+    on_ice, surface = ice_surface(
+        margin, thickness, bed, partial(_wide_blur, sigma=sigma), waves
+    )
+    return np.where(land & on_ice, surface, np.nan), balance
+
+
+def _wide_blur(values: F64, sigma: float) -> F64:
+    """Gaussian blur that stays cheap for sigmas of hundreds of pixels."""
+    step = max(1, int(sigma / 4))
+    if step == 1:
+        return gaussian_filter(values, sigma, mode="nearest")
+    coarse = gaussian_filter(values[::step, ::step], sigma / step, mode="nearest")
+    rows, columns = values.shape
+    # Coarse sample k lies on fine pixel k * step.
+    r = np.clip(np.arange(rows) / step, 0, (rows - 1) // step)
+    c = np.clip(np.arange(columns) / step, 0, (columns - 1) // step)
+    return map_coordinates(coarse, np.meshgrid(r, c, indexing="ij"), order=1, mode="nearest")
 
 
 def playa_beds(ponds: B, depth: F64) -> B:
@@ -730,7 +793,18 @@ def display_relief(window: RegionWindow) -> F64:
         riser = np.clip((relief - level) / TRAP_STEP_M, 0, 1)
         benches = level + TRAP_STEP_M * np.clip((riser - 0.7) / 0.3, 0, 1) ** 2
         relief = relief + (benches - relief) * 0.8 * window.basalt
+    if window.ice_surface_m is not None:
+        # Ice fills the relief up to its surface; nunataks rise through it.
+        relief = np.fmax(relief, window.ice_surface_m)
     return np.where(land, np.maximum(relief, 1.0), z)
+
+
+def window_ice_cover(window: RegionWindow, relief: F64) -> F64:
+    """Anti-aliased ice cover (0..1) of a window's display relief."""
+    if window.ice_surface_m is None:
+        return np.zeros(relief.shape)
+    covered = window.land & (relief <= np.nan_to_num(window.ice_surface_m, nan=-1e9) + 0.01)
+    return gaussian_filter(covered.astype(np.float64), 0.6)
 
 
 def _smooth_step(x: F64, a: float, b: float) -> F64:
@@ -771,6 +845,11 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             REGION_SLOPE_SCALE,
             window.basalt,
             window.cover,
+            (
+                None
+                if window.ice_balance_m is None
+                else IcePixels(window_ice_cover(window, z), window.ice_balance_m)
+            ),
         )
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
@@ -802,7 +881,7 @@ def window_topographic(window: RegionWindow) -> Image.Image:
     shown = np.where(np.isfinite(window.elevation_m), z, np.nan)
     return topographic_image(
         shown, window.land, window.lakes, window.rivers, light, window.pixel_m, window.pixel_m,
-        local=True, playa=window.playa,
+        window_ice_cover(window, z) > 0.5, local=True, playa=window.playa,
     )
 
 
@@ -827,7 +906,7 @@ def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
     )
     inputs = parchment_inputs(
         shown, cover, np.where(np.isfinite(window.elevation_m), z, np.nan), window.land,
-        window.lakes | window.playa, window.rivers, light, np.zeros_like(window.land),
+        window.lakes | window.playa, window.rivers, light, window_ice_cover(window, z) > 0.5,
     )
     return parchment_image(inputs, seed, float(np.clip(window.pixels / 45, 12, 30)))
 

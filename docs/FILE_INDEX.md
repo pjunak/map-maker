@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 92 |
-| Dated research reports | 96 |
+| Architecture decision records | 93 |
+| Dated research reports | 97 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **238** |
+| **Total** | **240** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (92)
+## Architecture decision records (93)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -196,14 +196,16 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0090-regional-coast-detail-below-drawing-precision.md](adr/0090-regional-coast-detail-below-drawing-precision.md) | Regional levels use the drawn coast smoothed at its precision plus nested fractal detail; the planet keeps the exact coast. |
 | [docs/adr/0091-age-wonders-on-their-own-patches.md](adr/0091-age-wonders-on-their-own-patches.md) | Each aged wonder is eroded on its own patch with the planet's stream-power model; maps draw the aged relief in place of the fresh shape. |
 | [docs/adr/0092-regional-lakes-fill-the-regional-relief.md](adr/0092-regional-lakes-fill-the-regional-relief.md) | Regional lakes fill the window relief from the parent lake's core, closed lakes are sinks, tiles hold lakes without young relief, and lake outlines get nested detail. |
+| [docs/adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md](adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md) | Ice sheets grow from snowfall against melt by shallow-ice flow with height, albedo and regional-climate feedbacks; large sheets are drawn with their own surface inside refined margins. |
 
-## Dated research reports (96)
+## Dated research reports (97)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-13-ice-sheets.md](research/2026-10-13-ice-sheets.md) | Ice sheets: causes of the latitude-line ice edge, mass balance and shallow-ice trials, sheet versus glacier drawing, margins and Aethelara results. |
 | [docs/research/2026-10-12-regional-lake-shores.md](research/2026-10-12-regional-lake-shores.md) | Straight regional lake shores: causes, the relief flood, crater lakes held in the tiles' frame, refined outlines, open-lake playa rings and Aethelara measurements. |
 | [docs/research/2026-10-12-straight-display-lines.md](research/2026-10-12-straight-display-lines.md) | Straight lines in regional hillshade: display carving across filled depressions and stepped ridged detail; isolating experiment, fixes, tests and Aethelara before/after. |
 | [docs/research/2026-10-11-regional-coast-detail.md](research/2026-10-11-regional-coast-detail.md) | Regional coast detail below the drawing's precision: method trials, chosen parameters and Aethelara before/after. |

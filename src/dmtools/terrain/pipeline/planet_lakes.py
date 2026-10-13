@@ -66,6 +66,7 @@ def young_depressions(
     coast_m: F64,
     regions: GeologyRegions | None,
     warm_season_c: F64 | None,
+    ice_m: F64 | None,
     elevation_m: F64,
     seed: int,
 ) -> F64:
@@ -100,9 +101,9 @@ def young_depressions(
         district = _smoothstep(fbm3(p, seed + 708, 2, 8.0), -0.2, 0.3)
         scour = _smoothstep(knobs, -0.05, 0.3) * district
         depth += GLACIAL_SCOUR_DEPTH_M * glaciated * scour
-    if warm_season_c is not None:
-        # Land still under ice has no open water: its depressions hold ice, not lakes.
-        depth *= _smoothstep(warm_season_c, -1.0, 2.0)
+    if ice_m is not None:
+        # Land under an ice sheet has no open water: its depressions hold ice, not lakes.
+        depth = np.where(ice_m > 0, 0.0, depth)
     # Coastal scour would make fjords (sea), not lakes; keep depressions inland.
     return np.where(land, depth * _smoothstep(coast_m, 30e3, 100e3), 0.0)
 

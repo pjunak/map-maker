@@ -121,3 +121,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0090: Add coast detail below the drawing's precision at regional levels](0090-regional-coast-detail-below-drawing-precision.md)
 - [ADR-0091: Age wonders by eroding each on its own patch](0091-age-wonders-on-their-own-patches.md)
 - [ADR-0092: Fill regional lakes on the regional relief, with refined outlines](0092-regional-lakes-fill-the-regional-relief.md)
+- [ADR-0093: Grow ice sheets from mass balance by shallow-ice flow](0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md)

@@ -23,6 +23,7 @@ from dmtools.terrain.adapters.world_project import read_world_project
 from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
 from dmtools.terrain.pipeline.planet_aging import AgedPatch, Aging
 from dmtools.terrain.pipeline.planet_eruptions import Eruptions
+from dmtools.terrain.pipeline.planet_ice import IceSheets
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
 from dmtools.terrain.pipeline.planet_scarps import Cliffs, Tepuis
@@ -132,6 +133,13 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
             ),
             volcanic_m=data["volcanic_m"].astype(np.float64),
             wonder_m=data["wonder_m"].astype(np.float64),
+            ice=(
+                IceSheets(
+                    data["ice_m"].astype(np.float64), data["ice_balance_m"].astype(np.float64)
+                )
+                if "ice_m" in data
+                else None
+            ),
             wonders=Wonders(
                 Craters(
                     data["crater_xyz"].astype(np.float64).reshape(-1, 3),

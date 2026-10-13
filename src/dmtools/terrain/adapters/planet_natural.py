@@ -13,12 +13,15 @@ biome fills:
   - aridity P/PET with soil patchiness sets desert, steppe, grass or forest;
   - temperature, lapse-corrected to the pixel's height, picks tropical,
     temperate or boreal forest, tundra and perennial snow;
-  - slope exposes rock, and bare dryland hills read dark brown.
+  - slope exposes rock, and bare dryland hills read dark brown;
+  - ice sheets (ADR-0093) show firn above their equilibrium line and bare blue
+    ice below it, on a smooth surface where it rises above the detailed relief.
 * **Ocean colour.** Depth-tinted, with subtly shaded abyssal texture.
 * **Rivers.** Tapered with discharge, smoothed and anti-aliased.
 """
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from typing import Any, cast
 
 import numpy as np
@@ -40,7 +43,13 @@ from dmtools.terrain.adapters.planet_render import (
 )
 from dmtools.terrain.pipeline.planet import PlanetResult
 from dmtools.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
-from dmtools.terrain.pipeline.planet_kernels import multi_source_distance, neighbour_mix
+from dmtools.terrain.pipeline.planet_ice import (
+    equilibrium_line_c,
+    ice_sheet_nodes,
+    margin_distance,
+    nye_thickness,
+    sample_ice,
+)
 from dmtools.terrain.pipeline.planet_volcanism import GUYOT_DEPTH_M, SEAMOUNT, edifice_height
 from dmtools.terrain.pipeline.planet_wonders import WonderCover, wonder_cover, wonder_relief
 
@@ -60,8 +69,21 @@ OPENNESS_SCALES = ((8e3, 0.4, 120.0), (30e3, 0.35, 350.0), (120e3, 0.25, 800.0))
 OPENNESS_GAIN = 0.3
 # Moisture shift (in log aridity) between ridge crests and valley floors.
 TERRAIN_MOISTURE = 0.5
-ICE_BASAL_STRESS_PA = 1e5
-ICE_BED_SMOOTHING_M = 150e3
+# The ice surface is smoothed over this share of the mesh spacing, which hides
+# the facets of triangle-linear interpolation.
+ICE_SMOOTHING_SPACINGS = 0.6
+# Ice surfaces undulate by tens of metres over kilometres where flow crosses
+# bed relief, and by metres over hundreds of metres (dunes, sastrugi fields);
+# the undulations give the domes texture in hillshade at every scale.
+ICE_UNDULATION_M = 50.0  # amplitude of the coarsest octave
+ICE_UNDULATION_WAVELENGTH_M = 40e3
+ICE_UNDULATION_FINEST_M = 400.0
+ICE_UNDULATION_SEED = 31
+# Polar sun stands low, so ice relief reads strongly in imagery: gentle ice
+# slopes get this much more hillshade contrast than land, saturating at
+# ICE_SHADE_LIMIT so steep ice fronts do not turn black.
+ICE_SHADE_GAIN = 2.5
+ICE_SHADE_LIMIT = 0.5
 
 DESERT_HOT: RGB = (208, 186, 146)
 DESERT_COLD: RGB = (176, 166, 140)
@@ -83,6 +105,7 @@ WETLAND: RGB = (92, 98, 70)
 ROCK: RGB = (132, 122, 112)
 BARE_DRYLAND: RGB = (124, 102, 80)
 SNOW: RGB = (242, 244, 247)
+BARE_ICE: RGB = (176, 196, 210)  # ablation-zone glacier ice, bluish grey
 VOLCANIC_ROCK: RGB = (82, 74, 70)
 BASALT_SOIL: RGB = (96, 86, 72)
 FRESH_LAVA: RGB = (34, 31, 30)
@@ -135,6 +158,18 @@ def ramp(z: F64, stops: tuple[tuple[float, RGB], ...]) -> F64:
     return np.stack([np.interp(z, xs, [s[1][k] for s in stops]) for k in range(3)], axis=-1)
 
 
+@dataclass(frozen=True, slots=True)
+class IcePixels:
+    """Ice sheets at each pixel (ADR-0093)."""
+
+    cover: F64  # 0..1, anti-aliased
+    balance_m: F64  # surface mass balance (m of ice a year): firn above 0, bare ice below
+
+    @property
+    def covered(self) -> B:
+        return self.cover > 0.5
+
+
 @dataclass(frozen=True)
 class DisplayFields:
     """Per-pixel fields shared by the natural and relief maps."""
@@ -145,6 +180,41 @@ class DisplayFields:
     light: F64  # multi-directional hillshade, 1.0 on flat ground
     position: F64  # -1 (valley floor) .. +1 (ridge crest), multi-scale openness
     volcanic: F64  # 0..1 cover of young volcanic edifices
+    ice: IcePixels
+
+
+def ice_surface(
+    margin_m: F64,
+    thickness_m: F64,
+    bed_m: F64,
+    smooth: Callable[[F64], F64],
+    undulation: F64,
+) -> tuple[B, F64]:
+    """Where ice lies inside its margin, and its surface (m).
+
+    The ice rests on the mesh-scale bed ``bed_m``; ``smooth`` removes the
+    facets of interpolation. Near the margin, thickness follows Nye's profile.
+    Maps draw ice where this surface lies above their detailed relief, so thin
+    ice near the margin fills valleys and leaves ridges bare, and nunataks rise
+    through thicker ice.
+    """
+    thickness = np.minimum(smooth(thickness_m), nye_thickness(margin_m))
+    surface = smooth(bed_m) + thickness + undulation * _smooth(thickness, 0.0, 300.0)
+    return (margin_m > 0) & (thickness > 0), surface
+
+
+def ice_undulation(points: F64, radius_m: float, finest_m: float) -> F64:
+    """Surface undulation (m) of ice sheets down to ``finest_m``, anchored to the world.
+
+    Finer maps add octaves; coarser octaves keep their height.
+    """
+    octaves = max(1, min(8, 1 + int(np.log(ICE_UNDULATION_WAVELENGTH_M / finest_m) / np.log(2.03))))
+    gain = 0.5
+    waves = eroded_fbm(
+        points, np.zeros(len(points)), ICE_UNDULATION_SEED, octaves,
+        radius_m / ICE_UNDULATION_WAVELENGTH_M, gain, 0.0,
+    )
+    return ICE_UNDULATION_M * waves * sum(gain**k for k in range(octaves))
 
 
 def display_fields(
@@ -206,11 +276,29 @@ def display_fields(
     land = np.maximum(
         base_land + amplitude * detail - valley_depth(rough, raster, land_px, amplitude), 1.0
     )
-    ice = ice_covered(result)
-    if ice.any():
-        surface = raster.interpolate(mesh, np.where(ice, ice_surface(result, ice), 0.0))
-        covered = land_px & (raster.interpolate(mesh, ice.astype(np.float64)) > 0.5)
-        land = np.where(covered, np.maximum(surface, land), land)
+    covered = np.zeros(shape, dtype=bool)
+    balance = np.zeros(shape)
+    sheets = ice_sheet_nodes(
+        mesh, result.ice.thickness_m, np.where(result.land, result.lakes.surface_m, 0.0)
+    )
+    if sheets.any():
+        margin, thickness, balance = (
+            v.reshape(shape)
+            for v in sample_ice(
+                mesh, result.ice, margin_distance(mesh, sheets), points,
+                6 * np.pi * radius / columns, result.settings.seed,
+            )
+        )
+        bed = raster.interpolate(mesh, np.where(result.land, np.maximum(result.elevation_m, 0), 0))
+
+        def smooth(values: F64) -> F64:
+            return blur_m(values, ICE_SMOOTHING_SPACINGS * mesh.spacing_m, dy, dx[:, 0])
+
+        pixel_m = 2 * np.pi * radius / columns
+        waves = ice_undulation(points, radius, max(2 * pixel_m, ICE_UNDULATION_FINEST_M))
+        on_ice, surface = ice_surface(margin, thickness, bed, smooth, waves.reshape(shape))
+        covered = on_ice & land_px & (surface > land)
+        land = np.where(covered, surface, land)
     hills = eroded_fbm(
         points, np.zeros(len(points)), DETAIL_SEED + 4, 5, radius / 60e3, 0.55, 0.0
     ).reshape(shape)
@@ -230,30 +318,8 @@ def display_fields(
         raster.interpolate(mesh, np.where(result.islands, result.elevation_m, 0.0)),
         base_land - sharp - cut,
     )
-    return DisplayFields(z, base, slope, light, position, volcanic)
-
-
-def ice_surface(result: PlanetResult, ice: B) -> F64:
-    """Display surface of ice sheets (m): Nye's perfectly plastic profile.
-
-    Basal shear stress tau0 ~ 100 kPa gives a thickness h = sqrt(2 tau0 / (rho g) d)
-    at a distance d from the ice margin: ~3.3 km at 500 km, as on Antarctica and
-    Greenland. The ice rests on a smoothed bed, so it shades as a smooth dome;
-    nunataks keep their own height where they rise above it.
-    """
-    mesh = result.mesh
-    bed = np.where(result.land, np.maximum(result.elevation_m, 0.0), 0.0)
-    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
-    margin = np.flatnonzero(np.bincount(src, ice[src] & ~ice[mesh.nbr], mesh.size) > 0)
-    if not len(margin):
-        return bed
-    inside = multi_source_distance(
-        margin, np.zeros(margin.size), mesh.ptr, mesh.nbr, mesh.length_m
-    )
-    thickness = np.sqrt(2 * ICE_BASAL_STRESS_PA / (917.0 * 9.81) * inside)
-    passes = max(1, round((ICE_BED_SMOOTHING_M / mesh.spacing_m) ** 2))
-    smooth_bed = neighbour_mix(bed, mesh.ptr, mesh.nbr, np.full(mesh.size, 0.5), passes)
-    return np.where(ice, np.maximum(smooth_bed + thickness, bed), bed)
+    ice = IcePixels(gaussian_filter(covered.astype(np.float64), 0.6), balance)
+    return DisplayFields(z, base, slope, light, position, volcanic, ice)
 
 
 def openness(z: F64, dy_m: float, dx_m: F64) -> F64:
@@ -266,18 +332,26 @@ def openness(z: F64, dy_m: float, dx_m: F64) -> F64:
     """
     total = np.zeros_like(z)
     for radius_m, weight, scale_m in OPENNESS_SCALES:
-        blurred = gaussian_filter1d(z, radius_m / dy_m, axis=0, mode="nearest")
-        # Rows share a latitude-dependent east-west sigma; blur bands of rows
-        # with similar sigma together.
-        sigma = np.minimum(radius_m / dx_m, z.shape[1] / 4)
-        bands = np.round(np.log(sigma) * 8).astype(np.int64)
-        for band in np.unique(bands):
-            rows = bands == band
-            blurred[rows] = gaussian_filter1d(
-                blurred[rows], float(np.median(sigma[rows])), axis=1, mode="wrap"
-            )
-        total += weight * np.tanh((z - blurred) / scale_m)
+        total += weight * np.tanh((z - blur_m(z, radius_m, dy_m, dx_m)) / scale_m)
     return total
+
+
+def blur_m(z: F64, sigma_m: float, dy_m: float, dx_m: F64) -> F64:
+    """Gaussian blur of a world-frame raster with ``sigma_m`` metres on the ground.
+
+    ``dx_m`` is the east-west pixel width of each row; columns wrap around.
+    """
+    blurred = gaussian_filter1d(z, sigma_m / dy_m, axis=0, mode="nearest")
+    # Rows share a latitude-dependent east-west sigma; blur bands of rows with
+    # similar sigma together.
+    sigma = np.minimum(sigma_m / dx_m, z.shape[1] / 4)
+    bands = np.round(np.log(sigma) * 8).astype(np.int64)
+    for band in np.unique(bands):
+        rows = bands == band
+        blurred[rows] = gaussian_filter1d(
+            blurred[rows], float(np.median(sigma[rows])), axis=1, mode="wrap"
+        )
+    return blurred
 
 
 def valley_depth(rough: F64, raster: FrameRaster, land_px: B, amplitude: F64) -> F64:
@@ -417,8 +491,9 @@ def land_colour(
     slope_scale: float = 1.0,
     basalt: F64 | None = None,
     overlay: WonderCover | None = None,
+    ice: IcePixels | None = None,
 ) -> F64:
-    """Continuous natural land colour (desert to forest, tundra, rock, snow), shaded.
+    """Continuous natural land colour (desert to forest, tundra, rock, snow, ice), shaded.
 
     ``wet`` (0..1, blurred river coverage) greens river corridors in drylands.
     ``position`` (-1 valley floor .. +1 ridge crest) ties the vegetation mosaic
@@ -482,6 +557,11 @@ def land_colour(
     shed = np.clip(0.85 * _smooth(slope, 0.3, 0.7) + exposed, 0.0, 0.9)
     snow = _smooth(cold, -0.8, 1.0) * (1 - shed)
     colour = _mix(colour, SNOW, snow)
+    sheet = np.zeros(shape) if ice is None else ice.cover
+    if ice is not None:
+        # Firn above an ice sheet's equilibrium line, bare bluish ice below it.
+        firn = _smooth(ice.balance_m, -0.2, 0.05)
+        colour = _mix(colour, _mix(_fill(shape, BARE_ICE), SNOW, firn), sheet)
     if overlay is not None:
         # Fresh lava is bare black rock in any climate; ash greys the ground and
         # thins the vegetation under it.
@@ -490,7 +570,10 @@ def land_colour(
         # An oasis: date palms and gardens around its spring.
         colour = _mix(colour, OASIS_GREEN, 0.9 * overlay.green)
     texture = eroded_fbm(points, zeros, 23, 4, radius_m / 25e3, 0.6, 0.0).reshape(shape)
-    colour *= (1 + 0.045 * texture + 0.05 * patch)[..., None]
+    # Ice sheets carry no soil or vegetation mosaic.
+    colour *= (1 + (0.045 * texture + 0.05 * patch) * (1 - 0.8 * sheet))[..., None]
+    boosted = 1 + ICE_SHADE_LIMIT * np.tanh(ICE_SHADE_GAIN * (light - 1) / ICE_SHADE_LIMIT)
+    light = light + sheet * (boosted - light)
     shaded = colour * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
     if overlay is not None:
         # Molten rock glows by its own light; spring ponds are flat water.
@@ -520,17 +603,6 @@ def erg_cover(
     zeros = np.zeros(len(points))
     patches = eroded_fbm(points, zeros, 61, 4, radius_m / 500e3, 0.5, 0.0).reshape(shape)
     return arid * flat * low * _smooth(patches, -0.05, 0.1)
-
-
-def equilibrium_line_c(precipitation_mm: F64) -> F64:
-    """Summer air temperature (deg C) at a glacier's equilibrium line.
-
-    Inverts Ohmura et al. (1992), P = 645 + 296 T + 9 T^2 (P in mm/yr, T the
-    summer mean at the ELA): about -2 C for 100 mm, +1 C for 1,000 mm and +4 C
-    for 2,000 mm of precipitation.
-    """
-    p = np.clip(precipitation_mm, 0.0, 6000.0)
-    return (-296.0 + np.sqrt(np.maximum(296.0**2 - 36.0 * (645.0 - p), 0.0))) / 18.0
 
 
 def _fill(shape: tuple[int, ...], colour: RGB) -> F64:
@@ -592,6 +664,7 @@ def natural_colour(
         0.6 * rivers,
         fields.position,
         volcanic=fields.volcanic,
+        ice=fields.ice,
         basalt=(
             None
             if result.forcing.flood_basalt is None
@@ -838,7 +911,10 @@ def preview_images(
     fields = display_fields(
         result, rasters.raster, land_px, base_land, base_sea, rasters.islands_px
     )
-    rivers = river_layer(result, rasters.raster, threshold_m3_s)
+    # No rivers or lakes show on ice sheets.
+    rivers = river_layer(result, rasters.raster, threshold_m3_s) * (1 - fields.ice.cover)
+    covered = fields.ice.covered
+    rasters = replace(rasters, lakes_px=np.where(covered, -1, rasters.lakes_px))
     sea = sea_colour(fields)
     images: dict[str, Image.Image] = {}
     if result.climate is not None:
@@ -859,7 +935,6 @@ def preview_images(
     images |= climate_images(result, rasters)
     rows, columns = land_px.shape
     radius = result.mesh.radius_m
-    covered = rasters.raster.interpolate(result.mesh, ice_covered(result).astype(np.float64)) > 0.5
     images["Planet topographic"] = topographic_image(
         fields.elevation_m, land_px, rasters.lakes_px >= 0, rivers, fields.light,
         np.pi * radius / rows,

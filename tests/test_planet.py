@@ -16,6 +16,7 @@ from PIL import Image
 from benchmarks.planet.sample_geology import sample_recipe
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
 from dmtools.terrain.adapters.build import file_sha256
+from dmtools.terrain.adapters.planet_load import read_planet_parent
 from dmtools.terrain.adapters.world_geology import write_geology
 from dmtools.terrain.application.planet import build_planet, input_identity
 from dmtools.terrain.application.world import open_world
@@ -220,6 +221,13 @@ def test_planet_build_publishes_verified_world_aligned_products(
         assert np.all(archive["elevation_m"][land] >= 1.0)
         assert set(np.unique(archive["biome"][land]).tolist()) <= set(range(1, 14))
         assert archive["xyz"].shape == (FAST.nodes, 3)
+        ice, balance = archive["ice_m"], archive["ice_balance_m"]
+        assert np.all(np.isfinite(ice)) and np.all(ice >= 0) and not ice[~land].any()
+        assert np.all(np.isfinite(balance))
+    assert 0.0 <= manifest["climate"]["ice_sheet_share"] <= 1.0
+    loaded = read_planet_parent(target).parent
+    assert loaded.ice is not None
+    assert np.allclose(loaded.ice.thickness_m, ice)
     with rasterio.open(target / "elevation.tif") as tif:
         assert (tif.width, tif.height) == (256, 128)
         assert tif.crs is not None and "6371000" in tif.crs.to_wkt()
@@ -351,13 +359,14 @@ def test_ice_sheets_hold_no_young_lakes() -> None:
     land = np.ones(mesh.size, dtype=bool)
     coast = np.full(mesh.size, 1e6)
     flat = np.full(mesh.size, 200.0)
-    ice_free = young_depressions(mesh, land, coast, None, np.full(mesh.size, 10.0), flat, 1)
-    ice = young_depressions(mesh, land, coast, None, np.full(mesh.size, -5.0), flat, 1)
+    cool = np.full(mesh.size, 10.0)
+    ice_free = young_depressions(mesh, land, coast, None, cool, None, flat, 1)
     assert ice_free.max() > 0
-    # Under permanent ice only non-glacial sags remain; scour adds nothing.
-    no_scour = young_depressions(mesh, land, coast, None, None, flat, 1)
-    assert np.all(ice <= no_scour + 1e-9)
-    assert np.all(ice <= ice_free + 1e-9)
+    # Under an ice sheet depressions hold ice, not lakes; beside it they stay.
+    sheet = np.where(mesh.xyz[:, 2] > 0, 1500.0, 0.0)
+    iced = young_depressions(mesh, land, coast, None, cool, sheet, flat, 1)
+    assert not iced[sheet > 0].any()
+    assert np.array_equal(iced[sheet == 0], ice_free[sheet == 0])
 
 
 def test_fine_meshes_couple_climate_on_coarser_meshes(
@@ -649,8 +658,8 @@ def test_summer_rain_belts_reach_further_over_heated_subtropical_land() -> None:
 
 
 def test_snowline_rises_with_dryness_and_massifs_warm_in_summer() -> None:
-    from dmtools.terrain.adapters.planet_natural import equilibrium_line_c
     from dmtools.terrain.pipeline.planet_climate import mass_elevation_warming
+    from dmtools.terrain.pipeline.planet_ice import equilibrium_line_c
     from dmtools.terrain.pipeline.planet_mesh import build_mesh
 
     ela = equilibrium_line_c(np.array([100.0, 1000.0, 2000.0]))

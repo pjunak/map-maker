@@ -201,7 +201,7 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 
 | File | Contents |
 |---|---|
-| `atlas.png` | Natural-colour shaded relief: vegetation from dryness and temperature, rock, snow, depth-tinted sea, lakes and rivers (needs climate). |
+| `atlas.png` | Natural-colour shaded relief: vegetation from dryness and temperature, rock, snow, ice sheets, depth-tinted sea, lakes and rivers (needs climate). |
 | `relief.png` | Hypsometric shaded relief with rivers. |
 | `precipitation.png`, `temperature.png` | Annual climate previews. |
 | `koppen.png` | Köppen–Geiger climate zones in their standard colours. |
@@ -214,7 +214,7 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
 | `volcanoes.geojson` | Volcano points with kind (stratovolcano, shield, caldera, seamount), setting (arc, hotspot, rift, intraplate), activity, age, summit height and size. |
-| `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields. |
+| `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields, and ice thickness and mass balance. |
 | `world.dmworld.json`, `geology.dmgeology.json` | Snapshots of the inputs used. |
 | `manifest.json` | Settings, stage seeds, input hashes, runtime, calibration, metrics and output hashes ([schema](../schemas/world/planet-build-v1.schema.json)). |
 
@@ -261,9 +261,16 @@ SVG's size and it lies under your coastline drawing.
    - **Runoff** is rain minus evaporation. It makes wet regions erode more in the
      next pass.
    - **Biomes** come from temperature and dryness.
+   - **Ice sheets** grow where snowfall outweighs summer melt at the ice's own
+     surface, which their height and brightness cool, and flow outward under
+     their weight until melt at the margin balances them (ADR-0093). Dry polar
+     plains can stay bare; wet uplands carry ice caps. Large sheets are drawn
+     with their own smooth surface, firn above the snowline and bare blue ice
+     below it; mountain ice is drawn as snow and glaciers on the relief.
 5. **Lakes.**
    - **Young depressions** are added where geology or climate says they belong:
-     rifts, sedimentary basins, interior sags, and recently glaciated lowlands.
+     rifts, sedimentary basins, interior sags, and recently glaciated lowlands;
+     none under ice.
    - **Open lakes:** where inflow beats evaporation, the depression fills and
      overflows.
    - **Closed (endorheic) lakes:** otherwise the lake shrinks until evaporation
@@ -271,6 +278,9 @@ SVG's size and it lies under your coastline drawing.
 
 ## Limits
 
+- **Ice.** There are no ice shelves or sea ice: sheets end at the coast. On a
+  broad plain a dry sheet's margin follows the regional climate and stays smooth
+  at world scale. Mountain ice is drawn as snow and glaciers.
 - **Lakes.** Levels are a steady annual balance. Small lake districts are mostly
   below world resolution, and basins below sea level are not modelled yet.
 - **Climate.** It is an explainable annual-mean model, not a weather or ocean

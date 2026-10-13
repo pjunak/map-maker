@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Ice sheets — 2026-10-13](2026-10-13-ice-sheets.md) grows ice sheets from snowfall
+  against melt by shallow-ice flow, with height, albedo and regional climate feedbacks,
+  and draws large sheets with their own surface inside refined margins, on the atlas
+  and in regional windows.
+
 - [Regional lake shores — 2026-10-12](2026-10-12-regional-lake-shores.md) draws regional
   lakes as water filling the regional relief, holds crater lakes in the tiles' own frame
   and refines lake outlines below the parent spacing, so shores lose the parent mesh's
