@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Polar land — 2026-10-13](2026-10-13-polar-land.md) works the planet's polar land in true
+  distance and covers a pole the drawn land touches, so the south polar ice sheet domes over
+  the pole instead of ending in a spike.
+
 - [Ice sheets — 2026-10-13](2026-10-13-ice-sheets.md) grows ice sheets from snowfall
   against melt by shallow-ice flow, with height, albedo and regional climate feedbacks,
   and draws large sheets with their own surface inside refined margins, on the atlas

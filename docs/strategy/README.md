@@ -41,6 +41,9 @@ backlog, and [status](../research/status.md) records what works now.
    - Regional plains no longer show straight grid lines: display carving drains
      filled hollows along their thalweg, and ridged detail has no steps
      ([report](../research/2026-10-12-straight-display-lines.md)).
+   - Polar land is worked in true distance and a touched pole is covered, so the
+     south polar ice sheet domes over the pole instead of ending in a spike
+     (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`).
 2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
    settings for random placement or placed by hand. Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a

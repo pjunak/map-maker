@@ -9,11 +9,22 @@ map. It produces:
 - lakes, both open and closed basins;
 - river lines.
 
-The planet keeps your coastline exactly; zoomed maps only add detail finer than
-you drew it. An optional geology recipe (`.dmgeology.json`)
+The planet keeps your coastline, except near the poles (see below); zoomed maps
+only add detail finer than you drew it. An optional geology recipe (`.dmgeology.json`)
 says where mountains, plateaus, old worn ranges and basins should be. The
 generator honours those elevations approximately and lets erosion shape every
 valley and divide.
+
+**Near the poles** a flat world drawing breaks down, so the planet works polar land
+in true distance ([ADR-0094](adr/0094-planet-polar-land-in-true-distance.md)):
+- Poleward of 55°, land and water narrower than half a drawing unit are removed,
+  so traced stair-steps do not become radial streaks. Tiny islets stay.
+- Land drawn down to the map's top or bottom edge along only part of its width
+  would meet the pole as a wedge. The planet covers that pole with land about 4°
+  across, with a natural coast, so an ice sheet can dome over it. The build's
+  manifest reports the added area under `metrics.pole_cover`.
+
+Your drawing and the world's Source view are unchanged.
 
 This is experimental, so it is not yet an accepted world parent for local or zoomed
 terrain. See [ADR-0085](adr/0085-generate-planet-relief-on-a-sphere-mesh.md) and the
@@ -78,8 +89,7 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   parchment**. Each renders in the background and is kept. The topographic view
   stretches its tints over the window's own height range and draws contours at
   true heights.
-- Coasts gain detail as you zoom. The planet keeps your drawn coastline exactly.
-  Regional, province and local maps smooth it at the precision you drew it, then
+- Coasts gain detail as you zoom. Regional, province and local maps smooth it at the precision you drew it, then
   add bays, headlands, coves and islets at every finer scale. Each deeper level
   only adds smaller detail, so a coast keeps its shape as you zoom in. The coast
   can move by up to about one drawing unit from your line, which is 13 km on an

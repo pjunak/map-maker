@@ -61,6 +61,7 @@ from dmtools.terrain.pipeline.planet_lakes import Lakes, balance_lakes, young_de
 from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh, sample_field
 from dmtools.terrain.pipeline.planet_metrics import relief_metrics
 from dmtools.terrain.pipeline.planet_noise import fbm3
+from dmtools.terrain.pipeline.planet_poles import planet_world
 from dmtools.terrain.pipeline.planet_volcanism import (
     TITAN,
     VOLCANO_WONDERS,
@@ -179,6 +180,8 @@ def generate_planet(
             report(min(max(fraction, 0.0), 1.0), message)
 
     check_cancelled(cancellation)
+    # The planet sees the drawn land with true-distance polar coasts and covered poles.
+    world = planet_world(world, settings.seed)
     seeds = {
         stage: stage_seed(settings.seed, stage)
         for stage in (
@@ -482,6 +485,7 @@ def generate_planet(
         )
     elevation = np.where(water, bathymetry, lakes.ground_m)
     metrics = relief_metrics(mesh, lakes.surface_m, water | (lakes.lake >= 0), lakes.flow)
+    metrics["pole_cover"] = [a.message for a in world.adjustments if a.kind == "pole_cover"]
     metrics["craters"] = [
         {
             "lat": round(float(np.degrees(np.arcsin(xyz[2]))), 3),

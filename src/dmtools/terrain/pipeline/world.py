@@ -43,7 +43,7 @@ class ContinentSummary:
 
 @dataclass(frozen=True, slots=True)
 class WorldAdjustment:
-    kind: Literal["edge_clip", "shared_land", "border_overlap"]
+    kind: Literal["edge_clip", "shared_land", "border_overlap", "pole_cover"]
     feature_ids: tuple[str, ...]
     area_source_units2: float
     message: str
@@ -303,6 +303,16 @@ def prepare_world_map(project: WorldProject) -> WorldMap:
         shapes.append(_PreparedShape(feature, assignment.continent_id, assignment.role, geometry))
     land, overlaps = _reconcile_land(shapes, tolerance)
     adjustments.extend(overlaps)
+    return world_from_land(project, land, tuple(adjustments))
+
+
+def world_from_land(
+    project: WorldProject,
+    land: tuple[WorldLandView, ...],
+    adjustments: tuple[WorldAdjustment, ...],
+) -> WorldMap:
+    """A world map over prepared ``land``, with each continent's area summarised."""
+    frame = project.frame
     summaries = tuple(
         ContinentSummary(
             continent.id,
@@ -324,6 +334,4 @@ def prepare_world_map(project: WorldProject) -> WorldMap:
                 f"{summary.name}: no independent land remains after resolving overlaps.",
                 tuple(f.feature_id for f in land if f.continent_id == summary.id),
             )
-    return WorldMap(
-        project, land, summaries, sum(s.area_km2 for s in summaries), tuple(adjustments)
-    )
+    return WorldMap(project, land, summaries, sum(s.area_km2 for s in summaries), adjustments)

@@ -10,7 +10,8 @@ obsolete features are not supported.
 
 ## What it does
 
-- **Whole-planet maps:** `dmtools world planet`. Your coastline is never changed.
+- **Whole-planet maps:** `dmtools world planet`. Your coastline is kept, except that
+  polar coasts are smoothed in true distance and a pole your land touches is covered.
   The planet's relief comes from plate-driven uplift and river erosion on a sphere
   mesh. That includes mountain belts, rifts, volcanoes, an ocean floor with
   ridges and trenches, lakes and rivers. A provisional climate adds winds,

@@ -25,6 +25,7 @@ from dmtools.terrain.pipeline.planet_aging import AgedPatch, Aging
 from dmtools.terrain.pipeline.planet_eruptions import Eruptions
 from dmtools.terrain.pipeline.planet_ice import IceSheets
 from dmtools.terrain.pipeline.planet_mesh import mesh_from_triangles
+from dmtools.terrain.pipeline.planet_poles import planet_world
 from dmtools.terrain.pipeline.planet_regional import RegionalParent
 from dmtools.terrain.pipeline.planet_scarps import Cliffs, Tepuis
 from dmtools.terrain.pipeline.planet_volcanism import Volcanoes
@@ -89,7 +90,9 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
     climate = PlanetClimateSettings(**settings_doc.pop("climate"))
     settings_doc["wonders"] = tuple(settings_doc["wonders"])
     settings = PlanetSettings(**settings_doc, climate=climate)
-    world = prepare_world_map(read_world_project(folder / "world.dmworld.json"))
+    world = planet_world(
+        prepare_world_map(read_world_project(folder / "world.dmworld.json")), settings.seed
+    )
     radius_m = float(manifest["world_frame"]["radius_km"]) * 1000
     with np.load(folder / "planet.npz", allow_pickle=False) as data:
         mesh = mesh_from_triangles(

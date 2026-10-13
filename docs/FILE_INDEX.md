@@ -1,6 +1,6 @@
 # Complete documentation file inventory
 
-Updated 2026-10-12. Scope: every version-controlled Markdown document in DM Tools,
+Updated 2026-10-13. Scope: every version-controlled Markdown document in DM Tools,
 plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
@@ -197,6 +197,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0091-age-wonders-on-their-own-patches.md](adr/0091-age-wonders-on-their-own-patches.md) | Each aged wonder is eroded on its own patch with the planet's stream-power model; maps draw the aged relief in place of the fresh shape. |
 | [docs/adr/0092-regional-lakes-fill-the-regional-relief.md](adr/0092-regional-lakes-fill-the-regional-relief.md) | Regional lakes fill the window relief from the parent lake's core, closed lakes are sinks, tiles hold lakes without young relief, and lake outlines get nested detail. |
 | [docs/adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md](adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md) | Ice sheets grow from snowfall against melt by shallow-ice flow with height, albedo and regional-climate feedbacks; large sheets are drawn with their own surface inside refined margins. |
+| [docs/adr/0094-planet-polar-land-in-true-distance.md](adr/0094-planet-polar-land-in-true-distance.md) | The planet works land poleward of 55° in true distance (opening and closing) and covers a pole that drawn land touches, with a natural cap outline. |
 
 ## Dated research reports (97)
 
@@ -205,6 +206,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-13-polar-land.md](research/2026-10-13-polar-land.md) | Polar land in true distance: the pole wedge and traced streaks, smoothing and cap trials, and Aethelara's covered south pole. |
 | [docs/research/2026-10-13-ice-sheets.md](research/2026-10-13-ice-sheets.md) | Ice sheets: causes of the latitude-line ice edge, mass balance and shallow-ice trials, sheet versus glacier drawing, margins and Aethelara results. |
 | [docs/research/2026-10-12-regional-lake-shores.md](research/2026-10-12-regional-lake-shores.md) | Straight regional lake shores: causes, the relief flood, crater lakes held in the tiles' frame, refined outlines, open-lake playa rings and Aethelara measurements. |
 | [docs/research/2026-10-12-straight-display-lines.md](research/2026-10-12-straight-display-lines.md) | Straight lines in regional hillshade: display carving across filled depressions and stepped ridged detail; isolating experiment, fixes, tests and Aethelara before/after. |
