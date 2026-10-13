@@ -122,6 +122,7 @@ The images are local artifacts, not tracked in the repository
   lists this). Multiple-flow routing for incision remains the candidate.
 - The crater's salt pan has straight edges 25–50 km long. Its shore is most likely
   where the parent's lake cover, interpolated linearly on 24 km triangles, passes
-  0.15, which is a straight line within each triangle. This is a separate defect.
+  0.15, which is a straight line within each triangle. This is a separate defect,
+  fixed by ADR-0092 ([lake shores](2026-10-12-regional-lake-shores.md)).
 - The mesh kernels still route filled flats along their 1 mm gradient. Their
   tiles showed no such lines here.
