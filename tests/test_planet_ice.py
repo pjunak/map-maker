@@ -106,6 +106,26 @@ def test_only_large_ice_bodies_that_bury_their_bed_are_drawn_as_sheets() -> None
     assert not ice_sheet_nodes(mesh, np.zeros(mesh.size), flat).any()
 
 
+def test_bed_relief_for_ice_sheets_does_not_depend_on_the_mesh() -> None:
+    from dmtools.terrain.pipeline.planet_ice import local_relief
+
+    # Hills of 2,000 km wavelength: relief between neighbouring nodes about
+    # halves on a mesh twice as fine; relief at a fixed scale stays.
+    reliefs: list[float] = []
+    steps: list[float] = []
+    for nodes in (20_000, 80_000):
+        mesh = build_mesh(nodes, RADIUS, 8)
+        hills = 900.0 * np.sin(mesh.xyz[:, 0] * RADIUS / 320e3) * np.cos(
+            mesh.xyz[:, 1] * RADIUS / 320e3
+        )
+        middle = np.abs(np.degrees(mesh.lat)) < 50
+        reliefs.append(float(local_relief(mesh, hills, 400e3)[middle].mean()))
+        src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+        steps.append(float(np.sqrt(np.mean((hills[mesh.nbr] - hills[src]) ** 2))))
+    assert reliefs[1] == pytest.approx(reliefs[0], rel=0.05)
+    assert steps[1] < 0.7 * steps[0]
+
+
 def test_ice_rises_steeply_from_its_margin_and_lies_only_inside_it() -> None:
     from dmtools.terrain.adapters.planet_natural import ice_surface
 

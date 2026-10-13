@@ -61,11 +61,14 @@ The model adds about 11 s to an 800k-node build.
 - **Sheets and glaciers.** The model also grows ice caps on high ranges. Drawn as
   surfaces they were flat white blobs over whole ranges. Ice bodies are drawn as
   sheets only when at least 100,000 km² and thick enough to bury their bed: mean
-  thickness at least four times the bed's relief between neighbouring ice nodes.
-  On Aethelara that ratio is 11.7 for the polar sheet and 0.4–2.8 for every other
-  body, the largest being the titan volcano's cap (134,000 km²) and a range at
-  45 °N (124,000 km²). Mountain ice keeps the per-pixel snow and
-  glacier colour, which follows ridges and valleys.
+  thickness at least four times the bed's relief, its standard deviation within
+  about 50 km. On Aethelara that ratio is 10.5 for the polar sheet, at both 800k
+  and 3.2 million nodes, and at most 2.7 for every other body, the largest being
+  the titan volcano's cap (134,000 km²) and a range at 45 °N (124,000 km²).
+  Relief between neighbouring nodes, tried first, shrinks on finer meshes: at
+  3.2 million nodes two mountain icefields passed and were drawn as flat white
+  sheets. Mountain ice keeps the per-pixel snow and glacier colour, which follows
+  ridges and valleys.
 - **Margin.** A signed distance to the margin, zero halfway along each edge from
   an ice node to a bare one, is sampled through the nested warp of lake outlines,
   larger for ice (6 spacings, 0.6-spacing amplitude). Thickness near the margin

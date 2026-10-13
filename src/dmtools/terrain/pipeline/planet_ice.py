@@ -56,11 +56,13 @@ ICE_WANDER_C = 6.0  # noise amplitude; about 1.6 deg C standard deviation
 ICE_WANDER_WAVELENGTH_M = 1000e3
 # Ice bodies are drawn as ice sheets, with their own smooth surface, when they
 # are large and bury their bed: mean thickness at least ICE_SHEET_BURIAL times
-# the bed's relief between neighbouring ice nodes (about 12 for a polar sheet,
-# under 3 for icefields on mountain ranges). The mesh does not resolve
-# mountain icefields, so they are drawn as snow and glaciers on the relief.
+# the bed's relief within about ICE_RELIEF_SCALE_M (its local standard
+# deviation). On Aethelara that ratio is about 10 for the polar sheet and under 3
+# for icefields on mountain ranges, at 800k and 3.2M nodes alike. The mesh does
+# not resolve mountain icefields, so they are drawn as snow and glaciers.
 ICE_SHEET_MIN_KM2 = 100_000.0
 ICE_SHEET_BURIAL = 4.0
+ICE_RELIEF_SCALE_M = 50e3
 # Below this warmest-month temperature (deg C) the Ohmura melt curve reaches zero.
 MELT_FLOOR_C = -2.35
 # Margins are refined below the mesh spacing like lake outlines (ADR-0092).
@@ -232,25 +234,33 @@ def ice_sheets(
     return IceSheets(np.where(ice, thickness, 0.0), balance)
 
 
+def local_relief(mesh: SphereMesh, values: F64, scale_m: float) -> F64:
+    """Standard deviation of ``values`` within about ``scale_m`` of each node.
+
+    Unlike differences between neighbouring nodes, which shrink on finer meshes,
+    it does not change with the mesh once the mesh resolves ``scale_m``.
+    """
+    passes = max(1, round((scale_m / mesh.spacing_m) ** 2))
+    half = np.full(mesh.size, 0.5)
+    mean = neighbour_mix(values, mesh.ptr, mesh.nbr, half, passes)
+    square = neighbour_mix(values * values, mesh.ptr, mesh.nbr, half, passes)
+    return np.sqrt(np.maximum(square - mean * mean, 0.0))
+
+
 def ice_sheet_nodes(mesh: SphereMesh, thickness_m: F64, bed_m: F64) -> B:
-    """Nodes of the ice bodies drawn as ice sheets (see ICE_SHEET_BURIAL)."""
+    """Nodes of the ice bodies drawn as ice sheets (see ICE_SHEET_BURIAL).
+
+    ``bed_m`` is the land surface, 0 at sea.
+    """
     ice = thickness_m > 0
     if not ice.any():
         return ice
     body = _bodies(ice, mesh.ptr, mesh.nbr)
-    # Bed relief along edges between ice nodes, so the sea and its islands never count.
-    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
-    inside = ice[src] & ice[mesh.nbr]
-    step = np.where(inside, bed_m[mesh.nbr] - bed_m[src], 0.0)
-    relief = np.sqrt(
-        np.bincount(src, step * step, mesh.size)
-        / np.maximum(np.bincount(src, inside, mesh.size), 1)
-    )
+    relief = local_relief(mesh, bed_m, ICE_RELIEF_SCALE_M)
     on = body[ice]
     area = np.bincount(on, mesh.area_m2[ice])
-    count = np.bincount(on)
     buried = np.bincount(on, thickness_m[ice]) >= ICE_SHEET_BURIAL * np.bincount(on, relief[ice])
-    sheet = (area >= ICE_SHEET_MIN_KM2 * 1e6) & buried & (count > 0)
+    sheet = (area >= ICE_SHEET_MIN_KM2 * 1e6) & buried
     return ice & sheet[np.maximum(body, 0)]
 
 

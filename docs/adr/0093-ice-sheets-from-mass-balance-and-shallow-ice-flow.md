@@ -49,6 +49,16 @@ crossed the bed under a snow colour.
    hillshade. Smaller or rugged bodies, mountain icefields the mesh does not
    resolve, keep the per-pixel snow and glacier colour.
 
+## Revision (2026-10-13)
+
+Point 5 first measured the bed's relief as the difference between neighbouring
+ice nodes. That difference shrinks on finer meshes: at 3.2 million nodes the
+polar sheet scored 21.8 instead of 11.7, and two mountain icefields (132,000 and
+170,000 km²) passed the test and were drawn as flat white sheets over their
+ranges. Relief is now the bed's standard deviation within about 50 km, which does
+not change with the mesh once the mesh resolves it: the polar sheet scores 10.5
+at both 800k and 3.2 million nodes, and every mountain body stays below 3.
+
 ## Consequences
 
 - On Aethelara the polar sheet is up to 2.4 km thick, covers the land poleward

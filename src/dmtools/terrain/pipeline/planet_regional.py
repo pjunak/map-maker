@@ -185,9 +185,8 @@ class RegionalParent:
         # Only the planet's own parent holds ice on its mesh; level parents carry
         # the planet's margin.
         assert self.planet_mesh is None
-        return margin_distance(
-            self.mesh, ice_sheet_nodes(self.mesh, self.ice.thickness_m, self.surface_m)
-        )
+        bed = np.where(self.land, self.surface_m, 0.0)
+        return margin_distance(self.mesh, ice_sheet_nodes(self.mesh, self.ice.thickness_m, bed))
 
     def ice_at(self, xyz: F64, detail_m: float) -> tuple[F64, F64, F64] | None:
         """Ice margin distance, thickness and mass balance with margins refined to ``detail_m``.
