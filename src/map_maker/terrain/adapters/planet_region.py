@@ -312,6 +312,13 @@ def _compose(
     else:
         islands = np.zeros((pixels, pixels), dtype=bool)
     wonders = parent.wonders
+    floors = parent.crater_floor_m
+    if floors is not None and np.any(floors != 0):
+        # Tiles carry the ground without wonders (ADR-0097): level crater floors
+        # as the planet did before drawing the craters on top.
+        elevation = np.where(
+            land, elevation + parent.sample(points, floors).reshape(pixels, pixels), elevation
+        )
     if wonders is not None and len(wonders):
         elevation = np.where(
             land,

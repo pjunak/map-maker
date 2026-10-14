@@ -179,10 +179,10 @@ def test_planet_panel_rejects_an_invalid_seed(app: ui.TerrainApp) -> None:
 
 def test_planet_panel_chooses_wonder_kinds(app: ui.TerrainApp) -> None:
     panel = app.world_workspace.planet_panel
-    assert panel.settings().wonders == ()
+    assert panel.wonder_settings().random == ()
     panel.wonders["chasm"].set(True)
     panel.wonders["titan"].set(True)
-    assert panel.settings().wonders == ("titan", "chasm")  # catalog order
+    assert panel.wonder_settings().random == ("titan", "chasm")  # catalog order
     panel._wonders_changed()
     assert panel.wonder_section.title == "Wonders · 2 chosen"
     panel.new_seed()

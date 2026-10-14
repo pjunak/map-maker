@@ -28,16 +28,18 @@ scientific engines; core contracts must not depend on those concrete libraries.
 ## Planet path (current product path)
 
 ```text
-<name>.world.json (+ geology recipe)
+<name>.world.json (+ geology recipe, + wonder document)
    -> pipeline/planet.py: sphere mesh, plates and forcing, uplift + stream-power
-      erosion, climate coupling, lakes, volcanoes and wonders
+      erosion, climate coupling, lakes and volcanoes make the base planet; a
+      separate pass adds wonders and works out ice and lakes again (ADR-0097)
    -> PlanetResult (node elevation is authoritative, ADR-0085)
    -> adapters/planet_build.py: planet.npz, GeoTIFF, rivers, lakes, manifest
    -> adapters/map_views.py: theme registry; map_*.py and planet_natural.py
       render each theme on the world frame; map_projection.py shows any theme
       as a flat world, globe or polar view (ADR-0087)
    -> application/planet_region.py: fixed blended tiles enriched from the
-      verified build (pipeline/planet_regional.py, planet_tiles.py), composed into
+      verified build without its wonders (pipeline/planet_regional.py,
+      planet_tiles.py), composed into
       regional windows (adapters/planet_region.py, ADR-0086); deeper levels are
       enriched from level parents built from the coarser tiles
       (pipeline/planet_levels.py, ADR-0088)

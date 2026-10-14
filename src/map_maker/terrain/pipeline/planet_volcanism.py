@@ -125,14 +125,12 @@ def place_volcanoes(
     seed: int,
     ground_m: F64,
     islands: bool = False,
-    wonders: tuple[str, ...] = (),
 ) -> Volcanoes:
     """Volcanoes for this world; ``ground_m`` is the eroded land surface they stand on.
 
     With ``islands``, young hotspot volcanoes at sea are planned to break the
     surface and island arcs rise behind ocean-ocean trenches (see ``emerge``).
-    ``wonders`` adds fantastical volcanoes at random deep inland: a ``titan``
-    shield, a ``shattered`` volcano and an ``active`` giant.
+    Wonder volcanoes are separate (``wonder_volcanoes``, ``placed_volcano``).
     """
     rng = np.random.default_rng([seed, 5150])
     radius = mesh.radius_m
@@ -182,7 +180,7 @@ def place_volcanoes(
         )
     if islands:
         parts.append(_island_arcs(mesh, land, coast_m, plates, seed, rng))
-    volcanoes = _concat(parts)
+    volcanoes = join_volcanoes(parts)
     if not len(volcanoes):
         return volcanoes
     # Earth's highest volcanoes reach ~6-7 km (Ojos del Salado 6.9 km): edifices
@@ -201,28 +199,36 @@ def place_volcanoes(
         volcanoes.caldera_depth_m * scale,
         volcanoes.summit_m, volcanoes.emergent,
     )
-    # Each wonder has its own random stream: earlier placements vary with mesh
-    # resolution, and so would anything drawn after them.
-    if "titan" in wonders:
-        volcanoes = _concat(
-            [volcanoes, _titan(mesh, land, coast_m, np.random.default_rng([seed, 7070]))]
-        )
+    return volcanoes
+
+
+def wonder_volcanoes(
+    mesh: SphereMesh, land: B, coast_m: F64, seed: int, kinds: tuple[str, ...]
+) -> Volcanoes:
+    """Fantastical volcanoes of ``kinds`` placed at random deep inland.
+
+    A ``titan`` shield, a ``shattered`` volcano and an ``active`` giant. Each has
+    its own random stream: earlier placements vary with mesh resolution, and so
+    would anything drawn after them.
+    """
+    volcanoes = Volcanoes.empty()
+    if "titan" in kinds:
+        volcanoes = _titan(mesh, land, coast_m, np.random.default_rng([seed, 7070]))
     for kind, code, coast, build in (
         ("shattered", 7171, SHATTERED_COAST_M, shattered_volcano),
         ("active", 7272, FIRE_COAST_M, fire_mountain),
     ):
-        if kind not in wonders:
+        if kind not in kinds:
             continue
         rng = np.random.default_rng([seed, code])
         taken = np.zeros(mesh.size, dtype=bool)
-        for xyz, reach in zip(volcanoes.xyz[volcanoes.setting >= TITAN],
-                              volcanoes.radius_m[volcanoes.setting >= TITAN], strict=True):
+        for xyz, reach in zip(volcanoes.xyz, volcanoes.radius_m, strict=True):
             taken |= mesh.xyz @ xyz > np.cos(2 * reach / mesh.radius_m)
         site = draw_site(
             mesh, (land & (coast_m >= coast) & ~taken).astype(np.float64), 1.0, rng
         )
         if site is not None:
-            volcanoes = _concat([volcanoes, build(site, None, rng)])
+            volcanoes = join_volcanoes([volcanoes, build(site, None, rng)])
     return volcanoes
 
 
@@ -234,18 +240,18 @@ def _titan(mesh: SphereMesh, land: B, coast_m: F64, rng: np.random.Generator) ->
     return titan_volcano(site, TITAN_RADIUS_M * rng.uniform(0.9, 1.1), rng)
 
 
-def with_placed(
-    volcanoes: Volcanoes, kind: str, sites: F64, radii_m: F64, seed: int
-) -> Volcanoes:
-    """``volcanoes`` plus hand-placed wonder volcanoes of ``kind`` at unit vectors ``sites``."""
+def placed_volcano(kind: str, site: F64, radius_m: float, seed: int) -> Volcanoes:
+    """A hand-placed wonder volcano of ``kind`` at unit vector ``site``.
+
+    Its shape is drawn from its own ``seed`` (ADR-0097), so other wonders do not
+    change it.
+    """
     code, build = {
         "titan": (7071, _titan_at),
         "shattered": (7172, shattered_volcano),
         "active": (7273, fire_mountain),
     }[kind]
-    rng = np.random.default_rng([seed, code])
-    placed = [build(site, float(r), rng) for site, r in zip(sites, radii_m, strict=True)]
-    return _concat([volcanoes, *placed])
+    return build(site, radius_m, np.random.default_rng([seed, code]))
 
 
 def _titan_at(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
@@ -460,7 +466,8 @@ _FIELDS = (
 )
 
 
-def _concat(parts: list[Volcanoes]) -> Volcanoes:
+def join_volcanoes(parts: list[Volcanoes]) -> Volcanoes:
+    """Several volcano lists as one."""
     parts = [p for p in parts if len(p)]
     if not parts:
         return Volcanoes.empty()

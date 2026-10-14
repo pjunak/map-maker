@@ -8,7 +8,6 @@ the workspace's job runner, so it shares one status bar and one job at a time.
 
 from __future__ import annotations
 
-import math
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -30,7 +29,6 @@ from map_maker.terrain.adapters.world_render import OCEAN, render_world_source
 from map_maker.terrain.application.world_context import WorldContextRun
 from map_maker.terrain.application.world_geology import GeologyFile, open_geology, save_geology
 from map_maker.terrain.domain.models import Point2D
-from map_maker.terrain.domain.wonders import WONDER_KINDS, WONDERS, WonderKind
 from map_maker.terrain.domain.world_context import EXPOSURE_BEARINGS
 from map_maker.terrain.domain.world_geology import (
     GEOLOGICAL_SETTINGS,
@@ -38,7 +36,6 @@ from map_maker.terrain.domain.world_geology import (
     SETTING_TEXT,
     ContinentGeology,
     GeologicalSetting,
-    GeologyLandmark,
     GeologyProfile,
     GeologyProvince,
     WorldGeologyRecipe,
@@ -64,7 +61,6 @@ from map_maker.terrain.viewport import MapViewport
 from map_maker.terrain.world_landform_ui import WorldLandformForm
 from map_maker.terrain.world_view import CONTEXT_LEGENDS
 
-KIND_BY_LABEL: dict[str, WonderKind] = {WONDERS[kind].label: kind for kind in WONDER_KINDS}
 SETTING_BY_LABEL: dict[str, GeologicalSetting] = {
     SETTING_TEXT[setting][0]: setting for setting in GEOLOGICAL_SETTINGS
 }
@@ -127,16 +123,6 @@ class GeologyEditor(ttk.Frame):
         }
         self.setting_label = tk.StringVar(self)
         self.setting_help = tk.StringVar(self)
-        self.landmark = {
-            "name": tk.StringVar(self),
-            "kind": tk.StringVar(self, value=WONDERS["crater"].label),
-            "size": tk.StringVar(self),
-            "age": tk.StringVar(self),
-        }
-        self.landmark_help = tk.StringVar(self)
-        self._landmark_selected: str | None = None
-        self._placing = False
-        self._line_start: Point2D | None = None  # a line wonder's first click
         self.layer = tk.StringVar(self, value=COVERAGE)
         self.bearing = tk.StringVar(self, value="N")
         self.file_label = tk.StringVar(self)
@@ -183,8 +169,8 @@ class GeologyEditor(ttk.Frame):
 
     @property
     def editing(self) -> bool:
-        """An unapplied form edit, an unfinished outline or a landmark being placed."""
-        return self.form_dirty or self._draft is not None or self._placing
+        """An unapplied form edit or an unfinished outline."""
+        return self.form_dirty or self._draft is not None
 
     @property
     def dirty(self) -> bool:
@@ -192,10 +178,8 @@ class GeologyEditor(ttk.Frame):
 
     def summary(self) -> str:
         """One line on what this recipe sets, for the step list and other steps."""
-        provinces, landmarks = len(self.recipe.provinces), len(self.recipe.landmarks)
+        provinces = len(self.recipe.provinces)
         parts = [f"{provinces} province{'s' * (provinces != 1)}"]
-        if landmarks:
-            parts.append(f"{landmarks} landmark{'s' * (landmarks != 1)}")
         if self.dirty:
             parts.append("unsaved")
         return " · ".join(parts)
@@ -226,7 +210,6 @@ class GeologyEditor(ttk.Frame):
             self._button(files, text, command, style="Small").pack(side="right", padx=(4, 0))
         self._build_regions()
         self._build_region_form()
-        self._build_landmarks()
 
     def _build_regions(self) -> None:
         box = section(self, "Regions")
@@ -324,66 +307,6 @@ class GeologyEditor(ttk.Frame):
             row=0, column=1, sticky="ew", padx=(3, 0)
         )
 
-    def _build_landmarks(self) -> None:
-        """Hand-placed wonders from the catalog (``domain.wonders``)."""
-        box = section(self, "Landmarks")
-        hint(box, "Wonders placed exactly where you want them. Placed wonders replace "
-             "random ones of their kind.")
-        grid = ttk.Frame(box, style="Panel.TFrame")
-        grid.pack(fill="x", pady=(GAP // 2, 0))
-        grid.columnconfigure(1, weight=1)
-        kind = ttk.Combobox(
-            grid, textvariable=self.landmark["kind"], values=tuple(KIND_BY_LABEL),
-            state="readonly", width=20,
-        )
-        ttk.Label(grid, text="Kind", style="Body.TLabel").grid(row=0, column=0, sticky="w")
-        kind.grid(row=0, column=1, sticky="w", pady=2)
-        name = ttk.Entry(grid, textvariable=self.landmark["name"], width=22)
-        ttk.Label(grid, text="Name", style="Body.TLabel").grid(row=1, column=0, sticky="w")
-        name.grid(row=1, column=1, sticky="w", pady=2)
-        size = ttk.Entry(grid, textvariable=self.landmark["size"], width=8)
-        ttk.Label(grid, text="Size", style="Body.TLabel").grid(row=2, column=0, sticky="w")
-        size.grid(row=2, column=1, sticky="w", pady=2)
-        ttk.Label(grid, text="km", style="Body.TLabel").grid(row=2, column=1, padx=(70, 0),
-                                                              sticky="w")
-        age = ttk.Entry(grid, textvariable=self.landmark["age"], width=8)
-        ttk.Label(grid, text="Age", style="Body.TLabel").grid(row=3, column=0, sticky="w",
-                                                               padx=(0, GAP))
-        age.grid(row=3, column=1, sticky="w", pady=2)
-        ttk.Label(grid, text="million years", style="Body.TLabel").grid(
-            row=3, column=1, padx=(70, 0), sticky="w"
-        )
-        self._controls.extend(
-            ((name, "normal"), (kind, "readonly"), (size, "normal"), (age, "normal"))
-        )
-        hint(box, textvariable=self.landmark_help)
-        buttons = button_row(box)
-        for text, action in (
-            ("Place on map", self.place_landmark),
-            ("Update", self.update_landmark),
-            ("Delete", self.delete_landmark),
-        ):
-            self._button(buttons, text, action, style="Small").pack(side="left", padx=(0, 4))
-        self.landmark["kind"].trace_add("write", self._describe_landmark)
-        self._describe_landmark()
-
-    def _landmark_kind(self) -> WonderKind:
-        return KIND_BY_LABEL[self.landmark["kind"].get()]
-
-    def _describe_landmark(self, *_args: str) -> None:
-        spec = WONDERS[self._landmark_kind()]
-        if spec.size_km is None:
-            size = " It has no size."
-        else:
-            low, high, usual = spec.size_km
-            size = f" Size is its {spec.size}, {low:g}-{high:g} km; blank uses {usual:g} km."
-        clicks = " Place it with two clicks, one per end." if spec.line else ""
-        age = (
-            " Age erodes it; blank uses the planet's wonder age." if spec.ages
-            else " It does not age."
-        )
-        self.landmark_help.set(f"{spec.summary}{size}{clicks}{age}")
-
     def _build_map(self, parent: tk.Misc) -> ttk.Frame:
         frame_widget = ttk.Frame(parent, style="Panel.TFrame")
         frame_widget.columnconfigure(0, weight=1)
@@ -470,17 +393,7 @@ class GeologyEditor(ttk.Frame):
             self.tree.insert("defaults", "end", iid="continent:" + c.id, text=c.name)
         for p in sorted(self.recipe.provinces, key=lambda p: (-p.priority, p.name)):
             self.tree.insert("provinces", "end", iid=p.id, text=f"{p.name} · priority {p.priority}")
-        self.tree.insert("", "end", iid="landmarks", text="Landmarks", open=True)
-        for m in sorted(self.recipe.landmarks, key=lambda m: m.name):
-            self.tree.insert(
-                "landmarks", "end", iid=m.id,
-                text=f"{m.name} · {WONDERS[m.kind].label}"
-                + ("" if WONDERS[m.kind].size_km is None else f" {m.effective_size_km:,.4g} km"),
-            )
-        if self._landmark_selected and self.tree.exists(self._landmark_selected):
-            self.tree.selection_set(self._landmark_selected)
-            self.tree.see(self._landmark_selected)
-        elif self.tree.exists(self._selected):
+        if self.tree.exists(self._selected):
             self.tree.selection_set(self._selected)
             self.tree.see(self._selected)
 
@@ -553,18 +466,8 @@ class GeologyEditor(ttk.Frame):
             if self.tree.exists(self._selected):
                 self.tree.selection_set(self._selected)
             return
-        if selection[0] in ("defaults", "provinces", "landmarks"):
+        if selection[0] in ("defaults", "provinces"):
             return
-        landmark = next((m for m in self.recipe.landmarks if m.id == selection[0]), None)
-        if landmark is not None:
-            self._landmark_selected = landmark.id
-            self.landmark["name"].set(landmark.name)
-            self.landmark["kind"].set(WONDERS[landmark.kind].label)
-            self.landmark["size"].set("" if landmark.size_km is None else f"{landmark.size_km:g}")
-            self.landmark["age"].set("" if landmark.age_myr is None else f"{landmark.age_myr:g}")
-            self.canvas.redraw()
-            return
-        self._landmark_selected = None
         self._selected = selection[0]
         self._load_form()
         self.canvas.redraw()
@@ -685,8 +588,6 @@ class GeologyEditor(ttk.Frame):
     def _end_draft(self) -> None:
         self._draft = None
         self._draft_id = None
-        self._placing = False
-        self._line_start = None
         self.canvas.configure(cursor="")
 
     def delete(self) -> None:
@@ -704,112 +605,6 @@ class GeologyEditor(ttk.Frame):
         self._work(
             "Checking coverage after deletion",
             lambda token: _Result(resolve_geology(world, candidate, token), "edit"),
-        )
-
-    # Landmarks
-
-    def _landmark_age(self) -> float | None:
-        text = self.landmark["age"].get().strip()
-        try:
-            return float(text) if text else None
-        except ValueError as error:
-            raise ValueError("Landmark age must be a number of million years, or blank.") from error
-
-    def _landmark_values(self, kind_default: int) -> tuple[str, WonderKind, float | None]:
-        kind = self._landmark_kind()
-        name = self.landmark["name"].get().strip()
-        if not name:
-            names = {m.name for m in self.recipe.landmarks}
-            label = WONDERS[kind].label
-            name = next(
-                f"{label} {n}" for n in range(kind_default, 1000) if f"{label} {n}" not in names
-            )
-        text = self.landmark["size"].get().strip()
-        try:
-            size = float(text) if text else None
-        except ValueError as error:
-            raise ValueError("Landmark size must be a number of km, or blank.") from error
-        return name, kind, size
-
-    def _apply_landmarks(
-        self, landmarks: tuple[GeologyLandmark, ...], selected: str | None
-    ) -> None:
-        try:
-            candidate = replace(self.recipe, landmarks=landmarks)
-        except ValueError as error:
-            self.status.set(str(error))
-            return
-        self._landmark_selected = selected
-        self._next_selected = self._selected
-        world = self.world
-        self._work(
-            "Checking landmarks",
-            lambda token: _Result(resolve_geology(world, candidate, token), "edit"),
-        )
-
-    def place_landmark(self) -> None:
-        if self.busy or self.form_dirty or self._draft is not None:
-            self.status.set("Apply or revert the current edit before placing a landmark.")
-            return
-        self._placing = True
-        self._line_start = None
-        self.canvas.configure(cursor="crosshair")
-        self.canvas.focus_set()
-        spec = WONDERS[self._landmark_kind()]
-        self.status.set(
-            f"Click one end of the {spec.label.lower()} on the map." if spec.line
-            else f"Click the map to place the {spec.label.lower()}."
-        )
-
-    def _place_at(self, position: Point2D) -> None:
-        spec = WONDERS[self._landmark_kind()]
-        if spec.line and self._line_start is None:
-            self._line_start = position
-            self.status.set(f"Click the other end of the {spec.label.lower()}.")
-            self.canvas.redraw()
-            return
-        start, self._line_start = self._line_start, None
-        self._placing = False
-        self.canvas.configure(cursor="")
-        try:
-            name, kind, size = self._landmark_values(len(self.recipe.landmarks) + 1)
-            landmark = GeologyLandmark(
-                "landmark-" + uuid4().hex, name, kind,
-                position if start is None else start, size,
-                None if start is None else position, self._landmark_age(),
-            )
-        except ValueError as error:
-            self.status.set(str(error))
-            return
-        self.landmark["name"].set("")
-        self._apply_landmarks((*self.recipe.landmarks, landmark), landmark.id)
-
-    def update_landmark(self) -> None:
-        current = next(
-            (m for m in self.recipe.landmarks if m.id == self._landmark_selected), None
-        )
-        if self.busy or current is None:
-            self.status.set("Select a landmark to update.")
-            return
-        try:
-            name, kind, size = self._landmark_values(1)
-            updated = GeologyLandmark(
-                current.id, name, kind, current.position, size,
-                current.end if WONDERS[kind].line else None, self._landmark_age(),
-            )
-        except ValueError as error:
-            self.status.set(str(error))
-            return
-        self._apply_landmarks(
-            tuple(updated if m.id == current.id else m for m in self.recipe.landmarks), current.id
-        )
-
-    def delete_landmark(self) -> None:
-        if self.busy or self._landmark_selected is None:
-            self.status.set("Select a landmark to delete.")
-            return
-        self._apply_landmarks(
-            tuple(m for m in self.recipe.landmarks if m.id != self._landmark_selected), None
         )
 
     def _history(self, undo: bool) -> None:
@@ -1056,9 +851,6 @@ class GeologyEditor(ttk.Frame):
         if self.busy:
             return
         position = self._source_point(point)
-        if self._placing:
-            self._place_at(position)
-            return
         if self._draft is not None:
             if len(self._draft) >= MAX_PROVINCE_VERTICES:
                 self.status.set(f"A province has at most {MAX_PROVINCE_VERTICES} corners.")
@@ -1154,57 +946,6 @@ class GeologyEditor(ttk.Frame):
                             fill=MAP_HIGHLIGHT,
                             width=2,
                         )
-        # Landmarks to scale: volcanoes as cones, a tepui as a block, other
-        # round wonders as rings, a chasm as a broad line and a cliff as an
-        # escarpment symbol, across the seam where that is shorter.
-        px_per_km = (right - left) / (2 * math.pi * frame.radius_km)
-        for m in self.recipe.landmarks:
-            x, y = at(*m.position)
-            r = max(5.0, m.effective_size_km / 2 * px_per_km)
-            colour = MAP_HIGHLIGHT if m.id == self._landmark_selected else MAP_TEXT
-            if m.end is not None:
-                ex, ey = at(
-                    m.end[0] + round((m.position[0] - m.end[0]) / frame.width) * frame.width,
-                    m.end[1],
-                )
-                if m.kind == "cliff":
-                    self._draw_scarp(canvas, (x, y), (ex, ey), colour)
-                    r = 5.0
-                else:
-                    canvas.create_line(
-                        x, y, ex, ey, fill=colour, width=max(3.0, 2 * r), capstyle="round",
-                        stipple="gray50",
-                    )
-                    canvas.create_line(x, y, ex, ey, fill=colour, width=2)
-                # Label a line wonder beyond its right-hand end, clear of the line.
-                x, y = max((x, y), (ex, ey))
-            elif m.kind in ("titan", "shattered", "active"):
-                # Volcanoes: a cone, dashed where it blew apart, with a vent if erupting.
-                canvas.create_polygon(
-                    x, y - r, x - r, y + r * 0.7, x + r, y + r * 0.7,
-                    outline=colour, fill="", width=2,
-                    dash=(4, 3) if m.kind == "shattered" else (),
-                )
-                if m.kind == "active":
-                    canvas.create_oval(x - 3, y - r - 3, x + 3, y - r + 3, fill=colour, outline="")
-            elif m.kind == "oasis":
-                canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
-                canvas.create_oval(x - 3, y - 3, x + 3, y + 3, fill=colour, outline="")
-            elif m.kind == "fork":
-                # A river dividing in two.
-                r = 7.0
-                canvas.create_line(x, y + r, x, y, fill=colour, width=3)
-                canvas.create_line(x, y, x - r, y - r, fill=colour, width=3)
-                canvas.create_line(x, y, x + r, y - r, fill=colour, width=3)
-            elif m.kind == "tepui":
-                canvas.create_rectangle(x - r, y - 0.7 * r, x + r, y + 0.7 * r, outline=colour,
-                                        width=2)
-            else:
-                canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
-            canvas.create_text(x + r + 4, y, text=m.name, fill=colour, anchor="w")
-        if self._line_start is not None:
-            x, y = at(*self._line_start)
-            canvas.create_oval(x - 4, y - 4, x + 4, y + 4, outline=MAP_HIGHLIGHT, width=2)
         # Cover off-frame copies without touching the source image.
         width, height = canvas.size()
         for bounds in (
@@ -1215,24 +956,6 @@ class GeologyEditor(ttk.Frame):
         ):
             canvas.create_rectangle(*bounds, fill=OCEAN, outline="")
         canvas.create_rectangle(left, top, right, bottom, outline=MAP_FRAME)
-
-    @staticmethod
-    def _draw_scarp(
-        canvas: FlatMapCanvas, start: tuple[float, float], end: tuple[float, float], colour: str
-    ) -> None:
-        """The map symbol of an escarpment: its edge with ticks down the low side.
-
-        The high side lies to the left going from ``start`` to ``end`` (north up).
-        """
-        (x, y), (ex, ey) = start, end
-        canvas.create_line(x, y, ex, ey, fill=colour, width=3)
-        length = math.hypot(ex - x, ey - y)
-        if length < 1:
-            return
-        dx, dy = (ex - x) / length, (ey - y) / length
-        for k in range(1, int(length // 10) + 1):
-            px, py = x + dx * 10 * k, y + dy * 10 * k
-            canvas.create_line(px, py, px - dy * 7, py + dx * 7, fill=colour, width=2)
 
     def close(self) -> None:
         if self._closed:

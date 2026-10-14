@@ -360,59 +360,6 @@ def test_invalid_landform_keeps_pending_form_and_busy_controls_lock(app: ui.Terr
     assert panel.read() is None
 
 
-def test_landmarks_are_placed_updated_and_deleted(app: ui.TerrainApp) -> None:
-    editor = edit(app)
-    editor.landmark["kind"].set("Titan volcano")
-    editor.landmark["size"].set("400")
-    editor.place_landmark()
-    assert editor._placing
-    editor._click((0.4, 0.4), tk.Event())  # type: ignore[arg-type]
-    wait(editor)
-    (titan,) = editor.recipe.landmarks
-    assert titan.kind == "titan" and titan.size_km == 400.0
-    assert titan.name == "Titan volcano 1"
-    assert editor.tree.exists(titan.id)
-    editor.landmark["name"].set("Skyfather")
-    editor.landmark["size"].set("")
-    editor.update_landmark()
-    wait(editor)
-    (renamed,) = editor.recipe.landmarks
-    assert renamed.name == "Skyfather" and renamed.effective_size_km == 560.0
-    assert renamed.position == titan.position
-    editor.landmark["size"].set("nonsense")
-    editor.update_landmark()
-    assert "size" in editor.status.get() and editor.recipe.landmarks == (renamed,)
-    editor.delete_landmark()
-    wait(editor)
-    assert editor.recipe.landmarks == ()
-    editor.undo()
-    assert editor.recipe.landmarks == (renamed,)
-
-
-def test_a_chasm_is_placed_with_two_clicks(app: ui.TerrainApp) -> None:
-    editor = edit(app)
-    editor.landmark["kind"].set("Great chasm")
-    editor.place_landmark()
-    editor._click((0.40, 0.45), tk.Event())  # type: ignore[arg-type]
-    assert editor.recipe.landmarks == () and "other end" in editor.status.get()
-    editor._click((0.46, 0.45), tk.Event())  # type: ignore[arg-type]
-    wait(editor)
-    (chasm,) = editor.recipe.landmarks
-    assert chasm.kind == "chasm" and chasm.end is not None and chasm.end != chasm.position
-    assert not editor._placing and editor._line_start is None
-    # Renaming keeps both ends.
-    editor.landmark["name"].set("The Rift")
-    editor.update_landmark()
-    wait(editor)
-    (renamed,) = editor.recipe.landmarks
-    assert renamed.name == "The Rift" and renamed.end == chasm.end
-    # Escape abandons a half-placed chasm.
-    editor.place_landmark()
-    editor._click((0.40, 0.50), tk.Event())  # type: ignore[arg-type]
-    editor.revert()
-    assert not editor._placing and editor._line_start is None
-
-
 def test_geology_follows_world_edits_and_feeds_the_planet(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

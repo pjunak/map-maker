@@ -16,14 +16,16 @@ shows a status line, and **Next** at the foot of a page moves on:
 1. **Source map**: import the SVG and assign each shape to a continent.
 2. **Planet**: name the world, set its radius and check how the map wraps the
    globe. **Next** checks the world.
-3. **Geology** (optional): continent settings, provinces and landmarks
+3. **Geology** (optional): continent settings and provinces
    ([geology guide](world-geology.md)). Skip it for automatic mountain ranges.
 4. **Generate**: detail, seed and features; then **Generate planet**.
-5. **Explore**: maps, projections, regional zoom and export.
+5. **Wonders** (optional): fantastical landmarks placed by hand, saved as their own
+   file and applied to the planet without eroding it again ([wonder guide](wonders.md)).
+6. **Explore**: maps, projections, regional zoom and export.
 
 **More tools** follow: [Geographic context](world-context.md),
 [Ocean floor](world-bathymetry.md) and **Local terrain** (below). The map on the
-right follows the open step; in the Geology step it shows the geology map.
+right follows the open step; the Geology and Wonders steps show their own maps.
 
 ## Try the public example
 
@@ -302,8 +304,8 @@ and [ADR-0072](adr/0072-bound-world-source-imperfections.md) record these identi
 The [Context page](world-context.md) now implements spherical coverage, connected
 water, shared-edge openings, shoreline distance, directional exposure, resolution
 support and verified bundle reopening. The **Geology** step holds the
-[geology inputs](world-geology.md): continent defaults, drawable provinces and
-landmarks over source/context backgrounds, saved as their own recipe. The
+[geology inputs](world-geology.md): continent defaults and drawable provinces
+over source/context backgrounds, saved as their own recipe. The
 **Ocean floor** tool opens the separate [ocean-depth workflow](world-bathymetry.md)
 from matching geographic context: select oceans, author a margin profile, generate
 and inspect depth/error/support, then export or reopen a verified result.

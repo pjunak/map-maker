@@ -13,7 +13,7 @@ from map_maker.terrain.adapters.map_views import THEMES
 from map_maker.terrain.application.planet import PlanetRun
 from map_maker.terrain.domain.planet import PlanetSettings
 from map_maker.terrain.domain.seeds import MAX_MASTER_SEED
-from map_maker.terrain.domain.wonders import AGE_PRESETS, WONDER_KINDS, WONDERS
+from map_maker.terrain.domain.wonders import AGE_PRESETS, WONDER_KINDS, WONDERS, WonderSettings
 from map_maker.terrain.pipeline.planet import PlanetResult
 from map_maker.terrain.ui_components import (
     ChoiceList,
@@ -50,7 +50,7 @@ class PlanetPanel(ttk.Frame):
     def __init__(
         self,
         parent: tk.Misc,
-        generate: Callable[[PlanetSettings], None],
+        generate: Callable[[PlanetSettings, WonderSettings], None],
         edit_geology: Callable[[], None],
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
@@ -100,7 +100,8 @@ class PlanetPanel(ttk.Frame):
         self.wonder_section.pack(fill="x", pady=(2 * GAP, 0))
         wonders = self.wonder_section.body
         hint(wonders, "Fantastical landmarks beyond Earth's extremes, placed at random. To "
-             "place one exactly, add it as a landmark in the Geology step.")
+             "place one exactly, use the Wonders step; changing wonders later does not "
+             "erode the planet again.")
         grid = ttk.Frame(wonders, style="Panel.TFrame")
         grid.pack(fill="x", pady=(GAP // 2, 0))
         self.wonder_inputs: list[ttk.Checkbutton] = []
@@ -116,7 +117,8 @@ class PlanetPanel(ttk.Frame):
             width=20,
         )
         self.wonder_age_input.pack(side="left", padx=GAP)
-        hint(wonders, "How long erosion has worn them. Fresh wonders are sharp-edged.")
+        hint(wonders, "How long erosion has worn them, unless a placed wonder sets its own. "
+             "Fresh wonders are sharp-edged.")
         self._wonders_changed()
         geology = section(self, "Geology")
         WrappingLabel(geology, textvariable=self.geology_label, style="Body.TLabel").pack(
@@ -147,8 +149,13 @@ class PlanetPanel(ttk.Frame):
             nodes=NODES[self.detail_preset.get()],
             climate_passes=1 if self.climate.get() else 0,
             volcanic_islands=bool(self.islands.get()),
-            wonders=tuple(kind for kind in WONDER_KINDS if self.wonders[kind].get()),
-            wonder_age_myr=AGE_PRESETS[self.wonder_age.get()],
+        )
+
+    def wonder_settings(self) -> WonderSettings:
+        """The wonders chosen for random placement and their age."""
+        return WonderSettings(
+            tuple(kind for kind in WONDER_KINDS if self.wonders[kind].get()),
+            AGE_PRESETS[self.wonder_age.get()],
         )
 
     def summary(self) -> str:
@@ -170,7 +177,7 @@ class PlanetPanel(ttk.Frame):
             self.message.set(str(error))
             return
         self.message.set("")
-        self._generate(settings)
+        self._generate(settings, self.wonder_settings())
 
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"

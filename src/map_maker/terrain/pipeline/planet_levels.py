@@ -93,6 +93,7 @@ def level_parent(
         wind_north=sample(planet.wind_north),
         wonder_m=sample(planet.wonder_m),
         wonders=planet.wonders,
+        crater_floor_m=sample(planet.crater_floor_m),
         planet_mesh=planet.mesh if planet.planet_mesh is None else planet.planet_mesh,
         ice=planet.ice,
         ice_margin=planet.ice_margin_m,

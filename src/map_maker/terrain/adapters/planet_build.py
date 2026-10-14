@@ -5,7 +5,8 @@
 The manifest is written last via an atomic rename, so a failed or cancelled
 export never looks complete. The authoritative relief is the node elevation on
 the sphere mesh; triangle-linear interpolation defines values between nodes.
-Rasters and images are derived products.
+Rasters and images are derived products. A build with wonders also archives the
+base planet's fields that regional tiles are made from (ADR-0097).
 """
 
 import json
@@ -34,9 +35,10 @@ from map_maker.terrain.adapters.planet_render import (
 )
 from map_maker.terrain.adapters.world_geology import geology_document
 from map_maker.terrain.adapters.world_project import world_project_document
+from map_maker.terrain.adapters.world_wonders import wonders_document
 from map_maker.terrain.domain.planet import PLANET_CLIMATE_ALGORITHM, PLANET_RELIEF_ALGORITHM
 from map_maker.terrain.domain.seeds import SEED_POLICY_ID
-from map_maker.terrain.pipeline.planet import PlanetResult
+from map_maker.terrain.pipeline.planet import PlanetResult, has_wonders
 from map_maker.terrain.pipeline.planet_climate import BIOMES
 from map_maker.terrain.pipeline.planet_koppen import KOPPEN, koppen_group_share
 from map_maker.terrain.pipeline.planet_mesh import sample_field
@@ -46,7 +48,7 @@ from map_maker.terrain.pipeline.planet_volcanism import SETTINGS as VOLCANO_SETT
 
 PLANET_BUILD_SCHEMA = "map-maker.planet-build"
 PREVIEW_FILES = {theme.label: theme_file(theme) for theme in THEMES}
-PLANET_BUILD_VERSION = 1
+PLANET_BUILD_VERSION = 2
 MAX_RIVER_FEATURES = 200_000
 
 type Verify = Callable[[], None]
@@ -222,10 +224,13 @@ def write_planet_build(
     inputs: dict[str, str | None],
     destination: Path,
     *,
+    base: PlanetResult,
+    base_sha256: str,
     width: int,
     river_km2: float,
     verify: Verify,
 ) -> Path:
+    """Publish ``result``; ``base`` is the same planet without wonders."""
     verify()
     target = destination.absolute()
     if target.exists() or target.is_symlink():
@@ -242,6 +247,8 @@ def write_planet_build(
     save_bytes("input.world.json", canonical_json(world_project_document(result.world.project)))
     if result.geology is not None:
         save_bytes("input.geology.json", canonical_json(geology_document(result.geology)))
+    if result.placed is not None:
+        save_bytes("input.wonders.json", canonical_json(wonders_document(result.placed)))
     verify()
     mesh, flow, climate = result.mesh, result.flow, result.climate
     arrays: dict[str, NDArray[Any]] = {
@@ -277,6 +284,7 @@ def write_planet_build(
     v = result.volcanoes
     arrays |= {
         "wonder_m": result.wonder_m.astype("<f4"),
+        "crater_floor_m": result.crater_floor_m.astype("<f4"),
         "crater_xyz": result.wonders.craters.xyz.astype("<f8"),
         "crater_radius_m": result.wonders.craters.radius_m.astype("<f8"),
         "crater_depth_m": result.wonders.craters.depth_m.astype("<f8"),
@@ -362,6 +370,8 @@ def write_planet_build(
             "ice_m": result.ice.thickness_m.astype("<f4"),
             "ice_balance_m": result.ice.balance_m.astype("<f4"),
         }
+    if has_wonders(result.wonder_settings, result.placed):
+        arrays |= base_arrays(base)
     with (target / "planet.npz").open("xb") as stream:
         np.savez_compressed(stream, allow_pickle=False, **arrays)
     names.append("planet.npz")
@@ -401,6 +411,7 @@ def write_planet_build(
             None if climate is None else PLANET_CLIMATE_ALGORITHM
         )},
         "settings": asdict(result.settings),
+        "wonder_settings": asdict(result.wonder_settings),
         "seed_policy": SEED_POLICY_ID,
         "stage_seeds": result.stage_seeds,
         "inputs": inputs,
@@ -443,6 +454,7 @@ def write_planet_build(
             result, _pixel_area_km2(rasters.raster, rasters.islands_px)
         ),
         "outputs": outputs,
+        "base_sha256": base_sha256,
     }
     manifest["build_sha256"] = sha256(canonical_json(manifest)).hexdigest()
     verify()
@@ -455,6 +467,22 @@ def write_planet_build(
     complete = target / "manifest.json"
     pending.replace(complete)
     return complete
+
+
+def base_arrays(base: PlanetResult) -> dict[str, NDArray[Any]]:
+    """The base planet's fields that regional tiles are enriched from (ADR-0097)."""
+    return {
+        "base_water_surface_m": np.where(
+            base.land, base.lakes.surface_m, base.elevation_m
+        ).astype("<f4"),
+        "base_volcanic_island": base.islands,
+        "base_receiver": base.flow.receiver.astype("<i4"),
+        "base_contributing_area_m2": base.flow.area_m2.astype("<f8"),
+        "base_lake": base.lakes.lake.astype("<i4"),
+        "base_lake_level_m": base.lakes.level_m.astype("<f4"),
+        "base_lake_endorheic": base.lakes.endorheic,
+        "base_volcanic_m": base.volcanic_m.astype("<f4"),
+    }
 
 
 def _pixel_area_km2(raster: FrameRaster, mask: NDArray[np.bool_]) -> float:

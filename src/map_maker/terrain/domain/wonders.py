@@ -1,11 +1,13 @@
 """The catalog of wonders: fantastical landmarks beyond Earth's extremes.
 
 A planet places a wonder at random when its kind is chosen in
-``PlanetSettings.wonders``, or where a geology landmark puts it by hand. Hand-placed
-wonders replace random ones of their kind.
+``WonderSettings.random``, or where a wonder document (``domain.world_wonders``)
+puts it by hand. Hand-placed wonders replace random ones of their kind. Wonders are
+added to a finished base planet (ADR-0097).
 """
 
 from dataclasses import dataclass
+from math import isfinite
 from typing import Literal
 
 type WonderKind = Literal[
@@ -89,6 +91,35 @@ AGE_PRESETS: dict[str, float] = {
     "Old · 30 Myr": 30.0,
     "Ancient · 80 Myr": 80.0,
 }
+
+
+def _finite_in(value: object, low: float, high: float) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and isfinite(value)
+        and low <= value <= high
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class WonderSettings:
+    """Wonders placed at random, and the age of every wonder without its own."""
+
+    random: tuple[WonderKind, ...] = ()
+    age_myr: float = 0.0  # for the aging tool (ADR-0091); 0 keeps wonders fresh
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.random) is not tuple
+            or len(set(self.random)) != len(self.random)
+            or any(kind not in WONDER_KINDS for kind in self.random)
+        ):
+            raise ValueError(f"Wonders must be distinct kinds from: {', '.join(WONDER_KINDS)}.")
+        if not _finite_in(self.age_myr, 0, MAX_WONDER_AGE_MYR):
+            raise ValueError(
+                f"Wonder age (Myr) must be a finite number from 0 to {MAX_WONDER_AGE_MYR:g}."
+            )
 
 
 def wonder_kinds(text: str) -> tuple[WonderKind, ...]:

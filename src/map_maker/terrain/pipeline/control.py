@@ -47,3 +47,16 @@ def cancellable_progress(
         cancellation.checkpoint()
 
     return report
+
+
+def progress_part(
+    progress: ProgressCallback | None, start: float, end: float
+) -> ProgressCallback | None:
+    """Progress of one part of a job, reported as ``start``..``end`` of the whole."""
+    if progress is None:
+        return None
+
+    def report(fraction: float, message: str) -> None:
+        progress(start + (end - start) * fraction, message)
+
+    return report

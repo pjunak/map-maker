@@ -23,6 +23,12 @@ Only the current formats are supported:
   input recipe with retained world identity, continent defaults, priority provinces
   and independent ages/duration, plus optional explicit landform controls. Terrain
   creation consumes those controls; categories/ages do not imply physical forcing.
+  Wonders are not geology: a recipe holding the former `landmarks` is refused.
+
+- [World wonders v1](world/wonders-v1.schema.json): separate `.wonders.json`
+  document of wonders placed by hand, with retained world identity. Each has a kind,
+  source position (and end for two-ended kinds), its own shape seed, an optional
+  size and age (ADR-0097).
 
 - [Bathymetry inputs v1](world/bathymetry-inputs-v1.schema.json): portable
   `.bathy.json` world snapshot, explicit water IDs and shelf/slope/basin assumptions.
@@ -30,13 +36,14 @@ Only the current formats are supported:
   samples, numerical error/support, a retained verified geographic dependency and
   result hashes. Neither a land DEM nor physical transport/heat capacity.
 
-- [Planet build v1](world/planet-build-v1.schema.json): experimental whole-planet relief
-  (`sphere-mesh-stream-power-v27`), provisional climate and ice sheets
-  (`planet-climate-v7`). Node elevation on the sphere mesh is authoritative;
-  world-frame GeoTIFF/images are derived. Not a world parent.
+- [Planet build v2](world/planet-build-v2.schema.json): experimental whole-planet relief
+  (`sphere-mesh-stream-power-v28`), provisional climate and ice sheets
+  (`planet-climate-v7`), with wonder settings and the identity of the planet
+  without wonders (`base_sha256`, ADR-0097). Node elevation on the sphere mesh is
+  authoritative; world-frame GeoTIFF/images are derived. Not a world parent.
 
 - [Planet region v1](world/planet-region-v1.schema.json): experimental regional detail
-  window (`planet-blended-tiles-v8`) from cached tiles of a planet build; local
+  window (`planet-blended-tiles-v9`) from cached tiles of a planet build; local
   azimuthal-equidistant GeoTIFF and previews.
 
 - [Terrain context v1](terrain/context-v1.schema.json): bounded geographic support

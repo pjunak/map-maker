@@ -157,13 +157,16 @@ def authored_cliffs(
     ends: tuple[tuple[F64, F64], ...],
     heights_m: F64,
     names: tuple[str, ...],
-    rng: np.random.Generator,
+    rngs: tuple[np.random.Generator, ...],
 ) -> Cliffs:
-    """Hand-placed cliffs between unit-vector ``ends``, high side to the left."""
+    """Hand-placed cliffs between unit-vector ``ends``, high side to the left.
+
+    Each cliff's shape comes from its own random stream in ``rngs``.
+    """
     tree = KDTree(mesh.xyz)
     paths: list[F64] = []
     troughs: list[F64] = []
-    for (start, end), height, name in zip(ends, heights_m, names, strict=True):
+    for (start, end), height, name, rng in zip(ends, heights_m, names, rngs, strict=True):
         nodes = np.asarray(tree.query(np.stack((start, end)))[1], dtype=np.int64)
         if not land[nodes].all():
             raise ValueError(f"{name} reaches the sea; place both ends of a cliff on land.")
@@ -278,18 +281,22 @@ def authored_tepuis(
     centres: F64,
     radii_m: F64,
     names: tuple[str, ...],
-    rng: np.random.Generator,
+    rngs: tuple[np.random.Generator, ...],
 ) -> Tepuis:
-    """Hand-placed tepuis at unit vectors ``centres``; each must stand on land."""
+    """Hand-placed tepuis at unit vectors ``centres``; each must stand on land.
+
+    Each tepui's plan comes from its own random stream in ``rngs``.
+    """
     tree = KDTree(mesh.xyz)
     for xyz, name in zip(centres, names, strict=True):
         if not land[int(tree.query(xyz)[1])]:
             raise ValueError(f"{name} lies at sea; place a tepui on land.")
     unit = centres / np.linalg.norm(centres, axis=1)[:, None]
     radii = np.asarray(radii_m, dtype=np.float64)
+    plans = np.array([(rng.uniform(1.0, 2.2), rng.uniform(0, np.pi)) for rng in rngs])
     return Tepuis(
         unit, radii, np.array([tepui_height_m(float(r)) for r in radii]),
-        rng.uniform(1.0, 2.2, len(radii)), rng.uniform(0, np.pi, len(radii)),
+        plans[:, 0] if len(plans) else np.zeros(0), plans[:, 1] if len(plans) else np.zeros(0),
     )
 
 

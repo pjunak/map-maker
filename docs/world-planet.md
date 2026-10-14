@@ -34,7 +34,7 @@ evidence for [relief](research/2026-10-06-whole-planet-erosion-relief.md) and
 ## In the desktop app
 
 Open or import a world in the **World** tab and work through its steps down the
-left (Source map, Planet, Geology, Generate, Explore; see the
+left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
 [world guide](terrain-worlds.md#the-steps)). The map is on the right.
 
 1. **Open the Generate step and choose the detail.** Each choice says how far
@@ -48,7 +48,10 @@ left (Source map, Planet, Geology, Generate, Explore; see the
      a random one. The same seed and inputs always give the same planet.
    - Keep **Climate, rivers, lakes and ice** on for the atlas, climate zone,
      rainfall and temperature maps.
-   - **Volcanic islands** and the [wonders](wonders.md) are optional.
+   - **Volcanic islands** and the [wonders](wonders.md) are optional. Wonders
+     are added to the finished planet: placing or changing them later in the
+     **Wonders** step, or generating again with only the wonders changed, does not
+     erode the planet again.
    - The **Geology** line says what the planet uses: the recipe in the Geology
      step, saved or not, or automatic mountain ranges when there is none.
 3. **Click Generate planet.** The status bar under the map shows progress.
@@ -152,6 +155,7 @@ file ([ADR-0087](adr/0087-map-themes-and-projections.md)).
 ```powershell
 map-maker world planet my-world.world.json --output my-planet
 map-maker world planet my-world.world.json --geology my-world.geology.json --output my-planet-geo
+map-maker world planet my-world.world.json --wonders my-world.wonders.json --random-wonders crater,tepui --output my-planet-wonders
 ```
 
 The output folder must not exist. Progress is printed. A cancelled or failed run
@@ -163,8 +167,9 @@ leaves no `manifest.json`, so it never looks complete.
 | `--geology` | none | A geology recipe for this exact world. Without one, ranges and margins are placed procedurally. |
 | `--calibrate` | 3 | How many times each geology region's uplift is corrected towards its target elevation. |
 | `--climate-passes` | 1 | Climate → erosion couplings. 0 skips climate and biomes. |
-| `--wonder-age` | 0 | Erode the wonders for this many million years (0 keeps them fresh); see the [wonder guide](wonders.md#age). Also **Age** under Wonders in the Generate step. |
-| `--wonders` | none | Wonder kinds placed at random: a comma-separated list such as `titan,chasm`, or `all`. See the [wonder guide](wonders.md). Also checkboxes under Wonders in the Generate step. |
+| `--wonders` | none | A `.wonders.json` file of wonders placed by hand for this exact world, from the Wonders step. See the [wonder guide](wonders.md). |
+| `--random-wonders` | none | Wonder kinds placed at random: a comma-separated list such as `titan,chasm`, or `all`. Placed wonders replace random ones of their kind. Also checkboxes under Wonders in the Generate step. |
+| `--wonder-age` | 0 | Erode the wonders for this many million years (0 keeps them fresh); placed wonders may set their own. See the [wonder guide](wonders.md#age). Also **Age** under Wonders in the Generate step. |
 | `--volcanic-islands` | off | Let young volcanoes at sea rise as islands: hotspot chains of shield islands and island arcs behind ocean trenches. **Adds land beyond your coastline.** Also a checkbox in the Generate step. |
 | `--erodibility` | 5e-6 | Lower values give higher overall relief. Geology targets are re-calibrated either way. |
 | `--process-km2` | 600 | Smallest drainage area treated as a river at world scale. Smaller values give more, finer valleys; keep it at least a few mesh cells. |
@@ -188,6 +193,8 @@ map-maker world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output m
 ```
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
+They are made from the planet without wonders, which windows draw on top, so they
+are cached under its identity and outlast changes to the wonders.
 Go deeper with `--level`. Each level is enriched from the level above it, and
 windows at the same level agree wherever they overlap
 ([ADR-0088](adr/0088-nested-regional-detail-levels.md)).
@@ -258,9 +265,9 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
 | `volcanoes.geojson` | Volcano points with kind (stratovolcano, shield, caldera, seamount), setting (arc, hotspot, rift, intraplate), activity, age, summit height and size. |
-| `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields, and ice thickness and mass balance. |
-| `input.world.json`, `input.geology.json` | Snapshots of the inputs used. |
-| `manifest.json` | Settings, stage seeds, input hashes, runtime, calibration, metrics and output hashes ([schema](../schemas/world/planet-build-v1.schema.json)). |
+| `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields, and ice thickness and mass balance. With wonders, also the surface, routing, lakes and volcanic relief of the planet without them, which regional tiles start from. |
+| `input.world.json`, `input.geology.json`, `input.wonders.json` | Snapshots of the inputs used. |
+| `manifest.json` | Settings, wonder settings, stage seeds, input hashes, runtime, calibration, metrics, output hashes and two identities: `build_sha256` for this planet and `base_sha256` for the planet without wonders ([schema](../schemas/world/planet-build-v2.schema.json)). |
 
 **Aligning with your drawing.** Images and the GeoTIFF cover exactly your SVG
 world frame: column 0 is the left edge and row 0 is the top. Scale a PNG to the

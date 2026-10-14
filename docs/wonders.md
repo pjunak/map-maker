@@ -3,21 +3,54 @@
 Wonders are fantastical landmarks beyond Earth's extremes. They are opt-in: a
 planet has none unless you choose some.
 
+Wonders are a layer on top of the planet ([ADR-0097](adr/0097-wonders-as-a-layer-on-a-base-planet.md)).
+The planet is first made without them: erosion, climate, volcanoes, ice, lakes and
+the sea floor. Wonders are then added to its ground, and only ice, lakes, rivers
+and the sea floor are worked out again. Changing wonders therefore never erodes the
+planet again, and regional detail already built for the planet stays valid.
+
 - **At random.** Tick the kinds under **Wonders** in the Generate step, or pass
-  `--wonders` to `map-maker world planet` with a comma-separated list of kinds or
-  `all`. Random wonders land in the same places at every mesh resolution, so a
-  quick preview shows where the final build puts them.
-- **By hand.** Place them under **Landmarks** in the Geology step
-  ([geology guide](world-geology.md#place-wonders-by-hand)). Placed wonders of a
-  kind replace the random ones of that kind.
+  `--random-wonders` to `map-maker world planet` with a comma-separated list of
+  kinds or `all`. Random wonders land in the same places at every mesh resolution,
+  so a quick preview shows where the final build puts them.
+- **By hand.** Place them in the **Wonders** step, which keeps them in their own
+  `.wonders.json` file beside the world. Pass that file to
+  `map-maker world planet` with `--wonders`. Placed wonders of a kind replace the
+  random ones of that kind.
 
 Wonders form after erosion and climate, so they keep their sharp shapes, and
 every map draws them at its own scale, from the world atlas down to local maps.
 Lakes form in them where the climate is wet and salt pans where it is dry. Rivers
 that drop over a wonder's cliffs fall as waterfalls, drawn as white spray, and
-hovering over a wonder on the map names it.
+hovering over a wonder on the map names it. The climate does not see them: a
+titan volcano casts no rain shadow.
 
-| Kind | `--wonders` name | What it is | Size when placed by hand |
+## Place wonders by hand
+
+1. Open the **Wonders** step and click **Place wonders** (or **Open wonders…**).
+   The step's map, your source drawing, replaces the world map while it is open.
+2. Choose a **Kind**; the text below describes it and its size range. Optionally
+   give a **Name**, a **Size** in km (a diameter, a width or a height, depending on
+   the kind; blank uses the usual size) and an **Age** in million years.
+3. Click **Place on map**, then a point on land. Wonders placed by their two ends,
+   such as a chasm, take a second click for the other end. Escape cancels.
+4. Select a wonder in the list to change it (**Update**), give it a **New shape** or
+   **Delete** it. Undo and redo cover every edit; **Save** writes the file.
+5. Generate the planet, or, if it already exists, click **Apply to the planet**.
+   Generating again with unchanged inputs and planet settings also only adds the
+   wonders.
+
+Each placed wonder draws its shape from its own seed, stored in the file. Adding,
+removing or moving other wonders, or changing the planet's seed, does not redraw
+it; only its depth follows the ground it is cut into. **New shape** draws it from a
+new seed. The planet reports an error if a
+wonder, or either end of a two-ended one, lies at sea, and if a splitting river has
+no large river near it. The file follows edits of its world, as a geology recipe
+does ([schema](../schemas/world/wonders-v1.schema.json)).
+
+## The catalog
+
+| Kind | `--random-wonders` name | What it is | Size when placed by hand |
 |---|---|---|---|
 | Titan volcano | `titan` | An ice-capped shield volcano about 10 km high, with a cliff around its base and radial valleys. | Diameter 200–1,200 km, usually 560 km. |
 | Shattered volcano | `shattered` | A volcano 3.5–5 km high that blew itself apart: a horseshoe amphitheatre with a rounded head at the summit caldera opens to one side, and a hummocky debris lobe runs out to 2.6 times its radius beyond the breach. | Diameter 20–200 km, usually 70 km. |
@@ -36,10 +69,10 @@ cut gullies into their walls, creep rounds their rims and their floors fill with
 sediment. A crater 10 million years old keeps its shape with a worn, gullied
 rim; at 60 million years it is a faint ring, as Earth's oldest craters are.
 
-- **For the whole planet:** choose **Age** under **Wonders** in the Generate step
+- **For every wonder:** choose **Age** under **Wonders** in the Generate step
   (fresh, weathered, old or ancient) or pass `--wonder-age` in million years.
-- **For one landmark:** set its **Age** (million years) under Landmarks in the
-  Geology step; blank uses the planet's age.
+- **For one placed wonder:** set its **Age** (million years) in the Wonders step;
+  blank uses the age above.
 
 Craters, chasms, great cliffs and tepuis age; volcanoes, oases and rivers stay
 young; tepuis and great cliffs wear slowly, as a hard caprock does. Each aged

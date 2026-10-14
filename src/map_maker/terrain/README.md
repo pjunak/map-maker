@@ -14,14 +14,15 @@ The window opens with **World** and **Terrain** tabs. World retains complete SVG
 source maps, continental ownership and an explicit spherical geographic frame.
 Read the [world guide](../../../docs/terrain-worlds.md), or try
 `map-maker terrain gui --world examples/world/four-shores.world.json`.
-Its guided steps run down the left (Source map, Planet, Geology, Generate, Explore;
+Its guided steps run down the left (Source map, Planet, Geology, Generate, Wonders, Explore;
 see [the steps](../../../docs/terrain-worlds.md#the-steps)) beside one map view that
 shows source, context and planet maps in any projection, with drill-down to regional
 detail ([planet guide](../../../docs/world-planet.md)). Long jobs show progress and
 **Cancel** in the status bar. The optional **Geology** step edits the
 [province/default recipe](../../../docs/world-geology.md) in place, with its own
-recipe saves, landmarks and source/context backgrounds; the planet uses it as it
-stands.
+recipe saves and source/context backgrounds; the planet uses it as it stands. The
+optional **Wonders** step places [wonders](../../../docs/wonders.md) by hand in their
+own file and applies them to a generated planet without eroding it again.
 
 **More tools** follow the steps. **Geographic context** generates spherical coverage,
 connected water and resolution support, shared-edge openings, separate water-piece

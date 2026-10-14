@@ -21,6 +21,7 @@ from map_maker.terrain.adapters.world_geology import write_geology
 from map_maker.terrain.application.planet import build_planet, input_identity
 from map_maker.terrain.application.world import open_world
 from map_maker.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
+from map_maker.terrain.domain.wonders import WonderSettings
 from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 from map_maker.terrain.pipeline.planet import generate_planet
 from map_maker.terrain.pipeline.planet_climate import simulate_climate
@@ -160,17 +161,22 @@ def test_settings_reject_unsupported_requests() -> None:
         {"step_kyr": 5000.0, "duration_myr": 1.0},
         {"climate_passes": 9},
         {"erodibility": float("nan")},
-        {"wonders": True},
-        {"wonders": ["crater"]},
-        {"wonders": ("crater", "crater")},
-        {"wonders": ("dragon",)},
-        {"wonder_age_myr": -1.0},
-        {"wonder_age_myr": 1e6},
     ):
         with pytest.raises(ValueError):
             PlanetSettings(**bad)  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         PlanetClimateSettings(pole_sst_c=40.0)
+    for wrong in (
+        {"random": True},
+        {"random": ["crater"]},
+        {"random": ("crater", "crater")},
+        {"random": ("dragon",)},
+        {"age_myr": -1.0},
+        {"age_myr": 1e6},
+        {"age_myr": True},
+    ):
+        with pytest.raises(ValueError):
+            WonderSettings(**wrong)  # type: ignore[arg-type]
 
 
 def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
@@ -183,13 +189,12 @@ def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
         wonder_kinds("crater,dragon")
     # The public schemas list exactly the catalog's kinds.
     root = Path(__file__).parents[1] / "schemas/world"
-    geology = json.loads((root / "geology-v2.schema.json").read_text(encoding="utf-8"))
-    build = json.loads((root / "planet-build-v1.schema.json").read_text(encoding="utf-8"))
-    landmark = geology["properties"]["landmarks"]["items"]["properties"]["kind"]
-    assert tuple(landmark["enum"]) == WONDER_KINDS
-    assert tuple(build["properties"]["settings"]["properties"]["wonders"]["items"]["enum"]) == (
-        WONDER_KINDS
-    )
+    placed = json.loads((root / "wonders-v1.schema.json").read_text(encoding="utf-8"))
+    build = json.loads((root / "planet-build-v2.schema.json").read_text(encoding="utf-8"))
+    kind = placed["properties"]["wonders"]["items"]["properties"]["kind"]
+    assert tuple(kind["enum"]) == WONDER_KINDS
+    random = build["properties"]["wonder_settings"]["properties"]["random"]
+    assert tuple(random["items"]["enum"]) == WONDER_KINDS
 
 
 def test_planet_build_publishes_verified_world_aligned_products(
@@ -201,7 +206,7 @@ def test_planet_build_publishes_verified_world_aligned_products(
     target = manifest_path.parent
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     schema = json.loads(
-        (ROOT / "schemas/world/planet-build-v1.schema.json").read_text(encoding="utf-8")
+        (ROOT / "schemas/world/planet-build-v2.schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(manifest)
@@ -211,7 +216,8 @@ def test_planet_build_publishes_verified_world_aligned_products(
         manifest["outputs"]
     )
     recipe = sample_recipe(world_path)
-    assert manifest["inputs"] == input_identity(recipe.world, recipe)
+    assert manifest["inputs"] == {**input_identity(recipe.world, recipe), "wonders_sha256": None}
+    assert manifest["wonder_settings"] == {"random": [], "age_myr": 0.0}
     assert {"atlas.png", "relief.png", "precipitation.png", "temperature.png"} <= set(
         manifest["outputs"]
     )
@@ -225,9 +231,13 @@ def test_planet_build_publishes_verified_world_aligned_products(
         assert np.all(np.isfinite(ice)) and np.all(ice >= 0) and not ice[~land].any()
         assert np.all(np.isfinite(balance))
     assert 0.0 <= manifest["climate"]["ice_sheet_share"] <= 1.0
-    loaded = read_planet_parent(target).parent
+    reopened = read_planet_parent(target)
+    loaded = reopened.parent
     assert loaded.ice is not None
     assert np.allclose(loaded.ice.thickness_m, ice)
+    # Without wonders the planet is its own base, and tiles start from it.
+    assert reopened.base_sha256 == manifest["base_sha256"] != manifest["build_sha256"]
+    assert np.array_equal(reopened.tiles.surface_m, loaded.surface_m)
     with rasterio.open(target / "elevation.tif") as tif:
         assert (tif.width, tif.height) == (256, 128)
         assert tif.crs is not None and "6371000" in tif.crs.to_wkt()
@@ -713,6 +723,7 @@ def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
         TITAN_MIN_COAST_M,
         edifice_height,
         place_volcanoes,
+        wonder_volcanoes,
     )
 
     mesh = build_mesh(20_000, RADIUS, 13)
@@ -722,7 +733,7 @@ def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
     ground = np.where(land, 300.0, -4000.0)
     plain = place_volcanoes(mesh, land, coast, plates, 4, ground)
     assert not (plain.setting == TITAN).any()
-    volcanoes = place_volcanoes(mesh, land, coast, plates, 4, ground, wonders=("titan",))
+    volcanoes = wonder_volcanoes(mesh, land, coast, 4, ("titan",))
     titan = volcanoes.subset(volcanoes.setting == TITAN)
     assert len(titan) == 1 and titan.height_m[0] > MAX_SUMMIT_M
     site = int(np.argmax(mesh.xyz @ titan.xyz[0]))
@@ -1159,8 +1170,10 @@ def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Pat
     from map_maker.terrain.adapters.planet_load import read_planet_parent
     from map_maker.terrain.application.planet import export_planet, generate_planet_run
 
-    settings = replace(FAST, climate_passes=0, wonders=("crater",), wonder_age_myr=15.0)
-    run = generate_planet_run(open_world(world_path).project, None, settings, preview_width=0)
+    run = generate_planet_run(
+        open_world(world_path).project, None, replace(FAST, climate_passes=0),
+        wonder_settings=WonderSettings(("crater",), 15.0), preview_width=0,
+    )
     aging = run.result.wonders.aging
     assert len(aging) == len(run.result.wonders.craters) >= 1
     assert all(patch.age_myr == 15.0 for patch in aging.patches)
@@ -1218,15 +1231,52 @@ def test_the_map_hover_names_wonders() -> None:
     assert wonder_at(np.array([0.0, 0.0, 1.0]), RADIUS, wonders) is None
 
 
-def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
-    from dataclasses import replace as replace_recipe
+def test_wonders_are_a_pass_on_the_base_planet(world_path: Path) -> None:
+    from map_maker.terrain.application.planet import (
+        apply_wonders,
+        base_identity,
+        generate_planet_run,
+        planet_identity,
+    )
+    from map_maker.terrain.pipeline.planet import finish_planet
 
-    from map_maker.terrain.domain.world_geology import GeologyLandmark
+    project = open_world(world_path).project
+    settings = replace(FAST, climate_passes=0)
+    run = generate_planet_run(
+        project, None, settings, wonder_settings=WonderSettings(("crater", "chasm")),
+        preview_width=0,
+    )
+    base, result = run.base.planet, run.result
+    # The base planet has no wonders; the planet adds them on top of it.
+    assert len(base.wonders) == 0 and not np.any(base.wonder_m) and not np.any(base.crater_floor_m)
+    assert len(result.wonders.craters) >= 1 and len(result.wonders.chasms) >= 1
+    assert np.any(result.crater_floor_m != 0) and np.any(result.wonder_m < 0)
+    assert np.array_equal(result.forcing.erodibility, base.forcing.erodibility)
+    # Without wonders the pass gives the base planet back.
+    kept = base.elevation_m.copy()
+    plain = finish_planet(run.base)
+    assert np.array_equal(plain.elevation_m, kept) and np.array_equal(base.elevation_m, kept)
+    # The same pass again gives the same planet, as one generation would.
+    again = generate_planet(
+        open_world(world_path), settings, wonder_settings=WonderSettings(("crater", "chasm"))
+    )
+    assert np.array_equal(again.elevation_m, result.elevation_m)
+    # Identities: the base outlasts wonder changes; the planet's does not.
+    assert run.base_sha256 == base_identity(project, None, settings, run.runtime)
+    other = apply_wonders(run, WonderSettings(("tepui",)), None, preview_width=0)
+    assert other.base_sha256 == run.base_sha256 and other.base is run.base
+    assert planet_identity(other) != planet_identity(run)
+    assert len(other.result.wonders.tepuis) >= 1 and len(other.result.wonders.craters) == 0
+
+
+def test_placed_wonders_replace_random_ones_and_keep_their_own_shapes(world_path: Path) -> None:
+    from map_maker.terrain.domain.world_wonders import WorldWonder, WorldWonders
+    from map_maker.terrain.pipeline.planet import finish_planet, generate_base
     from map_maker.terrain.pipeline.planet_volcanism import SHATTERED, STRATO, TITAN, WONDER
 
     world = open_world(world_path)
-    recipe = sample_recipe(world_path)
-    plain = generate_planet(world, replace(FAST, climate_passes=0), recipe)
+    base = generate_base(world, replace(FAST, climate_passes=0), sample_recipe(world_path))
+    plain = base.planet
     frame = world.project.frame
     inland = np.argsort(np.where(plain.land, plain.coast_m, -1.0))[::-1]
     first = int(inland[0])
@@ -1253,23 +1303,20 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     scarp_end = next(int(k) for k in inland if 300e3 < reach[k] < 700e3)
     mesa = next(int(k) for k in inland if 200e3 < reach[k] < 600e3 and k != scarp_end)
     blast = next(int(k) for k in inland if 700e3 < reach[k] < 1100e3)
-    placed = replace_recipe(
-        recipe,
-        landmarks=(
-            GeologyLandmark("landmark-sky", "Skyfather", "titan", source(first), 400.0),
-            GeologyLandmark("landmark-eye", "The Eye", "crater", source(far), 200.0),
-            GeologyLandmark(
-                "landmark-rift", "The Rift", "chasm", source(rift), 40.0, source(rift_end)
-            ),
-            GeologyLandmark(
-                "landmark-wall", "The Wall", "cliff", source(far), 1.5, source(scarp_end)
-            ),
-            GeologyLandmark("landmark-mesa", "High Table", "tepui", source(mesa), 80.0),
-            GeologyLandmark("landmark-blast", "The Ruin", "shattered", source(blast), 60.0),
-            GeologyLandmark("landmark-fire", "Firemount", "active", source(rift_end), 120.0),
-        ),
+    the_rift = WorldWonder(
+        "wonder-rift", "The Rift", "chasm", source(rift), 5, 40.0, source(rift_end)
     )
-    result = generate_planet(world, replace(FAST, climate_passes=0), placed)
+    placed = WorldWonders(world.project, (
+        WorldWonder("wonder-sky", "Skyfather", "titan", source(first), 1, 400.0),
+        WorldWonder("wonder-eye", "The Eye", "crater", source(far), 2, 200.0),
+        the_rift,
+        WorldWonder("wonder-wall", "The Wall", "cliff", source(far), 3, 1.5, source(scarp_end)),
+        WorldWonder("wonder-mesa", "High Table", "tepui", source(mesa), 4, 80.0),
+        WorldWonder("wonder-blast", "The Ruin", "shattered", source(blast), 6, 60.0),
+        WorldWonder("wonder-fire", "Firemount", "active", source(rift_end), 7, 120.0),
+    ))
+    # Random craters and titans are asked for too; the placed ones replace them.
+    result = finish_planet(base, WonderSettings(("titan", "crater")), placed)
     titans = result.volcanoes.subset(result.volcanoes.setting == TITAN)
     assert len(titans) == 1
     assert titans.xyz[0] @ plain.mesh.xyz[first] > np.cos(0.5 * plain.mesh.spacing_m / RADIUS)
@@ -1293,27 +1340,40 @@ def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     assert wonder.active[wonder.kind == STRATO].all()
     assert len(result.wonders.eruptions) == 1 and len(result.wonders.eruptions.flows) >= 5
     assert np.any(result.wonder_m != 0)
-    # A landmark in the sea is reported, not moved.
+    assert result.placed == placed
+    # Each wonder draws its shape from its own seed: another chasm placed before
+    # it changes nothing, and a new seed gives it a new shape.
+    gorge = WorldWonder("wonder-gorge", "The Gorge", "chasm", source(far), 8, 30.0,
+                        source(scarp_end))
+    alone = finish_planet(base, wonders=WorldWonders(world.project, (the_rift,))).wonders.chasms
+    pair = finish_planet(
+        base, wonders=WorldWonders(world.project, (gorge, the_rift))
+    ).wonders.chasms
+    start = next(i for i, path in enumerate(pair.paths) if path[0] @ alone.paths[0][0] > 1 - 1e-12)
+    assert start > 0
+    for a, b in zip(pair.paths[start:], alone.paths, strict=True):
+        assert np.array_equal(a, b)
+    reseeded = finish_planet(
+        base, wonders=WorldWonders(world.project, (replace(the_rift, seed=9),))
+    ).wonders.chasms
+    assert not np.array_equal(reseeded.paths[0], alone.paths[0])
+    # A wonder in the sea is reported, not moved.
     sea = int(np.argmax(np.where(plain.land, -1.0, -plain.elevation_m)))
     shore = int(np.argmin(np.where(plain.land, np.inf, span)))
     for wet in (
-        GeologyLandmark("landmark-wet", "Wet", "crater", source(sea)),
-        GeologyLandmark("landmark-wet", "Wet", "chasm", source(rift), None, source(shore)),
-        GeologyLandmark("landmark-wet", "Wet", "cliff", source(rift), None, source(shore)),
-        GeologyLandmark("landmark-wet", "Wet", "tepui", source(sea)),
-        GeologyLandmark("landmark-wet", "Wet", "active", source(sea)),
-        GeologyLandmark("landmark-wet", "Wet", "oasis", source(sea)),
+        WorldWonder("wonder-wet", "Wet", "crater", source(sea), 1),
+        WorldWonder("wonder-wet", "Wet", "chasm", source(rift), 1, None, source(shore)),
+        WorldWonder("wonder-wet", "Wet", "cliff", source(rift), 1, None, source(shore)),
+        WorldWonder("wonder-wet", "Wet", "tepui", source(sea), 1),
+        WorldWonder("wonder-wet", "Wet", "active", source(sea), 1),
+        WorldWonder("wonder-wet", "Wet", "oasis", source(sea), 1),
     ):
         with pytest.raises(ValueError, match=r"Wet.*sea"):
-            generate_planet(
-                world, replace(FAST, climate_passes=0), replace_recipe(recipe, landmarks=(wet,))
-            )
+            finish_planet(base, wonders=WorldWonders(world.project, (wet,)))
     # A splitting river must be placed near a large river.
-    dry = replace_recipe(
-        recipe, landmarks=(GeologyLandmark("landmark-dry", "Dry", "fork", source(sea)),)
-    )
+    dry = WorldWonders(world.project, (WorldWonder("wonder-dry", "Dry", "fork", source(sea), 1),))
     with pytest.raises(ValueError, match=r"Dry: no large river"):
-        generate_planet(world, replace(FAST, climate_passes=0), dry)
+        finish_planet(base, wonders=dry)
 
 
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:

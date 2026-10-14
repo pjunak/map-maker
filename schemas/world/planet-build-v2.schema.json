@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://map-maker.local/schemas/world/planet-build-v1.schema.json",
-  "title": "Map Maker experimental whole-planet relief build v1",
+  "$id": "https://map-maker.local/schemas/world/planet-build-v2.schema.json",
+  "title": "Map Maker experimental whole-planet relief build v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,6 +10,7 @@
     "status",
     "algorithms",
     "settings",
+    "wonder_settings",
     "seed_policy",
     "stage_seeds",
     "inputs",
@@ -25,18 +26,19 @@
     "lakes",
     "volcanoes",
     "outputs",
+    "base_sha256",
     "build_sha256"
   ],
   "properties": {
     "schema": { "const": "map-maker.planet-build" },
-    "version": { "type": "integer", "const": 1 },
+    "version": { "type": "integer", "const": 2 },
     "status": { "const": "experimental" },
     "algorithms": {
       "type": "object",
       "additionalProperties": false,
       "required": ["relief", "climate"],
       "properties": {
-        "relief": { "const": "sphere-mesh-stream-power-v27" },
+        "relief": { "const": "sphere-mesh-stream-power-v28" },
         "climate": { "enum": ["planet-climate-v7", null] }
       }
     },
@@ -45,7 +47,7 @@
       "required": [
         "seed", "nodes", "duration_myr", "step_kyr", "erodibility", "area_exponent",
         "process_area_km2", "calibration_iterations", "climate_passes", "climate",
-        "volcanic_islands", "wonders", "wonder_age_myr"
+        "volcanic_islands"
       ],
       "properties": {
         "seed": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
@@ -58,10 +60,17 @@
         "calibration_iterations": { "type": "integer", "minimum": 0 },
         "climate_passes": { "type": "integer", "minimum": 0 },
         "climate": { "type": "object" },
-        "volcanic_islands": { "type": "boolean" },
-        "wonder_age_myr": { "type": "number", "minimum": 0, "maximum": 500 },
-        "wonders": {
-          "description": "Wonder kinds placed at random.",
+        "volcanic_islands": { "type": "boolean" }
+      }
+    },
+    "wonder_settings": {
+      "description": "Wonders placed at random and the age of wonders without their own (ADR-0097).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["random", "age_myr"],
+      "properties": {
+        "random": {
+          "description": "Wonder kinds placed at random where none of the kind is placed by hand.",
           "type": "array",
           "uniqueItems": true,
           "items": {
@@ -70,7 +79,8 @@
               "fork"
             ]
           }
-        }
+        },
+        "age_myr": { "type": "number", "minimum": 0, "maximum": 500 }
       }
     },
     "seed_policy": { "const": "named-stage-sha256@1" },
@@ -88,10 +98,14 @@
     "inputs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["world_sha256", "geology_sha256"],
+      "required": ["world_sha256", "geology_sha256", "wonders_sha256"],
       "properties": {
         "world_sha256": { "$ref": "#/$defs/sha256" },
-        "geology_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+        "geology_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "wonders_sha256": {
+          "description": "Canonical hash of the hand-placed wonder document, copied as input.wonders.json.",
+          "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
       }
     },
     "runtime": { "type": "object" },
@@ -202,6 +216,10 @@
           "bytes": { "type": "integer", "minimum": 0 }
         }
       }
+    },
+    "base_sha256": {
+      "description": "Identity of the planet without wonders (inputs, settings and runtime); regional tiles are cached under it.",
+      "$ref": "#/$defs/sha256"
     },
     "build_sha256": { "$ref": "#/$defs/sha256" }
   },

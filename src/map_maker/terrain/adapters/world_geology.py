@@ -1,25 +1,22 @@
 """Portable, current-only geology recipes with retained world identity."""
 
 import json
-import os
-import tempfile
 from dataclasses import asdict
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
 from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.adapters.document_files import document_file_hash, write_document
 from map_maker.terrain.adapters.landform_inputs import landform_from_json
 from map_maker.terrain.adapters.world_project import (
     world_project_document,
     world_project_from_bytes,
 )
-from map_maker.terrain.domain.wonders import WONDER_KINDS
 from map_maker.terrain.domain.world import WorldProject
 from map_maker.terrain.domain.world_geology import (
     GEOLOGICAL_SETTINGS,
     ContinentGeology,
-    GeologyLandmark,
     GeologyProfile,
     GeologyProvince,
     WorldGeologyRecipe,
@@ -72,18 +69,6 @@ def geology_document(recipe: WorldGeologyRecipe) -> dict[str, object]:
                 "profile": profile(p.profile),
             }
             for p in sorted(recipe.provinces, key=lambda p: p.id)
-        ],
-        "landmarks": [
-            {
-                "id": m.id,
-                "name": m.name,
-                "kind": m.kind,
-                "position": [float(m.position[0]), float(m.position[1])],
-                "size_km": None if m.size_km is None else float(m.size_km),
-                "end": None if m.end is None else [float(m.end[0]), float(m.end[1])],
-                "age_myr": None if m.age_myr is None else float(m.age_myr),
-            }
-            for m in sorted(recipe.landmarks, key=lambda m: m.id)
         ],
     }
 
@@ -142,14 +127,15 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
         raise ValueError("Geology recipe exceeds 40 MiB.")
     try:
         value: object = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique)
-        fields = {
+        if "landmarks" in _keys(value):
+            raise ValueError(
+                "This recipe holds landmarks, which are now wonders in their own document "
+                "(.wonders.json, ADR-0097). Place them again in the Wonders step."
+            )
+        record = _record(value, {
             "schema", "version", "time_reference", "world_sha256", "world", "defaults",
             "provinces",
-        }
-        # Landmarks are optional, so recipes saved before they existed still open.
-        if "landmarks" in _keys(value):
-            fields.add("landmarks")
-        record = _record(value, fields)
+        })
         if (
             record["schema"] != GEOLOGY_SCHEMA
             or type(record["version"]) is not int
@@ -187,36 +173,7 @@ def geology_from_bytes(raw: bytes) -> WorldGeologyRecipe:
                     _profile(province["profile"]),
                 )
             )
-        landmarks: list[GeologyLandmark] = []
-        for item in _array(record.get("landmarks", [])):
-            keys = {"id", "name", "kind", "position", "size_km"}
-            optional = {"end", "age_myr"} & _keys(item)
-            landmark = _record(item, keys | optional)
-            position = tuple(_number(n) for n in _array(landmark["position"]))
-            if len(position) != 2:
-                raise ValueError("Landmark positions need two coordinates.")
-            kind = landmark["kind"]
-            if kind not in WONDER_KINDS:
-                raise ValueError(f"Unknown landmark kind: {kind}.")
-            size = landmark["size_km"]
-            end: tuple[float, float] | None = None
-            if landmark.get("end") is not None:
-                values = tuple(_number(n) for n in _array(landmark["end"]))
-                if len(values) != 2:
-                    raise ValueError("Landmark end points need two coordinates.")
-                end = (values[0], values[1])
-            landmarks.append(
-                GeologyLandmark(
-                    _text(landmark["id"]),
-                    _text(landmark["name"]),
-                    kind,
-                    (position[0], position[1]),
-                    None if size is None else _number(size),
-                    end,
-                    None if landmark.get("age_myr") is None else _number(landmark["age_myr"]),
-                )
-            )
-        return WorldGeologyRecipe(world, tuple(defaults), tuple(provinces), tuple(landmarks))
+        return WorldGeologyRecipe(world, tuple(defaults), tuple(provinces))
     except (UnicodeError, json.JSONDecodeError, OverflowError, RecursionError) as error:
         raise ValueError(f"Invalid geology recipe: {error}") from error
 
@@ -228,14 +185,7 @@ def read_geology(path: Path) -> tuple[WorldGeologyRecipe, str]:
 
 
 def geology_file_hash(path: Path) -> str | None:
-    try:
-        with path.open("rb") as stream:
-            raw = stream.read(MAX_GEOLOGY_BYTES + 1)
-    except FileNotFoundError:
-        return None
-    if len(raw) > MAX_GEOLOGY_BYTES:
-        raise ValueError("Existing geology file exceeds 40 MiB; choose another path.")
-    return sha256(raw).hexdigest()
+    return document_file_hash(path, MAX_GEOLOGY_BYTES, "geology")
 
 
 def write_geology(recipe: WorldGeologyRecipe, path: Path, expected_hash: str | None) -> str:
@@ -245,18 +195,4 @@ def write_geology(recipe: WorldGeologyRecipe, path: Path, expected_hash: str | N
     data = canonical_json(geology_document(recipe))
     if len(data) > MAX_GEOLOGY_BYTES:
         raise ValueError("Geology recipe exceeds 40 MiB.")
-    temporary: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".geology-", delete=False) as f:
-            temporary = f.name
-            f.write(data)
-            f.flush()
-            os.fsync(f.fileno())
-        if geology_file_hash(path) != expected_hash:
-            raise ValueError("Geology file changed outside the editor. Reopen it or use Save As.")
-        os.replace(temporary, path)
-        temporary = None
-    finally:
-        if temporary is not None:
-            Path(temporary).unlink(missing_ok=True)
-    return sha256(data).hexdigest()
+    return write_document(path, data, expected_hash, MAX_GEOLOGY_BYTES, "geology")

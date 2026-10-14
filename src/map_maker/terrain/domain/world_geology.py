@@ -6,12 +6,6 @@ from re import fullmatch
 from typing import Literal
 
 from map_maker.terrain.domain.models import LandformSettings, Point2D
-from map_maker.terrain.domain.wonders import (
-    MAX_WONDER_AGE_MYR,
-    WONDER_KINDS,
-    WONDERS,
-    WonderKind,
-)
 from map_maker.terrain.domain.world import WorldProject
 
 type GeologicalSetting = Literal[
@@ -45,7 +39,6 @@ SETTING_TEXT: dict[GeologicalSetting, tuple[str, str]] = {
 }
 MAX_PROVINCES = 128
 MAX_PROVINCE_VERTICES = 256
-MAX_LANDMARKS = 32
 MAX_AGE_MA = 1_000_000.0
 
 
@@ -114,71 +107,10 @@ class GeologyProvince:
 
 
 @dataclass(frozen=True, slots=True)
-class GeologyLandmark:
-    """A hand-placed wonder (``domain.wonders``) at a source position.
-
-    ``size_km`` is what the kind's size measures (a diameter, a width or a
-    height); None uses the usual size. Line wonders run from ``position`` to
-    ``end``.
-    """
-
-    id: str
-    name: str
-    kind: WonderKind
-    position: Point2D
-    size_km: float | None = None
-    end: Point2D | None = None
-    age_myr: float | None = None  # None uses the planet's wonder age
-
-    def __post_init__(self) -> None:
-        _name(self.id, "Landmark ID")
-        if not fullmatch(r"landmark-[A-Za-z0-9][A-Za-z0-9_-]*", self.id):
-            raise ValueError(
-                "Landmark ID must start with landmark- and use letters, digits, _ or -."
-            )
-        _name(self.name, "Landmark name")
-        if self.kind not in WONDER_KINDS:
-            raise ValueError(f"Landmark kind must be one of: {', '.join(WONDER_KINDS)}.")
-        if len(self.position) != 2 or any(not _finite_number(v) for v in self.position):
-            raise ValueError("A landmark position must be a finite coordinate pair.")
-        spec = WONDERS[self.kind]
-        label = spec.label.lower()
-        if self.size_km is not None:
-            if spec.size_km is None:
-                raise ValueError(f"A {label} has no size.")
-            low, high, _ = spec.size_km
-            if not _finite_number(self.size_km) or not low <= self.size_km <= high:
-                raise ValueError(f"A {label} needs a {spec.size} from {low:g} to {high:g} km.")
-        if spec.line:
-            if self.end is None or len(self.end) != 2 or any(
-                not _finite_number(v) for v in self.end
-            ):
-                raise ValueError(f"A {label} needs a finite end point.")
-            if tuple(self.end) == tuple(self.position):
-                raise ValueError(f"A {label}'s ends must differ.")
-        elif self.end is not None:
-            raise ValueError(f"A {label} has no end point.")
-        if self.age_myr is not None:
-            if not spec.ages:
-                raise ValueError(f"A {label} does not age.")
-            if not _finite_number(self.age_myr) or not 0 <= self.age_myr <= MAX_WONDER_AGE_MYR:
-                raise ValueError(f"A {label}'s age must be 0-{MAX_WONDER_AGE_MYR:g} Myr.")
-
-    @property
-    def effective_size_km(self) -> float:
-        """The size in kilometres, defaulting to the kind's usual size."""
-        if self.size_km is not None:
-            return self.size_km
-        usual = WONDERS[self.kind].size_km
-        return 0.0 if usual is None else usual[2]
-
-
-@dataclass(frozen=True, slots=True)
 class WorldGeologyRecipe:
     world: WorldProject
     defaults: tuple[ContinentGeology, ...]
     provinces: tuple[GeologyProvince, ...] = ()
-    landmarks: tuple[GeologyLandmark, ...] = ()
 
     def __post_init__(self) -> None:
         owners = {c.id for c in self.world.continents}
@@ -192,27 +124,6 @@ class WorldGeologyRecipe:
             raise ValueError("Province names must be unique.")
         frame = self.world.frame
         x0, y0, x1, y1 = frame.bounds
-        if len(self.landmarks) > MAX_LANDMARKS:
-            raise ValueError(f"A recipe supports at most {MAX_LANDMARKS} landmarks.")
-        if len({m.id for m in self.landmarks}) != len(self.landmarks):
-            raise ValueError("Landmark IDs must be unique.")
-        if len({m.name.casefold() for m in self.landmarks}) != len(self.landmarks):
-            raise ValueError("Landmark names must be unique.")
-        for landmark in self.landmarks:
-            for x, y in (landmark.position, *(() if landmark.end is None else (landmark.end,))):
-                if not (x0 <= x <= x1 and y0 <= y <= y1):
-                    raise ValueError(f"{landmark.name}: position is outside the world frame.")
-            spec = WONDERS[landmark.kind]
-            if landmark.end is not None and spec.length_km is not None:
-                length = frame.distance_km(
-                    frame.source_to_lonlat(landmark.position), frame.source_to_lonlat(landmark.end)
-                )
-                low, high = spec.length_km
-                if not low <= length <= high:
-                    raise ValueError(
-                        f"{landmark.name}: a {spec.label.lower()} must be "
-                        f"{low:,.0f}-{high:,.0f} km long (it is {length:,.0f} km)."
-                    )
         for province in self.provinces:
             xs, ys = zip(*province.vertices, strict=True)
             # Anchor one copy in the world and allow the remaining points to unwrap.
@@ -239,8 +150,8 @@ def follow_world(recipe: WorldGeologyRecipe, world: WorldProject) -> WorldGeolog
 
     Renaming, rescaling or reassigning shapes keeps the geology: continent defaults
     follow their continents, new continents start unspecified and removed ones drop
-    out. Provinces and landmarks stay where they were drawn on the source map, so
-    they must still fit the edited frame.
+    out. Provinces stay where they were drawn on the source map, so they must still
+    fit the edited frame.
     """
     if world.source.sha256 != recipe.world.source.sha256:
         raise ValueError("This geology was drawn on another source map; it cannot follow it.")
@@ -250,5 +161,4 @@ def follow_world(recipe: WorldGeologyRecipe, world: WorldProject) -> WorldGeolog
         tuple(ContinentGeology(c.id, profiles.get(c.id, GeologyProfile()))
               for c in world.continents),
         recipe.provinces,
-        recipe.landmarks,
     )

@@ -33,6 +33,12 @@ or inspect with `map-maker world inspect-geology examples/world/four-shores.geol
 The [geology guide](../docs/world-geology.md) explains priorities and age/duration
 semantics. It does not run erosion or change the source coastlines.
 
+The separate [`four-shores.wonders.json`](world/four-shores.wonders.json) places
+four invented wonders by hand: a titan volcano, an aged impact crater, a great
+chasm and a tepui. Open it with **World → Wonders → Open wonders…**, or pass it to
+`map-maker world planet examples/world/four-shores.world.json --wonders examples/world/four-shores.wonders.json --output artifacts/four-shores-wonders`.
+The [wonder guide](../docs/wonders.md) explains each kind.
+
 The separate [`four-shores.bathy.json`](world/four-shores.bathy.json) selects
 Water 1 with an illustrative 100 km / 200 m shelf, 200 km slope and 4,000 m basin,
 at 90 latitude rows. Open it with **World → Ocean floor → Open the ocean-floor editor… → Open inputs…** after

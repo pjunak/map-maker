@@ -14,8 +14,14 @@ small synthetic terrain before choosing one.
 
 See the [plan](docs/strategy/README.md) for states and evidence.
 
-- [ ] **Wonders:** more kinds as needed (natural arches, sinkhole fields, ice
-  canyons); below-sea-level floors for chasms and craters.
+- [ ] **Wonders** (ADR-0097 is the base for these):
+  - [ ] Place wonders on the generated relief, with per-kind settings generated
+    from the catalog (depth, side canyons, group size, breach direction).
+  - [ ] Suggest plausible sites per kind (stable interiors for craters, rifts for
+    chasms, hotspots for titans) to keep or reject, replacing random placement.
+  - [ ] Cache aged wonders per wonder, so applying others does not age them again.
+  - [ ] More kinds as needed (natural arches, sinkhole fields, ice canyons);
+    below-sea-level floors for chasms and craters.
 - [ ] **M2 planet relief:**
   - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).

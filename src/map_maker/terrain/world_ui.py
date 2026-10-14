@@ -1,10 +1,10 @@
 # pyright: reportUnknownMemberType=false
 """World workspace: guided steps from a drawn map to a whole planet, beside one map.
 
-The steps run down the left (Source map, Planet, Geology, Generate, Explore), with
-secondary tools after them. The workspace owns the world document, its derived
-results and the single job runner; each step page only gathers input and shows
-results.
+The steps run down the left (Source map, Planet, Geology, Generate, Wonders,
+Explore), with secondary tools after them. The workspace owns the world document,
+its derived results and the single job runner; each step page only gathers input
+and shows results.
 """
 
 from __future__ import annotations
@@ -24,6 +24,8 @@ from map_maker.terrain.adapters.world_project import WORLD_EXTENSION
 from map_maker.terrain.adapters.world_svg import drawn_coast_detail_km, load_world_svg
 from map_maker.terrain.application.planet import (
     PlanetRun,
+    apply_wonders,
+    base_identity,
     export_planet,
     generate_planet_run,
     planet_identity,
@@ -49,6 +51,7 @@ from map_maker.terrain.application.world_terrain import (
     create_world_terrain_project,
 )
 from map_maker.terrain.domain.planet import REGION_LEVEL_NAMES, PlanetSettings
+from map_maker.terrain.domain.wonders import WonderSettings
 from map_maker.terrain.domain.world import (
     WorldAssignment,
     WorldContinent,
@@ -64,6 +67,8 @@ from map_maker.terrain.domain.world_context import (
     exposure_steps,
 )
 from map_maker.terrain.domain.world_geology import WorldGeologyRecipe, follow_world
+from map_maker.terrain.domain.world_wonders import WorldWonders
+from map_maker.terrain.domain.world_wonders import follow_world as wonders_follow_world
 from map_maker.terrain.map_probes import PlanetProbe
 from map_maker.terrain.pipeline.control import CancellationToken
 from map_maker.terrain.pipeline.planet_regional import RegionalParent
@@ -89,6 +94,7 @@ from map_maker.terrain.world_bathymetry_ui import BathymetryEditor
 from map_maker.terrain.world_geology_ui import GeologyEditor
 from map_maker.terrain.world_terrain_ui import WorldTerrainPanel
 from map_maker.terrain.world_view import CONTEXT, PLANET, SOURCE, SourceScene, WorldMapView
+from map_maker.terrain.world_wonders_ui import WonderEditor
 
 REGION_PIXELS = 900
 STEPS = {
@@ -96,6 +102,7 @@ STEPS = {
     "planet": "Planet",
     "geology": "Geology",
     "generate": "Generate",
+    "wonders": "Wonders",
     "explore": "Explore",
 }
 TOOLS = {"context": "Geographic context", "ocean": "Ocean floor", "terrain": "Local terrain"}
@@ -123,11 +130,13 @@ class WorldWorkspace(ttk.Frame):
         self.path: Path | None = None
         self.validated: WorldMap | None = None
         self.geology: GeologyEditor | None = None
+        self.wonders: WonderEditor | None = None
         self.bathymetry_editor: BathymetryEditor | None = None
         self._bathymetry_file: BathymetryFile | None = None
         self.context_run: WorldContextRun | None = None
         self.planet_run: PlanetRun | None = None
         self._planet_geology: WorldGeologyRecipe | None = None
+        self._planet_wonders: WorldWonders | None = None  # the step's wonders, as used
         self.region_workers: int | None = None
         self.continents: tuple[WorldContinent, ...] = ()
         self.assignments: tuple[WorldAssignment, ...] = ()
@@ -192,7 +201,11 @@ class WorldWorkspace(ttk.Frame):
     @property
     def unsaved(self) -> bool:
         """Anything in this workspace that a save would keep."""
-        return self.dirty or (self.geology is not None and self.geology.dirty)
+        return (
+            self.dirty
+            or (self.geology is not None and self.geology.dirty)
+            or (self.wonders is not None and self.wonders.dirty)
+        )
 
     def _signature(self) -> object:
         return (
@@ -252,6 +265,7 @@ class WorldWorkspace(ttk.Frame):
             lambda: self.show_step("geology"),
         )
         self.planet_panel.pack(fill="x")
+        self._build_wonders(self.pages["wonders"].body)
         self.result_panel = PlanetResultPanel(
             self.pages["explore"].body, export=self.export_planet,
             zoom=self.pick_region, save_image=self.save_map_image,
@@ -438,8 +452,8 @@ class WorldWorkspace(ttk.Frame):
         self.geology_empty.pack(fill="x")
         hint(self.geology_empty,
              "A geology recipe gives each continent a default setting, such as an old stable "
-             "interior or a young mountain belt, and lets you draw provinces that differ and "
-             "place landmarks. It is saved as its own file, beside the world.",
+             "interior or a young mountain belt, and lets you draw provinces that differ. It "
+             "is saved as its own file, beside the world.",
              style="Muted.TLabel")
         self._button(self.geology_empty, "Create a geology recipe", self.start_geology,
                      style="Accent").pack(fill="x", pady=(2 * GAP, 0))
@@ -451,6 +465,38 @@ class WorldWorkspace(ttk.Frame):
         self.geology_remove = self._button(page, "Remove geology", self.stop_geology,
                                            style="Small")
         self._nav("geology", "planet", ("Next: Generate →", self.next_from_geology))
+
+    def _build_wonders(self, page: ttk.Frame) -> None:
+        page_title(
+            page, "Wonders (optional)",
+            "Place fantastical landmarks exactly where you want them, each with its own size, "
+            "age and shape. They sit on top of the planet, so changing them later does not "
+            "erode it again.",
+        )
+        self.wonders_empty = ttk.Frame(page, style="Panel.TFrame")
+        self.wonders_empty.pack(fill="x")
+        hint(self.wonders_empty,
+             "Placed wonders are saved as their own file, beside the world. Wonders placed at "
+             "random are chosen under Wonders in the Generate step.", style="Muted.TLabel")
+        self._button(self.wonders_empty, "Place wonders", self.start_wonders,
+                     style="Accent").pack(fill="x", pady=(2 * GAP, 0))
+        self._button(self.wonders_empty, "Open wonders…", self.choose_wonders).pack(
+            fill="x", pady=(GAP, 0)
+        )
+        self.wonders_holder = ttk.Frame(page, style="Panel.TFrame")
+        self.wonders_holder.pack(fill="x", pady=(GAP, 0))
+        self.wonders_remove = self._button(page, "Remove placed wonders", self.stop_wonders,
+                                           style="Small")
+        apply = section(page, "On the planet")
+        hint(apply, "Generate adds the wonders. Afterwards, apply changes here: only the "
+             "wonders, ice, lakes and rivers are worked out again, not the erosion.")
+        self.apply_wonders_button = ttk.Button(
+            apply, text="Apply to the planet", style="Accent.TButton", command=self.apply_wonders
+        )
+        self.apply_wonders_button.pack(fill="x", pady=(GAP, 0))
+        self.apply_note = tk.StringVar(self)
+        hint(apply, textvariable=self.apply_note)
+        self._nav("wonders", "generate", ("Next: Explore →", lambda: self.show_step("explore")))
 
     def _build_context(self, page: ttk.Frame) -> None:
         page_title(
@@ -516,6 +562,8 @@ class WorldWorkspace(ttk.Frame):
         """Open a step or tool page; the map beside it follows."""
         if key == "geology":
             self._geology_follows_world()
+        if key == "wonders":
+            self._wonders_follow_world()
         self.step = key
         for name, page in self.pages.items():
             if name == key:
@@ -534,13 +582,15 @@ class WorldWorkspace(ttk.Frame):
             self.map_view.set_layer(self.map_view.planet_layers()[0])
 
     def _show_map(self) -> None:
-        geology = self.geology if self.step == "geology" else None
-        if geology is not None:
+        """The open step's own map (Geology, Wonders), or else the world map."""
+        own = {"geology": self.geology, "wonders": self.wonders}.get(self.step)
+        for editor in (self.geology, self.wonders):
+            if editor is not None and editor is not own:
+                editor.map.grid_remove()
+        if own is not None:
             self.map_view.grid_remove()
-            geology.map.grid(row=0, column=0, sticky="nsew")
+            own.map.grid(row=0, column=0, sticky="nsew")
         else:
-            if self.geology is not None:
-                self.geology.map.grid_remove()
             self.map_view.grid(row=0, column=0, sticky="nsew")
 
     def _refresh_steps(self) -> None:
@@ -572,9 +622,27 @@ class WorldWorkspace(ttk.Frame):
             self.planet_panel.summary() + (" · geology changed" if geology_changed else ""),
             done=self.planet_run is not None and not geology_changed,
         )
+        wonders_changed = self.planet_run is not None and self._wonders_changed()
+        rail.set_status(
+            "wonders",
+            ("Optional · none placed" if self.wonders is None else self.wonders.summary())
+            + (" · not applied" if wonders_changed else ""),
+            done=self.wonders is not None and not self.wonders.dirty and not wonders_changed,
+        )
+        can_apply = wonders_changed and not geology_changed and not self.busy
+        self.apply_wonders_button.configure(state="normal" if can_apply else "disabled")
+        self.apply_note.set(
+            "Generate a planet first; it will include these wonders."
+            if self.planet_run is None
+            else "Generate again first: the geology has changed." if geology_changed
+            else "The wonders have changed since the planet was made." if wonders_changed
+            else "The planet has these wonders."
+        )
         self.result_panel.set_outdated(
             "The geology has changed since this planet was made. Generate again to apply it."
-            if geology_changed else None
+            if geology_changed
+            else "The wonders have changed. Apply them in the Wonders step; the relief stays."
+            if wonders_changed else None
         )
         rail.set_status(
             "explore", "Planet ready" if self.planet_run else "Generate first",
@@ -583,7 +651,7 @@ class WorldWorkspace(ttk.Frame):
         rail.set_status("context", "Generated" if self.context_run else "")
         rail.set_status("ocean", "Editor open" if self.bathymetry_editor else "")
         rail.set_status("terrain", "Project prepared" if self.terrain_panel.created else "")
-        for key in ("planet", "geology", "generate", "context", "ocean"):
+        for key in ("planet", "geology", "generate", "wonders", "context", "ocean"):
             rail.set_enabled(key, source is not None)
         rail.set_enabled("terrain", bool(self.continents))
         rail.set_enabled("explore", self.planet_run is not None)
@@ -627,26 +695,33 @@ class WorldWorkspace(ttk.Frame):
             "source": self.next_from_source, "planet": self.next_from_planet,
             "geology": self.next_from_geology,
             "generate": self.planet_panel.request_generate, "context": self.generate_context,
+            "wonders": self.apply_wonders,
         }
         if not self.busy and self.step in actions:
             actions[self.step]()
 
     def save_current(self, *, save_as: bool = False) -> None:
-        """Ctrl+S: the geology recipe in its step, otherwise the world."""
+        """Ctrl+S: the geology recipe or the wonders in their steps, otherwise the world."""
         if self.step == "geology" and self.geology is not None:
             self.geology.save(save_as=save_as)
+        elif self.step == "wonders" and self.wonders is not None:
+            self.wonders.save(save_as=save_as)
         else:
             self.save(save_as=save_as)
 
     def undo_current(self) -> None:
         if self.step == "geology" and self.geology is not None:
             self.geology.undo()
+        elif self.step == "wonders" and self.wonders is not None:
+            self.wonders.undo()
         else:
             self.undo()
 
     def redo_current(self) -> None:
         if self.step == "geology" and self.geology is not None:
             self.geology.redo()
+        elif self.step == "wonders" and self.wonders is not None:
+            self.wonders.redo()
         else:
             self.redo()
 
@@ -761,6 +836,8 @@ class WorldWorkspace(ttk.Frame):
     def fit(self) -> None:
         if self.step == "geology" and self.geology is not None:
             self.geology.fit()
+        elif self.step == "wonders" and self.wonders is not None:
+            self.wonders.fit()
         else:
             self.map_view.fit()
 
@@ -781,6 +858,10 @@ class WorldWorkspace(ttk.Frame):
         self.map_view.set_busy(busy)
         if self.geology is not None:
             self.geology.set_busy(busy)
+        if self.wonders is not None:
+            self.wonders.set_busy(busy)
+        if not busy:
+            self._refresh_steps()  # restores Apply, which depends on the planet
 
     def _job_state(self, state: JobState | None) -> None:
         self.status_bar.show(state)
@@ -996,21 +1077,34 @@ class WorldWorkspace(ttk.Frame):
             if self.step == "explore":
                 self.show_step("generate")
 
-    def generate_planet(self, settings: PlanetSettings) -> None:
+    def generate_planet(
+        self, settings: PlanetSettings, wonder_settings: WonderSettings | None = None
+    ) -> None:
+        """Generate the planet; with unchanged inputs and settings only its wonders change."""
         if self.busy:
             return
+        wonder_settings = wonder_settings or WonderSettings()
         try:
             project = self.project()
             geology = self._geology_recipe(project)
+            wonders = self._wonder_document(project)
         except ValueError as error:
             messagebox.showerror("The planet needs a valid world", str(error), parent=self)
             return
+        run = self.planet_run
+        if run is not None and run.base_sha256 == base_identity(project, geology, settings):
+            self._add_wonders(run, wonder_settings, wonders)
+            return
         signature = self._signature()
-        # The step's recipe as used, to tell when later geology edits make the planet old.
+        # The steps' recipe and wonders as used, to tell when later edits make the planet old.
         used = None if self.geology is None else self.geology.recipe
+        used_wonders = self._placed_now()
 
         def work(report: Report, token: CancellationToken) -> tuple[PlanetRun, PlanetProbe]:
-            run = generate_planet_run(project, geology, settings, report, cancellation=token)
+            run = generate_planet_run(
+                project, geology, settings, report, wonder_settings=wonder_settings,
+                wonders=wonders, cancellation=token,
+            )
             report(None, "Preparing the map readout")
             return run, PlanetProbe(run.result)
 
@@ -1018,19 +1112,62 @@ class WorldWorkspace(ttk.Frame):
             if signature != self._signature():
                 self.status.set("World inputs changed; generate the planet again.")
                 return
-            run, probe = ready
-            self.planet_run = run
             self._planet_geology = used
-            self.result_panel.show(run)
-            self.map_view.set_planet(run, probe)
+            self._show_planet(*ready, used_wonders)
             self.show_step("explore")
-            self._refresh_steps()
             self.status.set(
                 "Planet ready. Choose maps and projections above the map; export to keep a "
                 "reproducible build."
             )
 
         self._run("Generating the planet", work, done)
+
+    def apply_wonders(self) -> None:
+        """Add the Wonders step's wonders and the chosen random ones to the planet."""
+        run = self.planet_run
+        if self.busy or run is None:
+            return
+        try:
+            wonders = self._wonder_document(self.project())
+        except ValueError as error:
+            self.status.set(str(error))
+            return
+        self._add_wonders(run, self.planet_panel.wonder_settings(), wonders)
+
+    def _add_wonders(
+        self, run: PlanetRun, wonder_settings: WonderSettings, wonders: WorldWonders | None
+    ) -> None:
+        """Rerun only the wonder pass on ``run``'s base planet (ADR-0097)."""
+        signature = self._signature()
+        used_wonders = self._placed_now()
+
+        def work(report: Report, token: CancellationToken) -> tuple[PlanetRun, PlanetProbe]:
+            changed = apply_wonders(run, wonder_settings, wonders, report, cancellation=token)
+            report(None, "Preparing the map readout")
+            return changed, PlanetProbe(changed.result)
+
+        def done(ready: tuple[PlanetRun, PlanetProbe]) -> None:
+            if signature != self._signature() or run is not self.planet_run:
+                self.status.set("The planet changed meanwhile; apply the wonders again.")
+                return
+            self._show_planet(*ready, used_wonders)
+            if self.step == "generate":
+                self.show_step("explore")  # as a full generation would
+            self.status.set(
+                "Wonders applied: the planet kept its relief and climate; ice, lakes and rivers "
+                "follow the new wonders."
+            )
+
+        self._run("Adding the wonders to the planet", work, done)
+
+    def _show_planet(
+        self, run: PlanetRun, probe: PlanetProbe, wonders: WorldWonders | None
+    ) -> None:
+        self.planet_run = run
+        self._planet_wonders = wonders
+        self.result_panel.show(run)
+        self.map_view.set_planet(run, probe)
+        self._refresh_steps()
 
     def export_planet(self, destination: Path) -> None:
         run = self.planet_run
@@ -1062,11 +1199,13 @@ class WorldWorkspace(ttk.Frame):
         workers = self.region_workers
 
         def work(report: Report, token: CancellationToken) -> tuple[RegionRun, Image.Image, str]:
-            parent = RegionalParent.from_result(run.result)
+            # Tiles come from the planet without wonders and outlast wonder edits.
             region = region_window(
-                parent, identity, user_tile_cache(), (longitude, latitude), radius_km,
-                level=level, pixels=REGION_PIXELS, workers=workers, progress=report,
-                cancellation=token,
+                RegionalParent.from_result(run.result), identity, user_tile_cache(),
+                (longitude, latitude), radius_km,
+                tiles_parent=RegionalParent.tiles_from(run.base.planet),
+                tiles_sha256=run.base_sha256, level=level, pixels=REGION_PIXELS,
+                workers=workers, progress=report, cancellation=token,
             )
             report(0.96, "Drawing the map")
             theme = region_themes(region.window)[0].id
@@ -1152,6 +1291,93 @@ class WorldWorkspace(ttk.Frame):
         return editor.recipe if editor.recipe.world == project else follow_world(
             editor.recipe, project
         )
+
+    # Wonders
+
+    def _placed_now(self) -> WorldWonders | None:
+        """The Wonders step's document, or None when it places no wonder."""
+        editor = self.wonders
+        return editor.wonders if editor is not None and editor.wonders.wonders else None
+
+    def _wonders_changed(self) -> bool:
+        """The planet was made with other wonders than the Wonders and Generate steps hold."""
+        run = self.planet_run
+        return run is not None and (
+            self._placed_now() != self._planet_wonders
+            or self.planet_panel.wonder_settings() != run.result.wonder_settings
+        )
+
+    def _wonder_document(self, project: WorldProject) -> WorldWonders | None:
+        """The Wonders step's wonders for ``project``; they follow world edits."""
+        editor = self.wonders
+        if editor is None:
+            return None
+        if editor.editing:
+            raise ValueError("A wonder is being placed. Finish or cancel placing it first.")
+        document = editor.wonders
+        if not document.wonders:
+            return None
+        return document if document.world == project else wonders_follow_world(
+            document, project
+        )
+
+    def _wonders_follow_world(self) -> None:
+        editor = self.wonders
+        if editor is None or self.busy:
+            return
+        try:
+            project = self.project()
+        except ValueError as error:
+            self.status.set(str(error))
+            return
+        if editor.world.project != project:
+            self._with_validated(editor.follow)
+
+    def start_wonders(self, path: Path | None = None) -> None:
+        """Begin placing wonders on the current world (none yet, or opened from ``path``)."""
+        if self.busy or self.source is None or self.wonders is not None:
+            return
+
+        def create(world: WorldMap) -> None:
+            editor = WonderEditor(
+                self.wonders_holder, self.map_area, world, jobs=self.jobs, status=self.status,
+                on_change=self._refresh_steps,
+            )
+            editor.pack(fill="x")
+            self.wonders = editor
+            self.wonders_empty.pack_forget()
+            self.wonders_remove.pack(anchor="w", pady=(2 * GAP, 0), after=self.wonders_holder)
+            self.show_step("wonders")
+            if path is not None:
+                editor.load(path)
+            self._refresh_steps()
+
+        self._with_validated(create)
+
+    def choose_wonders(self) -> None:
+        selected = filedialog.askopenfilename(
+            parent=self, title="Open wonders", filetypes=[("Wonders", "*.wonders.json")],
+        )
+        if selected:
+            self.start_wonders(Path(selected))
+
+    def stop_wonders(self) -> None:
+        """Generate without placed wonders from now on (asks to save unsaved edits)."""
+        editor = self.wonders
+        if editor is None or self.busy:
+            return
+        editor.guard(self._close_wonders)
+
+    def _close_wonders(self) -> None:
+        if self.wonders is None:
+            return
+        self.wonders.close()
+        self.wonders = None
+        self.wonders_remove.pack_forget()
+        self.wonders_empty.pack(fill="x", before=self.wonders_holder)
+        self._show_map()
+        self._refresh_steps()
+        self.status.set("Placed wonders removed; apply to take them off the planet.")
 
     def _with_validated(self, then: Callable[[WorldMap], None]) -> None:
         """Run ``then`` with the prepared current world, checking it first if needed."""
@@ -1268,6 +1494,8 @@ class WorldWorkspace(ttk.Frame):
     def accept_source(self, source: WorldSource) -> None:
         if self.geology is not None and self.geology.world.project.source.sha256 != source.sha256:
             self._close_geology()  # geology is drawn on one source map
+        if self.wonders is not None and self.wonders.world.project.source.sha256 != source.sha256:
+            self._close_wonders()  # wonders are placed on one source map
         self._loading = True
         self.source, self.path, self.validated = source, None, None
         self.continents, self.assignments = (), ()
@@ -1429,7 +1657,13 @@ class WorldWorkspace(ttk.Frame):
             self.status.set("Wait for the world operation to finish before continuing.")
             return
         if self.geology is not None and self.geology.dirty:
-            self.geology.guard(lambda: self._guard_world(action))
+            self.geology.guard(lambda: self._guard_wonders(action))
+            return
+        self._guard_wonders(action)
+
+    def _guard_wonders(self, action: Callable[[], None]) -> None:
+        if self.wonders is not None and self.wonders.dirty:
+            self.wonders.guard(lambda: self._guard_world(action))
             return
         self._guard_world(action)
 
@@ -1724,6 +1958,9 @@ class WorldWorkspace(ttk.Frame):
         if self.geology is not None:
             self.geology.close()
             self.geology = None
+        if self.wonders is not None:
+            self.wonders.close()
+            self.wonders = None
         if self.bathymetry_editor is not None:
             self.bathymetry_editor.close()
         self.jobs.close()

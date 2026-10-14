@@ -266,7 +266,9 @@ def test_failed_replace_preserves_existing_recipe(
     def fail(*_args: object) -> None:
         raise OSError("simulated disk failure")
 
-    monkeypatch.setattr(files.os, "replace", fail)
+    from map_maker.terrain.adapters import document_files
+
+    monkeypatch.setattr(document_files.os, "replace", fail)
     with pytest.raises(OSError, match="disk failure"):
         save_geology(result, path, saved.sha256)
     assert path.read_bytes() == before
@@ -333,66 +335,9 @@ def test_duplicate_defaults_and_provinces_cannot_silently_replace_each_other() -
         replace(recipe, provinces=(province(), replace(province(), id="province-other")))
 
 
-def test_landmarks_round_trip_and_stay_optional() -> None:
-    from map_maker.terrain.domain.world_geology import GeologyLandmark
-
-    recipe = blank_geology(world().project)
-    x0, y0, x1, y1 = recipe.world.frame.bounds
-    centre = ((x0 + x1) / 2, (y0 + y1) / 2)
-    placed = replace(
-        recipe,
-        landmarks=(
-            GeologyLandmark("landmark-sky", "Skyfather", "titan", centre),
-            GeologyLandmark("landmark-eye", "The Eye", "crater", (x0 + 1, y0 + 1), 180.0),
-            GeologyLandmark(
-                "landmark-rift", "The Rift", "chasm", centre, None,
-                (centre[0] + 0.1 * (x1 - x0), centre[1]), 20.0,
-            ),
-        ),
-    )
-    document = files.geology_document(placed)
+def test_recipes_holding_landmarks_point_to_the_wonder_document() -> None:
+    document = files.geology_document(blank_geology(world().project))
     geology_validator().validate(document)
-    reopened = files.geology_from_bytes(canonical_json(document))
-    assert reopened.landmarks == tuple(sorted(placed.landmarks, key=lambda m: m.id))
-    assert reopened.landmarks[1].effective_size_km == 60.0  # chasm default width
-    assert reopened.landmarks[2].effective_size_km == 560.0  # titan default diameter
-    # Recipes saved before landmarks existed still open, with none.
-    del document["landmarks"]
-    assert files.geology_from_bytes(canonical_json(document)).landmarks == ()
-    for bad in (
-        {"kind": "volcano"},
-        {"size_km": 5.0},
-        {"id": "eye"},
-        {"end": (x0 + 1, y0 + 1)},  # only a chasm has an end
-        {"kind": "chasm"},  # without one
-        {"kind": "chasm", "end": centre},
-        {"age_myr": -1.0},
-        {"kind": "titan", "age_myr": 5.0},  # volcanoes stay young
-    ):
-        with pytest.raises(ValueError):
-            GeologyLandmark(**({"id": "landmark-a", "name": "A", "kind": "crater",
-                               "position": centre} | bad))  # type: ignore[arg-type]
-    with pytest.raises(ValueError, match="outside the world frame"):
-        replace(recipe, landmarks=(GeologyLandmark("landmark-a", "A", "crater", (x1 + 5, y0)),))
-    with pytest.raises(ValueError, match="outside the world frame"):
-        replace(
-            recipe,
-            landmarks=(GeologyLandmark("landmark-a", "A", "chasm", centre, None, (x1 + 5, y0)),),
-        )
-    with pytest.raises(ValueError, match="km long"):
-        replace(
-            recipe,
-            landmarks=(
-                GeologyLandmark(
-                    "landmark-a", "A", "chasm", centre, None, (centre[0] + 1e-6, centre[1])
-                ),
-            ),
-        )
-    with pytest.raises(ValueError, match="names must be unique"):
-        replace(
-            recipe,
-            landmarks=(
-                GeologyLandmark("landmark-a", "Same", "crater", centre),
-                GeologyLandmark("landmark-b", "same", "titan", centre),
-            ),
-        )
+    document["landmarks"] = []
+    with pytest.raises(ValueError, match="wonders"):
+        files.geology_from_bytes(canonical_json(document))

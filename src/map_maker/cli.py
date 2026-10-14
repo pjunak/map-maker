@@ -167,12 +167,15 @@ def create_parser() -> argparse.ArgumentParser:
     planet.add_argument("--volcanic-islands", action="store_true",
                         help="Let young volcanoes at sea rise as islands (adds land "
                              "beyond your coastline).")
-    planet.add_argument("--wonders", type=wonder_kinds, default=(), metavar="KINDS",
+    planet.add_argument("--wonders", type=Path, metavar="FILE",
+                        help="Optional matching .wonders.json document of hand-placed wonders.")
+    planet.add_argument("--random-wonders", type=wonder_kinds, default=(), metavar="KINDS",
                         help="Fantastical landmarks placed at random: a comma-separated "
-                             f"list of {', '.join(WONDER_KINDS)}, or all.")
+                             f"list of {', '.join(WONDER_KINDS)}, or all. Placed wonders "
+                             "replace random ones of their kind.")
     planet.add_argument("--wonder-age", type=float, default=0.0, metavar="MYR",
                         help="Age the wonders by eroding each for this many million years "
-                             "(0 keeps them fresh; landmarks may set their own).")
+                             "(0 keeps them fresh; placed wonders may set their own).")
     planet.add_argument("--climate-passes", type=int, default=1,
                         help="Climate/erosion couplings; 0 disables climate and biomes.")
     planet.add_argument("--width", type=int, default=4096, help="Raster and preview width.")
@@ -259,6 +262,7 @@ def _run_world_terrain(arguments: argparse.Namespace) -> int:
 def _run_world_planet(arguments: argparse.Namespace) -> int:
     from map_maker.terrain.application.planet import build_planet
     from map_maker.terrain.domain.planet import PlanetSettings
+    from map_maker.terrain.domain.wonders import WonderSettings
 
     last = [-1]
 
@@ -278,11 +282,11 @@ def _run_world_planet(arguments: argparse.Namespace) -> int:
             calibration_iterations=arguments.calibrate,
             climate_passes=arguments.climate_passes,
             volcanic_islands=arguments.volcanic_islands,
-            wonders=arguments.wonders,
-            wonder_age_myr=arguments.wonder_age,
         )
         path = build_planet(
             arguments.project, arguments.output, arguments.geology, settings,
+            wonders_path=arguments.wonders,
+            wonder_settings=WonderSettings(arguments.random_wonders, arguments.wonder_age),
             width=arguments.width, river_km2=arguments.river_km2, progress=progress,
         )
     except (OSError, ValueError, RuntimeError) as error:

@@ -9,6 +9,8 @@ Explicit landform controls also transfer into ordinary terrain projects through 
 instructions, not reconstructed Earth history.
 
 The step is optional: without a recipe, mountain ranges are placed automatically.
+Wonders are not geology: they are placed in their own step and file
+([wonder guide](wonders.md)).
 
 ## Try it
 
@@ -45,8 +47,8 @@ The step is optional: without a recipe, mountain ranges are placed automatically
 Editing the world after making geology (renaming it, changing its radius or
 frame, or reassigning shapes) does not lose the recipe: when you return to the
 Geology step it follows the edited world. Continent defaults stay with their
-continents, new continents start Automatic, and provinces and landmarks stay where
-they were drawn on the map. Save the recipe again to keep that version; the file
+continents, new continents start Automatic, and provinces stay where they were
+drawn on the map. Save the recipe again to keep that version; the file
 on disk still names the world it was saved with. A recipe drawn on another source
 map is closed when that map is imported.
 
@@ -86,26 +88,6 @@ map-maker terrain gui --project artifacts/landform-demo/terrain.terrain.json
 The command creates a project; **Generate terrain** produces its preview. Choose
 a fresh output folder for another transfer. Source, projected scale and physical
 land are identical with or without the optional recipe.
-
-## Place wonders by hand
-
-**Landmarks**, at the foot of the Geology step, places [wonders](wonders.md) where
-you want them. Choose a kind; the text below describes it and its size range.
-Optionally give a name and a size in km (a diameter, a width or a height,
-depending on the kind; blank uses the usual size). An **Age** in million years
-erodes craters, chasms, cliffs and tepuis ([wonder guide](wonders.md#age)); blank
-uses the planet's.
-Click **Place on map**, then a point on land. Wonders placed by their two
-ends, such as a chasm, take a second click for the other end. Select a landmark
-in the tree to rename, resize (**Update**) or **Delete** it. Undo and redo cover
-landmarks too.
-
-When the planet is generated with this recipe, placed wonders replace the random
-wonders of their kind. The planet reports an error if a landmark, or either end
-of a two-ended one, lies at sea. Landmarks are saved in the recipe's optional
-`landmarks` list, each with `kind`, `position`, `size_km`, an optional
-`age_myr` and, for two-ended wonders, `end` ([schema](../schemas/world/geology-v2.schema.json)). Recipes
-without landmarks still open.
 
 ## Values and overlap rules
 

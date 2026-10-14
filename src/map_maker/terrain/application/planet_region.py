@@ -3,6 +3,8 @@
 Level 1 tiles are enriched from the planet (ADR-0086). Level-n tiles are enriched
 from a level parent built from cached level n-1 tiles (ADR-0088). Coarser tiles
 are generated first, recursively, and every level is cached by its settings.
+Tiles come from the planet without wonders and are cached under its identity;
+windows draw the wonders on top (ADR-0097).
 """
 
 import os
@@ -229,6 +231,8 @@ def region_window(
     radius_km: float,
     settings: RegionalSettings | None = None,
     *,
+    tiles_parent: RegionalParent | None = None,
+    tiles_sha256: str | None = None,
     level: int = 1,
     levels: tuple[RegionalSettings, ...] | None = None,
     pixels: int = DEFAULT_REGION_PIXELS,
@@ -237,7 +241,14 @@ def region_window(
     progress: ProgressCallback | None = None,
     cancellation: CancellationToken | None = None,
 ) -> RegionRun:
-    """A window of nested detail ``level`` (1 region, 2 province, 3 local)."""
+    """A window of nested detail ``level`` (1 region, 2 province, 3 local).
+
+    ``tiles_parent`` is the planet without wonders that tiles are enriched from,
+    cached under ``tiles_sha256`` (ADR-0097); both default to ``parent``, for a
+    planet without wonders.
+    """
+    tiles_parent = tiles_parent or parent
+    tiles_sha256 = tiles_sha256 or parent_sha256
     levels = levels or detail_levels(settings)
     if type(level) is not int or not 1 <= level <= len(levels):
         raise ValueError(f"Detail level must be from 1 to {len(levels)}.")
@@ -261,7 +272,7 @@ def region_window(
             progress(0.9 * share, f"Level {at} detail tiles: {done} of {total}")
 
     grid, tiles = ensure_level_tiles(
-        parent, parent_sha256, cache, level, needed, levels, workers=workers,
+        tiles_parent, tiles_sha256, cache, level, needed, levels, workers=workers,
         progress=tile_progress, cancellation=cancellation,
     )
     window_parent = parent
@@ -270,8 +281,8 @@ def region_window(
         coarse_grid = TileGrid.for_planet(planet_m, coarse_settings)
         coarse_needed = coarse_grid.tiles_near(centre, reach_m * 1.3)
         _, coarse = ensure_level_tiles(
-            parent, parent_sha256, cache, level - 1, coarse_needed, levels, workers=workers,
-            cancellation=cancellation,
+            tiles_parent, tiles_sha256, cache, level - 1, coarse_needed, levels,
+            workers=workers, cancellation=cancellation,
         )
         if progress is not None:
             progress(0.91, "Preparing the coarser level")
@@ -287,7 +298,7 @@ def region_window(
         spacing_m=levels[level - 1].spacing_km * 1e3,
     )
     check_cancelled(cancellation)
-    store = TileStore(cache, parent_sha256, levels[level - 1], level)
+    store = TileStore(cache, tiles_sha256, levels[level - 1], level)
     return RegionRun(window, parent_sha256, levels[level - 1], store.key, planet_m, level)
 
 
@@ -311,8 +322,9 @@ def build_region(
     loaded: LoadedPlanet = read_planet_parent(planet)
     run = region_window(
         loaded.parent, loaded.build_sha256, cache or default_cache(loaded.path), centre,
-        radius_km, settings, level=level, pixels=pixels, river_km2=river_km2,
-        workers=workers, progress=progress, cancellation=cancellation,
+        radius_km, settings, tiles_parent=loaded.tiles, tiles_sha256=loaded.base_sha256,
+        level=level, pixels=pixels, river_km2=river_km2, workers=workers, progress=progress,
+        cancellation=cancellation,
     )
     return export_region(run, destination)
 

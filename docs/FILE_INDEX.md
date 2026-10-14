@@ -1,11 +1,11 @@
 # Complete documentation file inventory
 
-Updated 2026-10-13. Scope: every version-controlled Markdown document in Map Maker,
+Updated 2026-10-15. Scope: every version-controlled Markdown document in Map Maker,
 plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**244 Markdown files + 1 legal notice = 245 documentation files.**
+**245 Markdown files + 1 legal notice = 246 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 96 |
+| Architecture decision records | 97 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **245** |
+| **Total** | **246** |
 
 ## Project entry and guidance (4)
 
@@ -76,7 +76,7 @@ Current user workflows and numeric/file semantics, with future limits labelled i
 | [docs/terrain-water.md](terrain-water.md) | Authored lakes and dry basins |
 | [docs/terrain-worlds.md](terrain-worlds.md) | Import, map, validate and save retained world sources; geographic and workflow limits. |
 | [docs/world-planet.md](world-planet.md) | Experimental whole-planet relief, climate and biomes: command, options, outputs, alignment with the SVG and limits. |
-| [docs/wonders.md](wonders.md) | Wonder catalog: what each kind is, random placement and hand placement. |
+| [docs/wonders.md](wonders.md) | Wonder catalog: what each kind is, random placement, the Wonders step with per-wonder seeds, and age. |
 | [docs/world-bathymetry.md](world-bathymetry.md) | Explicit ocean selection, shelf/slope/basin hypotheses, numerical depth/error/support and portable input/result workflow. |
 | [docs/world-context.md](world-context.md) | Generate spherical geography, inspect water/resolution support and export context products. |
 | [docs/world-geology.md](world-geology.md) | Author continent defaults and independent province hypotheses; priority, time, coverage and portable recipe contracts. |
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (95)
+## Architecture decision records (97)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -200,6 +200,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0094-planet-polar-land-in-true-distance.md](adr/0094-planet-polar-land-in-true-distance.md) | The planet works land poleward of 55° in true distance (opening and closing) and covers a pole that drawn land touches, with a natural cap outline. |
 | [docs/adr/0095-export-the-refined-coast-as-a-source-map.md](adr/0095-export-the-refined-coast-as-a-source-map.md) | `world refine-coast` traces the coast as zoomed maps draw it into a new SVG source map, with ownership by territory and a declared coast detail for the round trip. |
 | [docs/adr/0096-guided-world-steps.md](adr/0096-guided-world-steps.md) | The World workspace guides creation through five numbered steps with explained defaults; geology is a step in the main window, generation uses its recipe, and the recipe follows world edits. |
+| [docs/adr/0097-wonders-as-a-layer-on-a-base-planet.md](adr/0097-wonders-as-a-layer-on-a-base-planet.md) | Wonders are a pass on a base planet without them: their own settings and `.wonders.json` document, a seed per placed wonder, base and planet identities, and regional tiles cached under the base. |
 
 ## Dated research reports (99)
 
@@ -324,7 +325,7 @@ Attribution/license documentation for a vendored asset.
 |---|---|
 | [docs/licenses/SCIENTIFIC_COLOUR_MAPS_LICENSE.txt](licenses/SCIENTIFIC_COLOUR_MAPS_LICENSE.txt) | Scientific Colour Maps attribution and redistribution license text. |
 
-## Supporting machine-readable contracts (15)
+## Supporting machine-readable contracts (16)
 
 These are operational specifications rather than prose documentation. They
 are included for a complete route from plans to the current usable formats.
@@ -339,12 +340,13 @@ are included for a complete route from plans to the current usable formats.
 | [schemas/terrain/regional-samples-v3.schema.json](../schemas/terrain/regional-samples-v3.schema.json) | Current bounded unchanged-field sampling artifact contract. |
 | [schemas/world/bathymetry-inputs-v1.schema.json](../schemas/world/bathymetry-inputs-v1.schema.json) | Retained-world ocean selection and explicit physical shelf/slope/basin assumptions. |
 | [schemas/world/planet-region-v1.schema.json](../schemas/world/planet-region-v1.schema.json) | Experimental regional detail window: parent identity, tiles, settings, local CRS and output hashes. |
-| [schemas/world/planet-build-v1.schema.json](../schemas/world/planet-build-v1.schema.json) | Experimental planet build manifest: settings, stage seeds, inputs, mesh/raster mapping, calibration, metrics and output hashes. |
+| [schemas/world/planet-build-v2.schema.json](../schemas/world/planet-build-v2.schema.json) | Experimental planet build manifest: settings, wonder settings, stage seeds, inputs, mesh/raster mapping, calibration, metrics, output hashes and base and build identities. |
 | [schemas/world/bathymetry-v1.schema.json](../schemas/world/bathymetry-v1.schema.json) | Completed depth/error arrays, verified geography dependency and source/runtime/product identity. |
 | [schemas/world/context-v4.schema.json](../schemas/world/context-v4.schema.json) | Spherical context products, source/runtime identity, coverage/topology/support, shared-edge widths, water-piece incidence/unresolved support, shore distance, exposure and hashes. |
 | [schemas/world/geology-v2.schema.json](../schemas/world/geology-v2.schema.json) | Authored continent profiles, explicit landform controls and priority polygons with retained world identity and a common present. |
 | [schemas/world/terrain-source-v2.schema.json](../schemas/world/terrain-source-v2.schema.json) | Canonical prepared SVG metadata with retained world, projection, optional geological recipe and exact metric polygons. |
 | [schemas/world/project-v1.schema.json](../schemas/world/project-v1.schema.json) | Portable retained world-source snapshot, explicit spherical frame/radius and semantic ownership. |
+| [schemas/world/wonders-v1.schema.json](../schemas/world/wonders-v1.schema.json) | Hand-placed wonders with retained world identity: kind, position, seed, size, ends and age. |
 | [benchmarks/evolution/requirements-windows-py314.txt](../benchmarks/evolution/requirements-windows-py314.txt) | Hashed isolated Windows/Python 3.14 scientific reference environment. |
 
 ## Maintaining this inventory

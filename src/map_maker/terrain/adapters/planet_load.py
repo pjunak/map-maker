@@ -1,11 +1,15 @@
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
-"""Reopen a completed planet build as a verified parent for regional detail."""
+"""Reopen a completed planet build as a verified parent for regional detail.
+
+A build gives two parents (ADR-0097): the planet as built, which regional windows
+draw, and the planet without wonders, which regional tiles are enriched from.
+"""
 
 import itertools
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -42,7 +46,9 @@ MAX_MANIFEST_BYTES = 8 * 1024 * 1024
 class LoadedPlanet:
     path: Path
     build_sha256: str
-    parent: RegionalParent
+    parent: RegionalParent  # the planet as built, with its wonders
+    tiles: RegionalParent  # the planet without wonders, for regional tiles
+    base_sha256: str  # identity of the planet without wonders; tiles are cached under it
 
 
 def verified_build(path: Path, files: tuple[str, ...]) -> tuple[Path, dict[str, Any]]:
@@ -88,7 +94,6 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
     claimed = manifest["build_sha256"]
     settings_doc = dict(manifest["settings"])
     climate = PlanetClimateSettings(**settings_doc.pop("climate"))
-    settings_doc["wonders"] = tuple(settings_doc["wonders"])
     settings = PlanetSettings(**settings_doc, climate=climate)
     world = planet_world(
         prepare_world_map(read_world_project(folder / "input.world.json")), settings.seed
@@ -136,6 +141,7 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
             ),
             volcanic_m=data["volcanic_m"].astype(np.float64),
             wonder_m=data["wonder_m"].astype(np.float64),
+            crater_floor_m=data["crater_floor_m"].astype(np.float64),
             ice=(
                 IceSheets(
                     data["ice_m"].astype(np.float64), data["ice_balance_m"].astype(np.float64)
@@ -223,4 +229,24 @@ def read_planet_parent(path: Path) -> LoadedPlanet:
                 else None
             ),
         )
-    return LoadedPlanet(folder, str(claimed), parent)
+        tiles = replace(parent, ice=None)
+        if "base_water_surface_m" in data:
+            # The planet has wonders: tiles come from the fields it had without them.
+            tiles = replace(
+                tiles,
+                surface_m=np.where(
+                    land | data["base_volcanic_island"].astype(bool),
+                    data["base_water_surface_m"].astype(np.float64),
+                    0.0,
+                ),
+                receiver=data["base_receiver"].astype(np.int64),
+                area_m2=data["base_contributing_area_m2"].astype(np.float64),
+                lake=data["base_lake"].astype(np.int64),
+                lake_level_m=data["base_lake_level_m"].astype(np.float64),
+                lake_endorheic=data["base_lake_endorheic"].astype(bool),
+                volcanic_m=data["base_volcanic_m"].astype(np.float64),
+                wonder_m=None,
+                wonders=None,
+                crater_floor_m=None,
+            )
+    return LoadedPlanet(folder, str(claimed), parent, tiles, str(manifest["base_sha256"]))

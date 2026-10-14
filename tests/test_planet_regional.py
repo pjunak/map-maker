@@ -140,20 +140,28 @@ def test_region_build_reuses_cached_tiles_and_publishes_a_manifest(
 def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
     parent: PlanetResult, tmp_path: Path
 ) -> None:
-    from dataclasses import replace
-
     from map_maker.terrain.adapters.planet_load import read_planet_parent
     from map_maker.terrain.application.planet import export_planet, generate_planet_run
-    from map_maker.terrain.domain.wonders import WONDER_KINDS
+    from map_maker.terrain.domain.wonders import WONDER_KINDS, WonderSettings
 
-    settings = replace(parent.settings, wonders=WONDER_KINDS)
-    run = generate_planet_run(parent.world.project, None, settings, preview_width=0)
+    run = generate_planet_run(
+        parent.world.project, None, parent.settings,
+        wonder_settings=WonderSettings(WONDER_KINDS), preview_width=0,
+    )
     result = run.result
     regional = RegionalParent.from_result(result)
     young = regional.young_m()
     # Regional erosion starts from the surface without volcanoes and wonders, which
     # windows draw back sharply (erosion would fill a crater or a chasm).
-    assert np.allclose(young, np.where(result.land, result.volcanic_m + result.wonder_m, 0.0))
+    assert np.allclose(young, np.where(
+        result.land, result.volcanic_m + result.wonder_m + result.crater_floor_m, 0.0
+    ))
+    # Tiles come from the planet without wonders (ADR-0097).
+    tiles = RegionalParent.tiles_from(run.base.planet)
+    base = run.base.planet
+    assert tiles.ice is None and not np.any(tiles.young_m() - np.where(
+        base.land, base.volcanic_m, 0.0
+    ))
     wonders = result.wonders
     assert len(wonders.craters) >= 1 and len(wonders.chasms) >= 1
     assert np.any(result.wonder_m < 0)
@@ -183,6 +191,12 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
     assert np.allclose(reloaded.forks.branch_xyz, wonders.forks.branch_xyz)
     assert np.allclose(reloaded.forks.area_m2, wonders.forks.area_m2)
     assert np.allclose(loaded.parent.young_m(), young, atol=0.1)
+    # The build keeps the base fields that tiles are enriched from.
+    assert loaded.base_sha256 == run.base_sha256
+    assert loaded.tiles.wonders is None and loaded.tiles.crater_floor_m is None
+    assert np.allclose(loaded.tiles.surface_m, tiles.surface_m, atol=0.1)
+    assert np.array_equal(loaded.tiles.receiver, tiles.receiver)
+    assert np.allclose(loaded.tiles.young_m(), tiles.young_m(), atol=0.1)
 
 
 def test_world_path_fixture_is_reusable(tmp_path: Path) -> None:

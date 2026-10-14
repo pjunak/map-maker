@@ -10,7 +10,8 @@ The whole-planet path lives in `planet*.py`:
 - `planet_tectonics.py` and `planet_forcing.py` set uplift and the ocean floor;
 - `planet_evolution.py` erodes, with Numba kernels in `planet_kernels.py`;
 - `planet_climate.py` and `planet_koppen.py` model climate;
-- `planet_volcanism.py` and `planet_wonders.py` add young landforms;
+- `planet_volcanism.py` and `planet_wonders.py` add young landforms; wonders are a
+  separate pass on the base planet (`finish_planet`, ADR-0097);
 - `planet_regional.py` and `planet_tiles.py` provide regional detail.
 
 See the [planet guide](../../../../docs/world-planet.md) and ADR-0085/0086. The

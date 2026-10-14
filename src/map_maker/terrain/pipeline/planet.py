@@ -1,11 +1,17 @@
-"""Whole-planet generation: mesh -> forcing -> erosion -> climate coupling.
+"""Whole-planet generation: mesh -> forcing -> erosion -> climate coupling -> wonders.
 
 The world coastline is a hard boundary. Geology recipes are soft intent:
 calibrated uplift targets shaped by erosion. Climate is provisional and only
 weights erosion by relative runoff. Every random stream comes from a named stage
 seed, so results do not depend on stage order.
+
+Generation runs in two passes (ADR-0097). ``generate_base`` makes the planet
+without wonders and keeps the ground before lakes; ``finish_planet`` adds wonders to
+that ground and works out ice, lakes and the sea floor again, so changing wonders
+never repeats the erosion.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
 
@@ -21,12 +27,15 @@ from map_maker.terrain.domain.planet import (
     PlanetSettings,
 )
 from map_maker.terrain.domain.seeds import stage_seed
+from map_maker.terrain.domain.wonders import WonderSettings
 from map_maker.terrain.domain.world_geology import WorldGeologyRecipe
+from map_maker.terrain.domain.world_wonders import WorldWonders
 from map_maker.terrain.pipeline.control import (
     CancellationToken,
     ProgressCallback,
     cancellable_progress,
     check_cancelled,
+    progress_part,
 )
 from map_maker.terrain.pipeline.planet_aging import AgingSetup
 from map_maker.terrain.pipeline.planet_climate import (
@@ -69,9 +78,11 @@ from map_maker.terrain.pipeline.planet_volcanism import (
     Volcanoes,
     edifice_height,
     emerge,
+    join_volcanoes,
     place_volcanoes,
+    placed_volcano,
     sea_floor_with_volcanoes,
-    with_placed,
+    wonder_volcanoes,
 )
 from map_maker.terrain.pipeline.planet_waters import (
     FORK_SHARE,
@@ -103,6 +114,8 @@ COUPLING_NODES = 800_000
 INITIAL_RELIEF_M = 300.0
 # Gentle rise of the inherited surface away from the coast (0.2 m/km).
 INITIAL_COAST_SLOPE = 2e-4
+# Share of the progress bar for the base planet when a wonder pass follows.
+BASE_SHARE = 0.93
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +125,7 @@ class _MeshInputs:
     coast_m: F64
     regions: GeologyRegions | None
     initial: F64
+
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,12 +147,43 @@ class PlanetResult:
     volcanoes: Volcanoes
     volcanic_m: F64  # edifice height each node gained from volcanoes (display/regional)
     islands: B  # water nodes standing above sea level as volcanic islands (opt-in)
-    wonders: Wonders  # opt-in or hand-placed craters and chasms
-    wonder_m: F64  # height change each node took from craters and chasms (display)
+    wonders: Wonders  # random or hand-placed wonders
+    wonder_m: F64  # height change each node took from the wonders' relief (display)
+    crater_floor_m: F64  # height change from levelling crater floors, below their relief
     ice: IceSheets  # ice sheets on land (ADR-0093); none without climate
     stage_seeds: dict[str, int]
     metrics: dict[str, object]
+    wonder_settings: WonderSettings  # random wonders and the default wonder age
+    placed: WorldWonders | None  # the hand-placed wonders, as authored
 
+
+@dataclass(frozen=True, slots=True)
+class PlanetGround:
+    """The planet before wonders: what the wonder pass starts from (ADR-0097)."""
+
+    world: WorldMap  # as the planet sees it: polar land in true distance
+    settings: PlanetSettings
+    geology: WorldGeologyRecipe | None
+    mesh: SphereMesh
+    land: B
+    coast_m: F64
+    forcing: Forcing
+    regions: GeologyRegions | None
+    calibration: tuple[tuple[RegionRecord, ...], ...]
+    climate: Climate | None  # before volcanic islands
+    runoff: F64 | None  # relative runoff that weighted erosion
+    eroded_m: F64  # relief straight from erosion
+    ground_m: F64  # relief with filled sediment basins, before volcanoes
+    volcanoes: Volcanoes  # the ordinary volcanoes; wonder volcanoes join them later
+    stage_seeds: dict[str, int]
+
+
+@dataclass(frozen=True, slots=True)
+class PlanetBase:
+    """A planet without wonders and the ground the wonder pass adds them to."""
+
+    ground: PlanetGround
+    planet: PlanetResult
 
 
 def lonlat(xyz: F64) -> list[float]:
@@ -165,14 +210,15 @@ def river_sediment(
     return np.asarray(receiver[nodes], dtype=np.int64), flux[nodes]
 
 
-def generate_planet(
+def generate_base(
     world: WorldMap,
     settings: PlanetSettings,
     geology: WorldGeologyRecipe | None = None,
     progress: ProgressCallback | None = None,
     *,
     cancellation: CancellationToken | None = None,
-) -> PlanetResult:
+) -> PlanetBase:
+    """The planet without wonders: erosion, climate, volcanoes, ice, lakes and sea floor."""
     report = cancellable_progress(progress, cancellation)
 
     def say(fraction: float, message: str) -> None:
@@ -341,61 +387,144 @@ def generate_planet(
     if result.forcing.basin_depth_m is not None:
         evolved = fill_basins(mesh, water, evolved, result.forcing.basin_depth_m)
     plates = result.forcing.tectonics
-    # Hand-placed wonders from the geology recipe replace random ones of their kind.
-    landmarks = () if geology is None else geology.landmarks
-    frame = world.project.frame
-
-    def unit(position: tuple[float, float]) -> F64:
-        lon, lat = np.radians(frame.source_to_lonlat(position))
-        return np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
-
-    # Wonder volcanoes placed by hand replace random ones of their kind.
-    by_hand = {m.kind for m in landmarks}
+    # Ordinary volcanoes are young: they stand on the eroded relief. Wonder
+    # volcanoes join them in the wonder pass.
     volcanoes = (
         Volcanoes.empty()
         if plates is None
         else place_volcanoes(
             mesh, land, coast, plates, seeds[PLANET_VOLCANISM_STAGE_ID], evolved,
             settings.volcanic_islands,
-            tuple(k for k in VOLCANO_WONDERS if k in settings.wonders and k not in by_hand),
         )
     )
+    ground = PlanetGround(
+        world, settings, geology, mesh, land, coast, result.forcing, regions, calibration,
+        climate, runoff, result.run.elevation, evolved, volcanoes, seeds,
+    )
+
+    def tail(fraction: float, message: str) -> None:
+        say(0.94 + 0.06 * fraction, message)
+
+    return PlanetBase(ground, _complete(ground, WonderSettings(), None, tail, cancellation))
+
+
+def has_wonders(settings: WonderSettings, wonders: WorldWonders | None) -> bool:
+    """Whether a wonder pass would add anything."""
+    return bool(settings.random) or (wonders is not None and bool(wonders.wonders))
+
+
+def finish_planet(
+    base: PlanetBase,
+    wonder_settings: WonderSettings | None = None,
+    wonders: WorldWonders | None = None,
+    progress: ProgressCallback | None = None,
+    *,
+    cancellation: CancellationToken | None = None,
+) -> PlanetResult:
+    """``base`` with wonders added; without wonders it is the base planet itself.
+
+    Wonders are placed on the base ground, then ice, lakes, splitting rivers and
+    the sea floor are worked out again; erosion and climate are not repeated.
+    """
+    wonder_settings = wonder_settings or WonderSettings()
+    check_cancelled(cancellation)
+    if not has_wonders(wonder_settings, wonders):
+        return replace(base.planet, wonder_settings=wonder_settings, placed=wonders)
+    report = cancellable_progress(progress, cancellation)
+
+    def say(fraction: float, message: str) -> None:
+        if report is not None:
+            report(min(max(fraction, 0.0), 1.0), message)
+
+    return _complete(base.ground, wonder_settings, wonders, say, cancellation)
+
+
+def generate_planet(
+    world: WorldMap,
+    settings: PlanetSettings,
+    geology: WorldGeologyRecipe | None = None,
+    progress: ProgressCallback | None = None,
+    *,
+    wonder_settings: WonderSettings | None = None,
+    wonders: WorldWonders | None = None,
+    cancellation: CancellationToken | None = None,
+) -> PlanetResult:
+    """A planet with its wonders: ``finish_planet`` of ``generate_base``."""
+    wonder_settings = wonder_settings or WonderSettings()
+    share = BASE_SHARE if has_wonders(wonder_settings, wonders) else 1.0
+    base = generate_base(
+        world, settings, geology, progress_part(progress, 0.0, share), cancellation=cancellation
+    )
+    return finish_planet(
+        base, wonder_settings, wonders, progress_part(progress, share, 1.0),
+        cancellation=cancellation,
+    )
+
+
+def _complete(
+    ground: PlanetGround,
+    wonder_settings: WonderSettings,
+    placed: WorldWonders | None,
+    say: Callable[[float, str], None],
+    cancellation: CancellationToken | None,
+) -> PlanetResult:
+    """The planet from its ground: wonders if any, then ice, lakes and the sea floor."""
+    world, settings, seeds = ground.world, ground.settings, ground.stage_seeds
+    mesh, land, coast = ground.mesh, ground.land, ground.coast_m
+    water = ~land
+    climate, runoff, forcing = ground.climate, ground.runoff, ground.forcing
+    plates = forcing.tectonics
+    frame = world.project.frame
+    items = () if placed is None else placed.wonders
+    kinds = wonder_settings.random
+
+    def unit(position: tuple[float, float]) -> F64:
+        lon, lat = np.radians(frame.source_to_lonlat(position))
+        return np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
+
+    if kinds or items:
+        aging = wonder_settings.age_myr > 0 or any(w.age_myr for w in items)
+        say(0.05, "Placing wonders" + (" and aging them" if aging else ""))
+    # Hand-placed wonders replace random ones of their kind.
+    by_hand = {w.kind for w in items}
+    parts = [
+        ground.volcanoes,
+        wonder_volcanoes(
+            mesh, land, coast, seeds[PLANET_VOLCANISM_STAGE_ID],
+            tuple(k for k in VOLCANO_WONDERS if k in kinds and k not in by_hand),
+        ),
+    ]
     for kind in VOLCANO_WONDERS:
-        items = tuple(m for m in landmarks if m.kind == kind)
-        if not items:
-            continue
-        sites = np.array([unit(m.position) for m in items])
-        for site, landmark in zip(sites, items, strict=True):
+        for wonder in (w for w in items if w.kind == kind):
+            site = unit(wonder.position)
             if not land[int(np.argmax(mesh.xyz @ site))]:
-                raise ValueError(f"{landmark.name} lies at sea; place it on land.")
-        volcanoes = with_placed(
-            volcanoes, kind, sites, np.array([m.effective_size_km * 500.0 for m in items]),
-            seeds[PLANET_VOLCANISM_STAGE_ID],
-        )
+                raise ValueError(f"{wonder.name} lies at sea; place it on land.")
+            parts.append(
+                placed_volcano(kind, site, wonder.effective_size_km * 500.0, wonder.seed)
+            )
+    volcanoes = join_volcanoes(parts)
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
     # carries cones widened to its resolution; images redraw them sharply.
     cones = edifice_height(mesh.xyz, mesh.radius_m, volcanoes, 1.5 * mesh.spacing_m)
-    evolved = np.where(land, evolved + cones, evolved)
+    evolved = np.where(land, ground.ground_m + cones, ground.ground_m)
     # Wonders are young too; lakes may then fill them.
-    if settings.wonders or landmarks:
-        say(0.94, "Placing wonders" + (" and aging them" if settings.wonder_age_myr > 0 else ""))
     giants = volcanoes.subset(volcanoes.setting >= TITAN)
     wonders = place_wonders(
-        mesh, land, coast, evolved, settings.wonders,
+        mesh, land, coast, evolved, kinds,
         tuple(
             PlacedWonder(
-                m.kind, unit(m.position), None if m.end is None else unit(m.end),
-                m.effective_size_km * 1e3, m.name, m.age_myr,
+                w.kind, unit(w.position), None if w.end is None else unit(w.end),
+                w.effective_size_km * 1e3, w.name, w.seed, w.age_myr,
             )
-            for m in landmarks if m.kind not in VOLCANO_WONDERS
+            for w in items if w.kind not in VOLCANO_WONDERS
         ),
         footprint(mesh, giants.xyz, 2.0 * giants.radius_m), seeds[PLANET_VOLCANISM_STAGE_ID],
         None if climate is None
         else deserts(land, climate.precipitation_mm, climate.pet_mm, climate.temperature_c),
         AgingSetup(
-            settings.wonder_age_myr,
+            wonder_settings.age_myr,
             partial(sample_field, mesh, values=evolved),
-            partial(sample_field, mesh, values=result.forcing.erodibility),
+            partial(sample_field, mesh, values=forcing.erodibility),
             None if runoff is None else partial(sample_field, mesh, values=runoff),
             settings.area_exponent,
             stage_seed(settings.seed, "planet.aging"),
@@ -418,20 +547,22 @@ def generate_planet(
         ))
     craters, chasms = wonders.craters, wonders.chasms
     wonder_m = np.zeros(mesh.size)
+    crater_floor = np.zeros(mesh.size)
     if len(wonders):
         wonder_m = np.where(land, wonder_relief(mesh.xyz, mesh.radius_m, wonders), 0.0)
         levelled = level_crater_floors(mesh, evolved, craters)
+        crater_floor = np.where(land, levelled - evolved, 0.0)
         evolved = np.where(land, np.maximum(levelled + wonder_m, 1.0), evolved)
     ice = IceSheets.none(mesh.size)
     if climate is not None:
-        say(0.95, "Growing ice sheets")
+        say(0.2, "Growing ice sheets")
         ice = ice_sheets(
-            mesh, land, evolved, np.where(land, result.run.elevation, 0.0), climate.warm_c,
+            mesh, land, evolved, np.where(land, ground.eroded_m, 0.0), climate.warm_c,
             climate.precipitation_mm, settings.climate.lapse_c_per_km, settings.seed,
             partial(check_cancelled, cancellation),
         )
     depressions = young_depressions(
-        mesh, land, coast, regions, None if climate is None else climate.warm_c,
+        mesh, land, coast, ground.regions, None if climate is None else climate.warm_c,
         ice.thickness_m, evolved, seeds[PLANET_FORCING_STAGE_ID],
     )
     # Land stays at least 1 m above sea level (no below-sea-level basins yet).
@@ -440,13 +571,16 @@ def generate_planet(
         None if climate is None else climate.runoff_mm,
         None if climate is None else climate.pet_mm,
     )
-    # A splitting river divides on a low divide once the rivers are known.
-    fork_rng = np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9595])
-    forking = [m for m in landmarks if m.kind == "fork"]
-    sites = [(m.name, unit(m.position)) for m in forking] or (
-        [("", None)] if "fork" in settings.wonders else []
+    # A splitting river divides on a low divide once the rivers are known. A
+    # hand-placed one searches near its place with its own random stream.
+    sites: list[tuple[str, F64 | None, np.random.Generator]] = [
+        (w.name, unit(w.position), np.random.default_rng([w.seed, 9595]))
+        for w in items if w.kind == "fork"
+    ] or (
+        [("", None, np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9595]))]
+        if "fork" in kinds else []
     )
-    for name, near in sites:
+    for name, near, fork_rng in sites:
         found = find_fork(mesh, land, coast, evolved, lakes, fork_rng, near)
         if found is None:
             if near is not None:
@@ -462,10 +596,10 @@ def generate_planet(
             np.concatenate([wonders.forks.discharge_m3_s, fork.discharge_m3_s]),
             np.concatenate([wonders.forks.area_m2, fork.area_m2]),
         ))
-    say(0.97, "Measuring relief")
+    say(0.6, "Measuring relief")
     bathymetry = ocean_floor(
         mesh, coast, water, seeds[PLANET_FORCING_STAGE_ID],
-        river_sediment(mesh, land, lakes.flow, result.forcing),
+        river_sediment(mesh, land, lakes.flow, forcing),
         plates,
     )
     # Volcanoes at sea stop below the surface unless volcanic islands are enabled;
@@ -538,8 +672,8 @@ def generate_planet(
     check_cancelled(cancellation)
     say(1.0, "Planet relief ready")
     return PlanetResult(
-        world, settings, geology, mesh, land, coast, elevation, lakes.flow, result.forcing,
-        regions, calibration, climate, runoff, lakes, volcanoes, volcanic, islands, wonders,
-        wonder_m, ice, seeds, metrics,
+        world, settings, ground.geology, mesh, land, coast, elevation, lakes.flow, forcing,
+        ground.regions, ground.calibration, climate, runoff, lakes, volcanoes, volcanic,
+        islands, wonders, wonder_m, crater_floor, ice, seeds, metrics, wonder_settings, placed,
     )
 

@@ -1,4 +1,8 @@
-"""Generate, preview and publish whole-planet relief from a world (experimental M2)."""
+"""Generate, preview and publish whole-planet relief from a world (experimental M2).
+
+A planet is a base planet without wonders plus a wonder pass (ADR-0097). A run
+keeps its base, so changed wonders are applied without eroding the planet again.
+"""
 
 import os
 from dataclasses import asdict, dataclass
@@ -13,11 +17,26 @@ from map_maker.terrain.adapters.planet_natural import render_previews
 from map_maker.terrain.adapters.world_geology import geology_document, read_geology
 from map_maker.terrain.adapters.world_project import read_world_project, world_project_document
 from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.adapters.world_wonders import read_wonders, wonders_sha256
 from map_maker.terrain.domain.planet import PlanetSettings
+from map_maker.terrain.domain.wonders import WonderSettings
 from map_maker.terrain.domain.world import WorldProject
 from map_maker.terrain.domain.world_geology import WorldGeologyRecipe
-from map_maker.terrain.pipeline.control import CancellationToken, ProgressCallback, check_cancelled
-from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
+from map_maker.terrain.domain.world_wonders import WorldWonders
+from map_maker.terrain.pipeline.control import (
+    CancellationToken,
+    ProgressCallback,
+    check_cancelled,
+    progress_part,
+)
+from map_maker.terrain.pipeline.planet import (
+    BASE_SHARE,
+    PlanetBase,
+    PlanetResult,
+    finish_planet,
+    generate_base,
+    has_wonders,
+)
 from map_maker.terrain.pipeline.world import prepare_world_map
 
 DEFAULT_RASTER_WIDTH = 4096
@@ -29,16 +48,18 @@ DEFAULT_RIVER_KM2 = 25_000.0
 class PlanetRun:
     """A generated planet with the identities needed to publish it unchanged."""
 
+    base: PlanetBase
     result: PlanetResult
     runtime: dict[str, object]
-    inputs: dict[str, str | None]
+    inputs: dict[str, str | None]  # world, geology and wonder document hashes
     previews: dict[str, Image.Image]
+    base_sha256: str  # identity of the planet without wonders; tiles are cached under it
 
 
 def input_identity(
     project: WorldProject, geology: WorldGeologyRecipe | None
 ) -> dict[str, str | None]:
-    """Hashes of the canonical input documents (independent of file formatting)."""
+    """Hashes of the canonical input documents of the base planet."""
     return {
         "world_sha256": sha256(canonical_json(world_project_document(project))).hexdigest(),
         "geology_sha256": None if geology is None
@@ -46,13 +67,29 @@ def input_identity(
     }
 
 
-def planet_identity(run: PlanetRun) -> str:
-    """Identity of an in-memory planet: inputs, settings and runtime (for tile caches)."""
+def base_identity(
+    project: WorldProject,
+    geology: WorldGeologyRecipe | None,
+    settings: PlanetSettings,
+    runtime: dict[str, object] | None = None,
+) -> str:
+    """Identity of a planet without wonders: its inputs, settings and runtime."""
     return sha256(
         canonical_json({
-            "inputs": run.inputs,
-            "settings": asdict(run.result.settings),
-            "runtime": run.runtime,
+            "inputs": input_identity(project, geology),
+            "settings": asdict(settings),
+            "runtime": runtime_identity() if runtime is None else runtime,
+        })
+    ).hexdigest()
+
+
+def planet_identity(run: PlanetRun) -> str:
+    """Identity of an in-memory planet: its base and its wonders."""
+    return sha256(
+        canonical_json({
+            "base": run.base_sha256,
+            "wonder_settings": asdict(run.result.wonder_settings),
+            "wonders_sha256": run.inputs["wonders_sha256"],
         })
     ).hexdigest()
 
@@ -64,12 +101,19 @@ def user_tile_cache() -> Path:
     return root / "map-maker" / "planet-tiles"
 
 
+def _check_wonders(project: WorldProject, wonders: WorldWonders | None) -> None:
+    if wonders is not None and wonders.world != project:
+        raise ValueError("The wonders belong to a different world; open their world.")
+
+
 def generate_planet_run(
     project: WorldProject,
     geology: WorldGeologyRecipe | None,
     settings: PlanetSettings,
     progress: ProgressCallback | None = None,
     *,
+    wonder_settings: WonderSettings | None = None,
+    wonders: WorldWonders | None = None,
     preview_width: int = DEFAULT_PREVIEW_WIDTH,
     river_km2: float = DEFAULT_RIVER_KM2,
     cancellation: CancellationToken | None = None,
@@ -80,15 +124,63 @@ def generate_planet_run(
         raise ValueError("World source snapshot and geometry disagree; import again.")
     if geology is not None and geology.world != project:
         raise ValueError("The geology recipe belongs to a different world; open its world.")
+    wonder_settings = wonder_settings or WonderSettings()
+    _check_wonders(project, wonders)
     world = prepare_world_map(project)
-    result = generate_planet(world, settings, geology, progress, cancellation=cancellation)
-    if progress is not None and preview_width:
-        progress(1.0, "Drawing the maps")
-    previews = render_previews(result, preview_width, river_km2) if preview_width else {}
+    share = BASE_SHARE if has_wonders(wonder_settings, wonders) else 1.0
+    base = generate_base(
+        world, settings, geology, progress_part(progress, 0.0, share), cancellation=cancellation
+    )
+    result = finish_planet(
+        base, wonder_settings, wonders, progress_part(progress, share, 1.0),
+        cancellation=cancellation,
+    )
+    previews = _previews(result, progress, preview_width, river_km2)
     if runtime_identity() != runtime:
         raise ValueError("Software changed during planet generation; generate again.")
     check_cancelled(cancellation)
-    return PlanetRun(result, runtime, input_identity(project, geology), previews)
+    return PlanetRun(
+        base, result, runtime,
+        {
+            **input_identity(project, geology),
+            "wonders_sha256": None if wonders is None else wonders_sha256(wonders),
+        },
+        previews, base_identity(project, geology, settings, runtime),
+    )
+
+
+def apply_wonders(
+    run: PlanetRun,
+    wonder_settings: WonderSettings,
+    wonders: WorldWonders | None,
+    progress: ProgressCallback | None = None,
+    *,
+    preview_width: int = DEFAULT_PREVIEW_WIDTH,
+    river_km2: float = DEFAULT_RIVER_KM2,
+    cancellation: CancellationToken | None = None,
+) -> PlanetRun:
+    """``run``'s base planet with these wonders: the wonder pass only (ADR-0097)."""
+    if runtime_identity() != run.runtime:
+        raise ValueError("Software changed since the planet was generated; generate again.")
+    _check_wonders(run.result.world.project, wonders)
+    result = finish_planet(run.base, wonder_settings, wonders, progress, cancellation=cancellation)
+    previews = _previews(result, progress, preview_width, river_km2)
+    check_cancelled(cancellation)
+    return PlanetRun(
+        run.base, result, run.runtime,
+        {**run.inputs, "wonders_sha256": None if wonders is None else wonders_sha256(wonders)},
+        previews, run.base_sha256,
+    )
+
+
+def _previews(
+    result: PlanetResult, progress: ProgressCallback | None, width: int, river_km2: float
+) -> dict[str, Image.Image]:
+    if not width:
+        return {}
+    if progress is not None:
+        progress(1.0, "Drawing the maps")
+    return render_previews(result, width, river_km2)
 
 
 def export_planet(
@@ -110,8 +202,8 @@ def export_planet(
             raise ValueError("Software changed after planet generation; generate again.")
 
     return write_planet_build(
-        run.result, run.runtime, run.inputs, destination, width=width, river_km2=river_km2,
-        verify=verify,
+        run.result, run.runtime, run.inputs, destination, base=run.base.planet,
+        base_sha256=run.base_sha256, width=width, river_km2=river_km2, verify=verify,
     )
 
 
@@ -121,6 +213,8 @@ def build_planet(
     geology_path: Path | None = None,
     settings: PlanetSettings | None = None,
     *,
+    wonders_path: Path | None = None,
+    wonder_settings: WonderSettings | None = None,
     width: int = DEFAULT_RASTER_WIDTH,
     river_km2: float = DEFAULT_RIVER_KM2,
     progress: ProgressCallback | None = None,
@@ -133,12 +227,15 @@ def build_planet(
         raise ValueError("River threshold must be a positive area in km².")
     check_cancelled(cancellation)
     files = {
-        path: file_sha256(path) for path in (world_path, geology_path) if path is not None
+        path: file_sha256(path)
+        for path in (world_path, geology_path, wonders_path) if path is not None
     }
     run = generate_planet_run(
         read_world_project(world_path),
         None if geology_path is None else read_geology(geology_path)[0],
         settings or PlanetSettings(), progress,
+        wonder_settings=wonder_settings,
+        wonders=None if wonders_path is None else read_wonders(wonders_path)[0],
         preview_width=0, river_km2=river_km2, cancellation=cancellation,
     )
     for path, digest in files.items():

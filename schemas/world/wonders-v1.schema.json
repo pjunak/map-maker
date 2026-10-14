@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://map-maker.local/schemas/world/wonders-v1.schema.json",
+  "title": "Map Maker hand-placed world wonders v1",
+  "description": "Wonders placed by hand on one world (ADR-0097). A planet adds them after erosion and climate; random wonders are planet build settings, not part of this document.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "world_sha256",
+    "world",
+    "wonders"
+  ],
+  "properties": {
+    "schema": {
+      "const": "map-maker.world-wonders"
+    },
+    "version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "world_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "world": {
+      "$ref": "https://map-maker.local/schemas/world/project-v1.schema.json"
+    },
+    "wonders": {
+      "description": "Hand-placed wonders, sorted by id.",
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "position",
+          "seed",
+          "size_km",
+          "end",
+          "age_myr"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^wonder-[A-Za-z0-9][A-Za-z0-9_-]*$",
+            "maxLength": 256
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "kind": {
+            "description": "A wonder kind from the catalog (domain.wonders).",
+            "enum": [
+              "titan",
+              "shattered",
+              "active",
+              "crater",
+              "chasm",
+              "cliff",
+              "tepui",
+              "oasis",
+              "fork"
+            ]
+          },
+          "position": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            },
+            "description": "Source-map coordinates of the wonder (its first end for wonders placed by two ends)."
+          },
+          "seed": {
+            "description": "The wonder's own random stream: its shape is drawn from this seed and its kind, independent of the planet seed and of other wonders.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "size_km": {
+            "description": "What the kind's size measures (diameter, width or height); null uses the usual size and is the only value for kinds without a size.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0
+          },
+          "end": {
+            "description": "The far end of a wonder placed by two ends; null for others.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "age_myr": {
+            "description": "Age (Myr) for the aging tool; null uses the wonder settings' age. Only craters, chasms, great cliffs and tepuis age.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 500
+          }
+        }
+      }
+    }
+  }
+}

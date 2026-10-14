@@ -16,7 +16,7 @@ A circular region is regenerated with finer, physically eroded detail:
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property, partial
 
 import numpy as np
@@ -102,6 +102,7 @@ class RegionalParent:
     wind_north: F64 | None = None
     wonder_m: F64 | None = None  # height change the mesh carries from craters and chasms
     wonders: Wonders | None = None
+    crater_floor_m: F64 | None = None  # crater floors levelled below their relief
     planet_mesh: SphereMesh | None = None  # the mesh lakes and ice are on, if not `mesh`
     ice: IceSheets | None = None  # on the planet mesh
     ice_margin: F64 | None = None  # signed margin distance on the planet mesh; computed if None
@@ -109,10 +110,9 @@ class RegionalParent:
     def young_m(self) -> F64:
         """Height that volcanoes and wonders added on land after erosion and climate."""
         young = np.zeros(self.mesh.size)
-        if self.volcanic_m is not None:
-            young = young + self.volcanic_m
-        if self.wonder_m is not None:
-            young = young + self.wonder_m
+        for added in (self.volcanic_m, self.wonder_m, self.crater_floor_m):
+            if added is not None:
+                young = young + added
         return np.where(self.land, young, 0.0)
 
     @classmethod
@@ -145,8 +145,18 @@ class RegionalParent:
             None if climate is None else climate.wind_north,
             result.wonder_m,
             result.wonders,
+            result.crater_floor_m,
             ice=result.ice if climate is not None else None,
         )
+
+    @classmethod
+    def tiles_from(cls, result: PlanetResult) -> RegionalParent:
+        """The parent that regional tiles are enriched from: ``result`` without ice.
+
+        Tiles come from the planet without wonders (ADR-0097), so ``result`` is the
+        base planet; tiles never use ice, which would only cost its margins.
+        """
+        return replace(cls.from_result(result), ice=None)
 
     def lakes_at(self, xyz: F64, detail_m: float) -> tuple[F64, F64, B]:
         """Lake cover (0..1), the nearest lake's level and whether it is closed.

@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-13. **Active milestone: M6, nested deterministic regional and local
+Updated 2026-10-15. **Active milestone: M6, nested deterministic regional and local
 maps.** Map views run alongside it. The plan is world-first: one whole-planet
 relief, made by uplift and erosion on a sphere mesh, feeds climate, map views and
 regional zoom ([decision D00a](../research/decision-catalog.md)).
@@ -16,7 +16,7 @@ backlog, and [status](../research/status.md) records what works now.
 | **M1** | implemented, experimental | Context-bound local rough terrain: one landmass, AEQD (ADR-0084). | [Evidence](../research/2026-09-28-context-bound-rough-terrain.md). |
 | **M2** | implemented, experimental | **Whole-planet relief** (ADR-0085), with geology recipes as uplift and erodibility. Includes plates, volcanism, sediment basins and ocean floor. `map-maker world planet` exports a GeoTIFF, a mesh archive, rivers and lakes. | Coast invariant, descending receivers, isotropic flow, mesh-converged statistics, deterministic repeats. See the [planet guide](../world-planet.md). |
 | **M3** | implemented, experimental | **Provisional climate:** seasonal temperature, winds, moisture with orographic lift, runoff, biomes and Köppen; ice sheets from mass balance and shallow-ice flow (ADR-0093). | Controlled windward/leeward and coastal/interior responses; closed water budget ([report](../research/2026-10-08-continentality-and-koppen.md)). |
-| **M4** | partly implemented | **Coupled, inspectable workflow:** runoff-weighted erosion and lakes (done); a World-tab stage with cancel and stale state (done); a single map view with background jobs and drill-down through every level (ADR-0089); guided steps with geology edited in place and following world edits (ADR-0096, done); compare and regenerate. | A user can run, inspect, change an input and regenerate, and sees nonconvergence. |
+| **M4** | partly implemented | **Coupled, inspectable workflow:** runoff-weighted erosion and lakes (done); a World-tab stage with cancel and stale state (done); a single map view with background jobs and drill-down through every level (ADR-0089); guided steps with geology edited in place and following world edits (ADR-0096, done); wonders regenerated without eroding again (ADR-0097, done); compare and regenerate. | A user can run, inspect, change an input and regenerate, and sees nonconvergence. |
 | **M5** | queued | **Accepted parent and native core:** reference-world realism gates, an adoption ADR, and a port of the stable kernels to a native core with differential tests. Decide what replaces the local composed generator. | Metric thresholds; Python/native agreement within tolerance; dependency audit. |
 | **M6** | **ACTIVE** | **Regional and local zoom.** Fixed blended tiles (ADR-0086) and nested levels are done: region (5 km), province (1 km) and local (200 m), each enriched from the level above (ADR-0088). Display detail is world-anchored and scaled per level; fine tiles branch; next: rivers traced on tiles. | Overlapping and nested requests agree; inherited flow is conserved; revisits do not age terrain again (ADR-0048). |
 | **Views** | implemented, experimental | **Map themes and projections** (ADR-0087): globe and polar views; atlas, relief, climate, topographic, parchment, plates, sea-floor age, basins and geology themes. Political and civilization views will need authored overlays. | Themes are registered once; projections are deterministic and verified against the build. |
@@ -49,11 +49,16 @@ backlog, and [status](../research/status.md) records what works now.
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`).
-2. **Wonder catalog** ([wonder guide](../wonders.md)): each kind is chosen in the
-   settings for random placement or placed by hand. Titans, shattered and
+2. **Wonder layer** ([wonder guide](../wonders.md)). Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a
-   splitting river are done, wonders age on their own patches (ADR-0091), and
-   rivers fall as waterfalls off their cliffs. Next: more kinds as needed.
+   splitting river are done; wonders age on their own patches (ADR-0091) and
+   rivers fall as waterfalls off their cliffs.
+   - Wonders are a pass on a base planet without them (ADR-0097): random kinds
+     are wonder settings, placed wonders have their own `.wonders.json` document,
+     Wonders step and seed each, and applying or regenerating them never erodes
+     again. Regional tiles come from the base, so wonder edits keep them.
+   - Next: place wonders on the generated relief with per-kind settings, then
+     suggest plausible sites to keep or reject, replacing random placement.
 3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks

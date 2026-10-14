@@ -1,12 +1,13 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false, reportMissingTypeStubs=false
-"""Opt-in fantastical landmarks beyond Earth's extremes (``PlanetSettings.wonders``).
+"""Opt-in fantastical landmarks beyond Earth's extremes (``domain.wonders``).
 
 The titan shield volcano lives with the other volcanoes (``planet_volcanism``),
 and great cliffs and tepuis in ``planet_scarps``. Wonders are young: they are
 cut into, or raised on, the eroded relief before lakes form, so the climate
 decides whether they hold lakes or stay dry. They form one overlay (``Wonders``)
-that maps redraw sharply at any scale.
+that maps redraw sharply at any scale. Random wonders draw from streams of the
+planet seed; each hand-placed wonder draws from its own seed (ADR-0097).
 """
 
 from __future__ import annotations
@@ -265,7 +266,12 @@ class PlacedWonder:
     end: F64 | None
     size_m: float
     name: str
-    age_myr: float | None = None  # None uses the planet's wonder age
+    seed: int  # its own random stream, so other wonders do not change its shape
+    age_myr: float | None = None  # None uses the wonder settings' age
+
+    def rng(self, code: int) -> np.random.Generator:
+        """This wonder's random stream for its kind's ``code``."""
+        return np.random.default_rng([self.seed, code])
 
 
 def place_wonders(
@@ -282,9 +288,10 @@ def place_wonders(
 ) -> Wonders:
     """Hand-placed wonders, and random ones of ``kinds`` where none is placed by hand.
 
-    Each kind has its own random stream, and each is kept clear of the wonders
-    placed before it (and of the ``blocked`` nodes, such as a titan). With
-    ``aging``, each wonder older than 0 is eroded for its age (ADR-0091).
+    Each random kind has its own stream of ``seed`` and is kept clear of the
+    wonders placed before it (and of the ``blocked`` nodes, such as a titan); each
+    hand-placed wonder has its own stream. With ``aging``, each wonder older than 0
+    is eroded for its age (ADR-0091).
     """
     blocked = blocked.copy()
     patches: list[AgedPatch] = []
@@ -337,12 +344,11 @@ def place_wonders(
         )
     systems: list[tuple[Chasms, PlacedWonder | None]] = []
     if items := mine("chasm"):
-        chasm_rng = stream(9191)
         for item in items:
             systems.append((
                 authored_chasms(
                     mesh, land, ground_m, ends((item,)), np.array([item.size_m]), (item.name,),
-                    chasm_rng,
+                    item.rng(9191),
                 ),
                 item,
             ))
@@ -373,7 +379,7 @@ def place_wonders(
     if items := mine("cliff"):
         cliffs = authored_cliffs(
             mesh, land, ground_m, ends(items), np.array([p.size_m for p in items]),
-            tuple(p.name for p in items), stream(9292),
+            tuple(p.name for p in items), tuple(p.rng(9292) for p in items),
         )
     elif "cliff" in kinds:
         cliffs = place_cliff(mesh, land, coast_m, ground_m, stream(9292), blocked)
@@ -393,7 +399,8 @@ def place_wonders(
     if items := mine("tepui"):
         tepuis = authored_tepuis(
             mesh, land, np.array([p.xyz for p in items]),
-            np.array([p.size_m / 2 for p in items]), tuple(p.name for p in items), stream(9393),
+            np.array([p.size_m / 2 for p in items]), tuple(p.name for p in items),
+            tuple(p.rng(9393) for p in items),
         )
     elif "tepui" in kinds:
         tepuis = tepui_group(mesh, land, coast_m, stream(9393), blocked)

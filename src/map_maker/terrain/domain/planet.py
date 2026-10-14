@@ -4,9 +4,8 @@ from dataclasses import dataclass, field
 from math import isfinite
 
 from map_maker.terrain.domain.seeds import validate_master_seed
-from map_maker.terrain.domain.wonders import MAX_WONDER_AGE_MYR, WONDER_KINDS, WonderKind
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v27"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v28"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v7"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"
@@ -59,6 +58,8 @@ class PlanetSettings:
     sphere mesh. ``process_area_km2`` is the smallest resolved drainage area;
     it keeps relief statistics independent of ``nodes``. ``climate_passes`` is the
     number of climate -> runoff-weighted erosion couplings (0 = no climate).
+    Wonders are not planet settings: they are added to the finished planet
+    (``domain.wonders.WonderSettings``, ADR-0097).
     """
 
     seed: int = 20261006
@@ -74,22 +75,11 @@ class PlanetSettings:
     # Opt-in: young volcanoes at sea may break the surface as new islands, which
     # adds land beyond the authored coastline.
     volcanic_islands: bool = False
-    # Opt-in: the kinds of wonder (domain.wonders) placed at random.
-    wonders: tuple[WonderKind, ...] = ()
-    # Age of the wonders (Myr) for the aging tool (ADR-0091); 0 keeps them fresh.
-    wonder_age_myr: float = 0.0
 
     def __post_init__(self) -> None:
         validate_master_seed(self.seed)
         if type(self.volcanic_islands) is not bool:
             raise ValueError("Volcanic islands must be true or false.")
-        if (
-            type(self.wonders) is not tuple
-            or len(set(self.wonders)) != len(self.wonders)
-            or any(kind not in WONDER_KINDS for kind in self.wonders)
-        ):
-            raise ValueError(f"Wonders must be distinct kinds from: {', '.join(WONDER_KINDS)}.")
-        _finite(self.wonder_age_myr, "Wonder age (Myr)", 0, MAX_WONDER_AGE_MYR)
         if (
             type(self.nodes) is not int
             or not MIN_PLANET_NODES <= self.nodes <= MAX_PLANET_NODES
@@ -119,7 +109,7 @@ class PlanetSettings:
         return max(1, round(self.duration_myr * 1e3 / self.step_kyr))
 
 
-REGIONAL_ALGORITHM = "planet-blended-tiles-v8"
+REGIONAL_ALGORITHM = "planet-blended-tiles-v9"
 TILE_STAGE_PREFIX = "planet.tile."
 
 
