@@ -2,7 +2,7 @@
 
 Every headless build now writes `elevation.tif` alongside the numeric NPY
 products. It contains the same Float32 DEM, with no elevation resampling or
-image colour conversion. Use `dmtools terrain build PROJECT --output NEW_DIRECTORY`.
+image colour conversion. Use `map-maker terrain build PROJECT --output NEW_DIRECTORY`.
 The desktop workbench still exports PNG; use the saved project build command
 for GeoTIFF.
 

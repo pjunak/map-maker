@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:dmtools:schema:terrain-regional-samples:3",
-  "title": "DM Tools unchanged-field regional samples v3",
+  "$id": "urn:map-maker:schema:terrain-regional-samples:3",
+  "title": "Map Maker unchanged-field regional samples v3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,7 +25,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "dmtools.terrain-regional-samples"
+      "const": "map-maker.terrain-regional-samples"
     },
     "schema_version": {
       "const": 3
@@ -65,10 +65,10 @@
       }
     },
     "settings": {
-      "$ref": "urn:dmtools:schema:terrain-project:9#/$defs/generatorSettings"
+      "$ref": "urn:map-maker:schema:terrain-project:9#/$defs/generatorSettings"
     },
     "runtime": {
-      "$ref": "urn:dmtools:schema:terrain-build:20#/properties/runtime"
+      "$ref": "urn:map-maker:schema:terrain-build:20#/properties/runtime"
     },
     "algorithms": {
       "type": "object",
@@ -103,10 +103,10 @@
           "const": "regional-unchanged-field-sampling@1"
         },
         "seed_policy": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/properties/algorithms/properties/seed_policy"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/properties/algorithms/properties/seed_policy"
         },
         "stage_seeds": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/properties/algorithms/properties/stage_seeds"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/properties/algorithms/properties/stage_seeds"
         }
       }
     },
@@ -294,7 +294,7 @@
         "samples.npz": {
           "allOf": [
             {
-              "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+              "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
             },
             {
               "properties": {
@@ -308,7 +308,7 @@
         "inputs.json": {
           "allOf": [
             {
-              "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+              "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
             },
             {
               "properties": {
@@ -322,7 +322,7 @@
         "scientific.png": {
           "allOf": [
             {
-              "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+              "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
             },
             {
               "properties": {

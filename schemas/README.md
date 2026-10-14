@@ -2,7 +2,7 @@
 
 Only the current formats are supported:
 
-- [World project v1](world/project-v1.schema.json): portable `.dmworld.json` source
+- [World project v1](world/project-v1.schema.json): portable `.world.json` source
   snapshot, full-sphere frame/radius and explicit continent/island assignments.
   Optional `coast_detail_km` states the finest coast detail the drawing already
   carries, so regional maps add only finer detail (ADR-0090). This is a validated
@@ -19,13 +19,13 @@ Only the current formats are supported:
   water exposure, resolution support and hashes of the numeric
   arrays, previews and original world snapshot. This is not a terrain parent.
 
-- [World geology v2](world/geology-v2.schema.json): separate `.dmgeology.json`
+- [World geology v2](world/geology-v2.schema.json): separate `.geology.json`
   input recipe with retained world identity, continent defaults, priority provinces
   and independent ages/duration, plus optional explicit landform controls. Terrain
   creation consumes those controls; categories/ages do not imply physical forcing.
 
 - [Bathymetry inputs v1](world/bathymetry-inputs-v1.schema.json): portable
-  `.dmbathy.json` world snapshot, explicit water IDs and shelf/slope/basin assumptions.
+  `.bathy.json` world snapshot, explicit water IDs and shelf/slope/basin assumptions.
 - [Bathymetry v1](world/bathymetry-v1.schema.json): negative ocean-floor centre
   samples, numerical error/support, a retained verified geographic dependency and
   result hashes. Neither a land DEM nor physical transport/heat capacity.
@@ -42,7 +42,7 @@ Only the current formats are supported:
 - [Terrain context v1](terrain/context-v1.schema.json): bounded geographic support
   serialized as a verified compressed sample binding, plus the metadata report
   retained by a completed terrain build. It does not redefine the terrain land mask.
-- [Project v9](terrain/project-v9.schema.json): authored `.dmterrain.json` inputs,
+- [Project v9](terrain/project-v9.schema.json): authored `.terrain.json` inputs,
   including hole rings, line-owned ridge/valley profiles and an optional nullable
   frozen world-context binding.
 - [Build v20](terrain/build-v20.schema.json): numeric products, coordinates,

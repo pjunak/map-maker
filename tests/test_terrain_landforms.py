@@ -10,12 +10,12 @@ from jsonschema import validate
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
-from dmtools.terrain.adapters import (
+from map_maker.terrain.adapters import (
     load_svg_coastline_source,
     load_terrain_project,
     save_terrain_project,
 )
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandformKind,
@@ -26,8 +26,8 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     landform_preset,
 )
-from dmtools.terrain.pipeline.generate import generate_terrain
-from dmtools.terrain.pipeline.landforms import (
+from map_maker.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.landforms import (
     prepare_regions,
     regional_elevation_fields,
     regional_incision_budget,
@@ -113,7 +113,7 @@ def test_region_project_round_trip_and_invalid_geometry(tmp_path: Path) -> None:
     region = TerrainRegion(RING, landform_preset("hills"))
     project = TerrainProject(source.coastline, SETTINGS, (region,),
                              TerrainAuthoringState(active_tool="region", region=region.settings))
-    path = tmp_path / "regions.dmterrain.json"
+    path = tmp_path / "regions.terrain.json"
     save_terrain_project(project, source, path)
     assert load_terrain_project(path).project == project
     schema = Path(__file__).parents[1] / "schemas/terrain/project-v9.schema.json"

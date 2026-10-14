@@ -10,8 +10,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from benchmarks.evolution.surface import validate_graph
-from dmtools.terrain.adapters.build import canonical_json
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 type FloatArray = NDArray[np.float64]
 type Sampler = Callable[[FloatArray, FloatArray], NDArray[np.float32]]

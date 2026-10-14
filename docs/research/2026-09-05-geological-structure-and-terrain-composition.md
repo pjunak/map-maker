@@ -14,9 +14,9 @@ controls without requiring a reconstruction of an entire planet's history.
 ## Scope and evidence
 
 Reviewed local baseline `1bcc3cf`, particularly the
-[domain types](../../src/dmtools/terrain/domain/models.py),
-[authoring state](../../src/dmtools/terrain/domain/project.py), and
-[generation pipeline](../../src/dmtools/terrain/pipeline/generate.py).
+[domain types](../../src/map_maker/terrain/domain/models.py),
+[authoring state](../../src/map_maker/terrain/domain/project.py), and
+[generation pipeline](../../src/map_maker/terrain/pipeline/generate.py).
 Public structure kinds remain ridge and valley. The pipeline already smooths
 structure lines, preserves compatible junction widths and attaches profile
 anchors. Geological materials and typed fault/divide/plateau objects are not

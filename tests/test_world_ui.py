@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from dmtools.terrain import ui, world_ui
-from dmtools.terrain.adapters.world_svg import load_world_svg
-from dmtools.terrain.application.world import open_world
+from map_maker.terrain import ui, world_ui
+from map_maker.terrain.adapters.world_svg import load_world_svg
+from map_maker.terrain.application.world import open_world
 
 EXAMPLES = Path(__file__).parents[1] / "examples/world"
 
@@ -61,7 +61,7 @@ def test_world_import_assignment_validate_save_and_reopen(
     view.validate()
     wait_world(app)
     assert view.validated is not None and view.dirty
-    destination = tmp_path / "world.dmworld.json"
+    destination = tmp_path / "input.world.json"
 
     def save_path(**_kwargs: object) -> str:
         return str(destination)
@@ -87,7 +87,7 @@ def test_world_assign_exclude_and_rename_retain_identity(
 
     view = app.world_workspace
     view.accept_world(
-        open_world(EXAMPLES / "four-shores.dmworld.json"), EXAMPLES / "four-shores.dmworld.json"
+        open_world(EXAMPLES / "four-shores.world.json"), EXAMPLES / "four-shores.world.json"
     )
     west = next(c for c in view.continents if c.name == "Westreach")
     view.owner.set("Westreach")
@@ -151,7 +151,7 @@ def test_world_close_cancel_and_failed_load_preserve_work(
         errors.append(str(args))
 
     monkeypatch.setattr(world_ui.messagebox, "showerror", collect_error)
-    view.load_world(tmp_path / "missing.dmworld.json")
+    view.load_world(tmp_path / "missing.world.json")
     wait_world(app)
     assert errors and view.source is retained and view.dirty
 
@@ -175,7 +175,7 @@ def test_world_busy_guard_and_cleanup(app: ui.TerrainApp) -> None:
 
 
 def test_import_issues_are_visible_and_selected(app: ui.TerrainApp) -> None:
-    from dmtools.terrain.adapters.world_svg import parse_world_svg
+    from map_maker.terrain.adapters.world_svg import parse_world_svg
 
     view = app.world_workspace
     view.accept_source(
@@ -202,7 +202,7 @@ def test_validation_selects_overlapping_shapes(
     app: ui.TerrainApp,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters.world_svg import parse_world_svg
+    from map_maker.terrain.adapters.world_svg import parse_world_svg
 
     view = app.world_workspace
     view.accept_source(
@@ -234,7 +234,7 @@ def test_tolerated_import_adjustments_validate_save_reopen_and_clear(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters.world_svg import parse_world_svg
+    from map_maker.terrain.adapters.world_svg import parse_world_svg
 
     view = app.world_workspace
     view.accept_source(
@@ -261,7 +261,7 @@ def test_tolerated_import_adjustments_validate_save_reopen_and_clear(
     view._review_adjustment()
     assert set(view.tree.selection()) == set(view.validated.adjustments[0].feature_ids)
     assert "export overflow" in str(view.adjustment_detail.cget("text"))
-    target = tmp_path / "accepted.dmworld.json"
+    target = tmp_path / "accepted.world.json"
 
     def save_path(**_kwargs: object) -> str:
         return str(target)
@@ -286,7 +286,7 @@ def test_context_generate_inspect_export_and_invalidate(
 ) -> None:
     view = app.world_workspace
     view.accept_world(
-        open_world(EXAMPLES / "four-shores.dmworld.json"), EXAMPLES / "four-shores.dmworld.json"
+        open_world(EXAMPLES / "four-shores.world.json"), EXAMPLES / "four-shores.world.json"
     )
     view.context_rows.set("12")
     view.generate_context()
@@ -333,7 +333,7 @@ def test_context_generate_inspect_export_and_invalidate(
 def test_context_cancel_and_changed_inputs_never_install_new_results(app: ui.TerrainApp) -> None:
     view = app.world_workspace
     view.accept_world(
-        open_world(EXAMPLES / "four-shores.dmworld.json"), EXAMPLES / "four-shores.dmworld.json"
+        open_world(EXAMPLES / "four-shores.world.json"), EXAMPLES / "four-shores.world.json"
     )
     view.context_rows.set("12")
     view.generate_context()
@@ -352,7 +352,7 @@ def test_context_cancel_and_changed_inputs_never_install_new_results(app: ui.Ter
 def test_issue_highlighting_returns_to_source_after_context(app: ui.TerrainApp) -> None:
     view = app.world_workspace
     view.accept_world(
-        open_world(EXAMPLES / "four-shores.dmworld.json"), EXAMPLES / "four-shores.dmworld.json"
+        open_world(EXAMPLES / "four-shores.world.json"), EXAMPLES / "four-shores.world.json"
     )
     view.context_rows.set("12")
     view.generate_context()
@@ -369,14 +369,14 @@ def test_context_reopen_restores_inputs_without_making_snapshot_a_save_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters.build import file_sha256
-    from dmtools.terrain.application.world_context import export_context, generate_context
-    from dmtools.terrain.domain.world_context import WorldContextSettings
+    from map_maker.terrain.adapters.build import file_sha256
+    from map_maker.terrain.application.world_context import export_context, generate_context
+    from map_maker.terrain.domain.world_context import WorldContextSettings
 
-    source = open_world(EXAMPLES / "four-shores.dmworld.json")
+    source = open_world(EXAMPLES / "four-shores.world.json")
     run = generate_context(source.project, WorldContextSettings(12))
     bundle = export_context(run, tmp_path / "saved-context")
-    snapshot = bundle.parent / "world.dmworld.json"
+    snapshot = bundle.parent / "input.world.json"
     before = file_sha256(snapshot)
     view = app.world_workspace
     view.load_context(bundle)
@@ -387,7 +387,7 @@ def test_context_reopen_restores_inputs_without_making_snapshot_a_save_target(
     view.map_view.set_layer("Water openings")
     view.map_view.draw_now()
     assert view.map_view.photo is not None
-    edited = tmp_path / "edited.dmworld.json"
+    edited = tmp_path / "edited.world.json"
 
     def choose_save(**_kwargs: object) -> str:
         return str(edited)
@@ -406,14 +406,14 @@ def test_failed_cancelled_or_obsolete_context_open_preserves_current_work(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.application.world_context import export_context, generate_context
-    from dmtools.terrain.domain.world_context import WorldContextSettings
+    from map_maker.terrain.application.world_context import export_context, generate_context
+    from map_maker.terrain.domain.world_context import WorldContextSettings
 
-    source = open_world(EXAMPLES / "four-shores.dmworld.json")
+    source = open_world(EXAMPLES / "four-shores.world.json")
     run = generate_context(source.project, WorldContextSettings(12))
     bundle = export_context(run, tmp_path / "context")
     view = app.world_workspace
-    view.accept_world(source, EXAMPLES / "four-shores.dmworld.json")
+    view.accept_world(source, EXAMPLES / "four-shores.world.json")
     errors: list[str] = []
 
     def show_error(*args: object, **_kwargs: object) -> None:
@@ -438,8 +438,8 @@ def test_water_connectivity_inspection_shows_pieces_and_finite_links(app: ui.Ter
     import numpy as np
     from test_world_context import project
 
-    from dmtools.terrain.application.world_context import generate_context
-    from dmtools.terrain.domain.world_context import WorldContextSettings
+    from map_maker.terrain.application.world_context import generate_context
+    from map_maker.terrain.domain.world_context import WorldContextSettings
 
     app.root.geometry("1160x760")
     app.root.deiconify()
@@ -483,7 +483,7 @@ def test_world_frame_keeps_the_coast_detail_a_map_already_carries(
     # A refined-coast export declares its detail; importing it fills the field.
     text = (EXAMPLES / "coastlines.svg").read_text(encoding="utf-8")
     marked = tmp_path / "refined.svg"
-    marked.write_text(text.replace("<svg ", '<svg data-dmtools-coast-detail-km="10" ', 1),
+    marked.write_text(text.replace("<svg ", '<svg data-map-maker-coast-detail-km="10" ', 1),
                       encoding="utf-8")
     view.load_svg(marked)
     wait_world(app)
@@ -493,7 +493,7 @@ def test_world_frame_keeps_the_coast_detail_a_map_already_carries(
     for key, value in (("x", "10"), ("y", "10"), ("width", "360"), ("height", "180")):
         view.values[key].set(value)
     assert view.project().coast_detail_km == 10.0
-    destination = tmp_path / "refined.dmworld.json"
+    destination = tmp_path / "refined.world.json"
 
     def save_path(**_kwargs: object) -> str:
         return str(destination)

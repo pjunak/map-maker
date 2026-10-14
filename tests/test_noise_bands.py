@@ -9,12 +9,12 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import box
 
-from dmtools.terrain.domain import LandformKind, TerrainRegion, TerrainSettings, landform_preset
-from dmtools.terrain.pipeline import noise
-from dmtools.terrain.pipeline.generate import (
+from map_maker.terrain.domain import LandformKind, TerrainRegion, TerrainSettings, landform_preset
+from map_maker.terrain.pipeline import noise
+from map_maker.terrain.pipeline.generate import (
     _base_elevation_fields,  # pyright: ignore[reportPrivateUsage]
 )
-from dmtools.terrain.pipeline.landforms import prepare_regions
+from map_maker.terrain.pipeline.landforms import prepare_regions
 
 
 @pytest.mark.parametrize("roughness", [.01, .25, .55, .9, np.nextafter(1., 0.)])

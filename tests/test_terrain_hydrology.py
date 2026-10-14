@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
-from dmtools.terrain.pipeline.diagnostics import (
+from map_maker.terrain.pipeline.diagnostics import (
     analyze_drainage,
 )
-from dmtools.terrain.pipeline.hydrology import (
+from map_maker.terrain.pipeline.hydrology import (
     condition_downstream_channel_steepness,
     drainage_incision,
     multiple_flow_accumulation,

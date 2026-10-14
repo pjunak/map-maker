@@ -11,13 +11,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from benchmarks import terrain as fixtures
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.pipeline.generate import (
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.pipeline.generate import (
     GENERATOR_ALGORITHM_ID,
     NOISE_ALGORITHM_ID,
     generate_terrain,
 )
-from dmtools.terrain.pipeline.noise import noise_band_amplitudes
+from map_maker.terrain.pipeline.noise import noise_band_amplitudes
 
 
 def _cell_means(values: NDArray[np.float64], land: NDArray[np.bool_]) -> NDArray[np.float64]:
@@ -91,7 +91,7 @@ def main() -> None:
                 or fixture_source != file_sha256(Path(fixtures.__file__))):
             raise RuntimeError("Source/runtime changed during detail-band experiment")
         stream.write(canonical_json({
-            "schema": "dmtools.detail-band-experiment", "schema_version": 1,
+            "schema": "map-maker.detail-band-experiment", "schema_version": 1,
             "complete": True, "generator": GENERATOR_ALGORITHM_ID, "noise": NOISE_ALGORITHM_ID,
             "runtime": runtime, "benchmark_source_sha256": source,
             "fixture_source_sha256": fixture_source,

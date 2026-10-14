@@ -2,7 +2,7 @@
 
 Status: **experimental**, first built as a research harness for M6 and ADR-0048.
 
-> Later the same day this was promoted to `dmtools world region` and the World-tab
+> Later the same day this was promoted to `map-maker world region` and the World-tab
 > zoom ([ADR-0086](../adr/0086-regional-planet-detail-from-blended-tiles.md)). The
 > harness modules were removed; module paths below are historical.
 > - **Product additions:**

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from dmtools.cli import main
+from map_maker.cli import main
 
 
 def test_root_help_is_available(capsys: pytest.CaptureFixture[str]) -> None:
@@ -26,10 +26,10 @@ def test_terrain_gui_help_is_available(capsys: pytest.CaptureFixture[str]) -> No
 
 
 def test_gui_accepts_a_startup_project(monkeypatch: pytest.MonkeyPatch) -> None:
-    from dmtools.terrain import ui
+    from map_maker.terrain import ui
     opened: list[Path | None] = []
     def run(project: Path | None = None) -> None:
         opened.append(project)
     monkeypatch.setattr(ui, "run", run)
-    assert main(["terrain", "gui", "--project", "example.dmterrain.json"]) == 0
-    assert opened == [Path("example.dmterrain.json")]
+    assert main(["terrain", "gui", "--project", "example.terrain.json"]) == 0
+    assert opened == [Path("example.terrain.json")]

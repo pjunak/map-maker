@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "dm-tools"
+name = "map-maker"
 version = "0.1.0"
 description = "Local-first worldbuilding and tabletop utilities"
 readme = "README.md"
@@ -34,10 +34,10 @@ dev = [
 ]
 
 [project.scripts]
-dmtools = "dmtools.cli:main"
+map-maker = "map_maker.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dmtools"]
+packages = ["src/map_maker"]
 
 [tool.pyright]
 include = ["src", "tests", "benchmarks"]

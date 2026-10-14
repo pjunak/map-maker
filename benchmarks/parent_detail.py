@@ -23,12 +23,12 @@ from benchmarks.parent_cells import (
     project_parent_cells,
     restrict_cell_means,
 )
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.render import render_ground_map
-from dmtools.terrain.domain import ElevationPoint, TerrainBasin
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
-from dmtools.terrain.pipeline.regional import prepare_regional_sampler, regional_coordinates
-from dmtools.terrain.pipeline.water import sampled_basin_water
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.render import render_ground_map
+from map_maker.terrain.domain import ElevationPoint, TerrainBasin
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.pipeline.regional import prepare_regional_sampler, regional_coordinates
+from map_maker.terrain.pipeline.water import sampled_basin_water
 
 type FloatArray = NDArray[np.float64]
 CASES = ("regional", "authored", "water")
@@ -252,7 +252,7 @@ def main() -> None:
         if runtime != runtime_identity() or sources != {p.name: file_sha256(p) for p in files}:
             raise RuntimeError("Source or runtime changed during parent-cell measurement.")
         stream.write(canonical_json({
-            "schema": "dmtools.parent-cell-experiment", "schema_version": 1,
+            "schema": "map-maker.parent-cell-experiment", "schema_version": 1,
             "complete": True, "runtime": runtime, "benchmark_sources": sources,
             "method": PARENT_CELL_METHOD_ID, "restriction": PARENT_RESTRICTION_ID,
             "parent_kind": "immutable-in-memory-snapshot-of-prepared-global-field",

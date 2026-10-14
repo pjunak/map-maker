@@ -8,14 +8,14 @@ import numpy as np
 import pytest
 
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
-from dmtools.terrain.adapters.planet_region import RegionWindow
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.domain.planet import PlanetSettings, RegionalSettings
-from dmtools.terrain.pipeline.planet import PlanetResult, generate_planet
-from dmtools.terrain.pipeline.planet_metrics import non_descending_receivers
-from dmtools.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
-from dmtools.terrain.pipeline.planet_regional import RegionalParent, enrich
-from dmtools.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend, generate_tile
+from map_maker.terrain.adapters.planet_region import RegionWindow
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.domain.planet import PlanetSettings, RegionalSettings
+from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
+from map_maker.terrain.pipeline.planet_metrics import non_descending_receivers
+from map_maker.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
+from map_maker.terrain.pipeline.planet_regional import RegionalParent, enrich
+from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend, generate_tile
 
 
 @pytest.fixture(scope="module")
@@ -98,8 +98,8 @@ def test_region_build_reuses_cached_tiles_and_publishes_a_manifest(
 ) -> None:
     import json
 
-    from dmtools.terrain.application.planet import export_planet, generate_planet_run
-    from dmtools.terrain.application.planet_region import build_region
+    from map_maker.terrain.application.planet import export_planet, generate_planet_run
+    from map_maker.terrain.application.planet_region import build_region
 
     run = generate_planet_run(
         parent.world.project, None, parent.settings, preview_width=0
@@ -142,9 +142,9 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
 ) -> None:
     from dataclasses import replace
 
-    from dmtools.terrain.adapters.planet_load import read_planet_parent
-    from dmtools.terrain.application.planet import export_planet, generate_planet_run
-    from dmtools.terrain.domain.wonders import WONDER_KINDS
+    from map_maker.terrain.adapters.planet_load import read_planet_parent
+    from map_maker.terrain.application.planet import export_planet, generate_planet_run
+    from map_maker.terrain.domain.wonders import WONDER_KINDS
 
     settings = replace(parent.settings, wonders=WONDER_KINDS)
     run = generate_planet_run(parent.world.project, None, settings, preview_width=0)
@@ -190,7 +190,7 @@ def test_world_path_fixture_is_reusable(tmp_path: Path) -> None:
 
 
 def test_display_valley_carving_only_lowers_land_and_keeps_outlets() -> None:
-    from dmtools.terrain.pipeline.planet_detail import carve_valleys
+    from map_maker.terrain.pipeline.planet_detail import carve_valleys
 
     rows = columns = 64
     rng = np.random.default_rng(3)
@@ -212,8 +212,8 @@ def test_display_valley_carving_only_lowers_land_and_keeps_outlets() -> None:
 
 
 def test_grid_carving_matches_the_mesh_kernels_and_wraps_longitude() -> None:
-    from dmtools.terrain.pipeline.planet_detail import carve_valleys
-    from dmtools.terrain.pipeline.planet_kernels import (
+    from map_maker.terrain.pipeline.planet_detail import carve_valleys
+    from map_maker.terrain.pipeline.planet_kernels import (
         accumulate,
         priority_flood,
         steepest_receivers,
@@ -295,7 +295,7 @@ def test_regional_parent_reports_lake_cover_and_level(parent: PlanetResult) -> N
 
 
 def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
-    from dmtools.terrain.adapters.planet_natural import meander
+    from map_maker.terrain.adapters.planet_natural import meander
 
     path = np.stack((np.linspace(0, 400, 50), np.full(50, 100.0)), axis=1)
     wound = meander(path, np.full(50, 40.0), 3, np.array([0.5]))
@@ -307,7 +307,7 @@ def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
 
 
 def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
-    from dmtools.terrain.pipeline.planet_detail import grid_flow
+    from map_maker.terrain.pipeline.planet_detail import grid_flow
 
     rows = columns = 30
     _, x = np.mgrid[0:rows, 0:columns]
@@ -346,7 +346,7 @@ def test_grid_routing_follows_the_ground_through_filled_hollows() -> None:
     """
     from scipy.ndimage import gaussian_filter
 
-    from dmtools.terrain.pipeline.planet_detail import grid_flow
+    from map_maker.terrain.pipeline.planet_detail import grid_flow
 
     n, cell = 96, 500.0
     rng = np.random.default_rng(5)
@@ -375,7 +375,7 @@ def test_ridged_display_detail_is_continuous() -> None:
     stepped all finer octaves there: sharp scarps along the value-noise lattice,
     seen as straight north-south and east-west lines on plains.
     """
-    from dmtools.terrain.pipeline.planet_detail import eroded_fbm
+    from map_maker.terrain.pipeline.planet_detail import eroded_fbm
 
     def largest_step(samples: int, ridged: float) -> float:
         # An arc of about 300 km on a 6,000 km planet, crossing many zero lines
@@ -392,7 +392,7 @@ def test_ridged_display_detail_is_continuous() -> None:
 
 
 def test_sand_seas_need_dry_flat_low_ground() -> None:
-    from dmtools.terrain.adapters.planet_natural import PixelClimate, erg_cover
+    from map_maker.terrain.adapters.planet_natural import PixelClimate, erg_cover
 
     rng = np.random.default_rng(5)
     points = rng.normal(size=(400, 3))
@@ -424,9 +424,9 @@ TINY_LEVELS = (
 
 
 def test_detail_levels_have_their_own_seeds() -> None:
-    from dmtools.terrain.domain.planet import REGION_LEVELS, tile_stage_prefix
-    from dmtools.terrain.domain.seeds import stage_seed
-    from dmtools.terrain.pipeline.planet_tiles import tile_seed
+    from map_maker.terrain.domain.planet import REGION_LEVELS, tile_stage_prefix
+    from map_maker.terrain.domain.seeds import stage_seed
+    from map_maker.terrain.pipeline.planet_tiles import tile_seed
 
     assert tile_stage_prefix(1) == "planet.tile."
     assert len({tile_stage_prefix(level) for level in (1, 2, 3)}) == 3
@@ -439,8 +439,8 @@ def test_detail_levels_have_their_own_seeds() -> None:
 def test_level_parent_carries_the_coarser_relief_and_drains(
     parent: PlanetResult, tmp_path: Path
 ) -> None:
-    from dmtools.terrain.application.planet_region import ensure_level_tiles
-    from dmtools.terrain.pipeline.planet_levels import level_parent
+    from map_maker.terrain.application.planet_region import ensure_level_tiles
+    from map_maker.terrain.pipeline.planet_levels import level_parent
 
     planet = RegionalParent.from_result(parent)
     centre = _land_centre(parent)
@@ -467,7 +467,7 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
 def test_level_two_windows_repeat_exactly_and_agree_with_level_one(
     parent: PlanetResult, tmp_path: Path
 ) -> None:
-    from dmtools.terrain.application.planet_region import region_window
+    from map_maker.terrain.application.planet_region import region_window
 
     planet = RegionalParent.from_result(parent)
     centre = _land_centre(parent)
@@ -503,10 +503,10 @@ def test_display_detail_is_world_anchored_and_shrinks_with_finer_levels(
 ) -> None:
     from dataclasses import replace
 
-    from dmtools.terrain.adapters.planet_region import detail_offset, display_relief
-    from dmtools.terrain.application.planet_region import region_window
-    from dmtools.terrain.pipeline.planet_detail import eroded_fbm
-    from dmtools.terrain.pipeline.planet_mesh import fibonacci_nodes
+    from map_maker.terrain.adapters.planet_region import detail_offset, display_relief
+    from map_maker.terrain.application.planet_region import region_window
+    from map_maker.terrain.pipeline.planet_detail import eroded_fbm
+    from map_maker.terrain.pipeline.planet_mesh import fibonacci_nodes
 
     # The detail is zero-mean over the whole sphere, not re-centred per window.
     points = fibonacci_nodes(5_000, seed=3, jitter=0.5)
@@ -531,8 +531,8 @@ def test_display_detail_is_world_anchored_and_shrinks_with_finer_levels(
 def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path: Path) -> None:
     from scipy.ndimage import binary_dilation
 
-    from dmtools.terrain.application.planet_region import region_window
-    from dmtools.terrain.pipeline.planet_patch import forward_aeqd
+    from map_maker.terrain.application.planet_region import region_window
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
 
     planet = RegionalParent.from_result(parent)
     lon, lat = _land_centre(parent)
@@ -592,8 +592,8 @@ def _longest_straight_run(shore: np.ndarray, band: float = 1.5, gap: float = 2.0
 def test_lake_shores_follow_the_fine_relief_not_the_parent_mesh() -> None:
     from scipy.ndimage import binary_dilation, gaussian_filter
 
-    from dmtools.terrain.adapters.planet_region import LAKE_SHORE_M, lake_water
-    from dmtools.terrain.pipeline.planet_detail import grid_flow
+    from map_maker.terrain.adapters.planet_region import LAKE_SHORE_M, lake_water
+    from map_maker.terrain.pipeline.planet_detail import grid_flow
 
     n, edge, level = 200, 50.0, 500.0
     rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
@@ -623,8 +623,8 @@ def test_lake_shores_follow_the_fine_relief_not_the_parent_mesh() -> None:
 
 
 def test_open_lake_water_stops_at_its_outlet() -> None:
-    from dmtools.terrain.adapters.planet_region import lake_water
-    from dmtools.terrain.pipeline.planet_detail import grid_flow
+    from map_maker.terrain.adapters.planet_region import lake_water
+    from map_maker.terrain.pipeline.planet_detail import grid_flow
 
     n, level = 120, 300.0
     rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
@@ -648,7 +648,7 @@ def test_open_lake_water_stops_at_its_outlet() -> None:
 def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
     from scipy.ndimage import binary_dilation, label
 
-    from dmtools.terrain.adapters.planet_region import (
+    from map_maker.terrain.adapters.planet_region import (
         POND_DEPTH_M,
         WindowFlow,
         lake_flow,
@@ -705,8 +705,8 @@ def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
 def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult) -> None:
     from dataclasses import replace
 
-    from dmtools.terrain.pipeline.planet_coast import level_finest_m
-    from dmtools.terrain.pipeline.planet_regional import LAKE_CORE_COVER
+    from map_maker.terrain.pipeline.planet_coast import level_finest_m
+    from map_maker.terrain.pipeline.planet_regional import LAKE_CORE_COVER
 
     lakes = parent.lakes
     ids, counts = np.unique(lakes.lake[lakes.lake >= 0], return_counts=True)
@@ -734,9 +734,9 @@ def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
 ) -> None:
     from dataclasses import replace
 
-    from dmtools.terrain.adapters.planet_region import display_relief, window_ice_cover
-    from dmtools.terrain.application.planet_region import region_window
-    from dmtools.terrain.pipeline.planet_ice import IceSheets
+    from map_maker.terrain.adapters.planet_region import display_relief, window_ice_cover
+    from map_maker.terrain.application.planet_region import region_window
+    from map_maker.terrain.pipeline.planet_ice import IceSheets
 
     lon, lat = _land_centre(parent)
     centre = inverse_aeqd(np.zeros(1), np.zeros(1), lon, lat, 1.0)[0]
@@ -772,7 +772,7 @@ def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
 def test_smooth_parent_sampling_has_no_creases_at_parent_triangle_edges(
     parent: PlanetResult,
 ) -> None:
-    from dmtools.terrain.pipeline.planet_patch import inverse_aeqd
+    from map_maker.terrain.pipeline.planet_patch import inverse_aeqd
 
     planet = RegionalParent.from_result(parent)
     mesh = parent.mesh

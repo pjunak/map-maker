@@ -11,8 +11,8 @@ import pytest
 from benchmarks.evolution.evidence import numeric_hash, write_json
 from benchmarks.evolution.frozen import GRAPH_ROLE, discover, load_case
 from benchmarks.evolution.reconstruction import run
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 @pytest.fixture

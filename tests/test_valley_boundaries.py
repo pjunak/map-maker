@@ -19,8 +19,8 @@ from benchmarks.evolution.valley_comparison import bank_profiles
 from benchmarks.evolution.valley_layout import relocate_guides
 from benchmarks.evolution.valley_patches import PatchSettings, ValleyPatches, prepare_patches
 from benchmarks.evolution.valley_support import ValleySupport, prepare_support
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 @pytest.fixture(scope="module")

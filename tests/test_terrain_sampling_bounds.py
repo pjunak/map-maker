@@ -10,8 +10,8 @@ import numpy as np
 import pytest
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
 
-from dmtools.terrain.pipeline import water_sampling as sampling
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.pipeline import water_sampling as sampling
+from map_maker.terrain.pipeline.water_sampling import (
     SamplingDensity,
     SamplingFeature,
     SamplingGuide,

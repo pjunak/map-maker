@@ -1,7 +1,7 @@
-# AGENTS.md — DM Tools
+# AGENTS.md — Map Maker
 
 Read this file before changing anything in this repository.
-[`src/dmtools/terrain/AGENTS.md`](src/dmtools/terrain/AGENTS.md) adds the terrain
+[`src/map_maker/terrain/AGENTS.md`](src/map_maker/terrain/AGENTS.md) adds the terrain
 rules. It also governs terrain tests, schemas, examples, benchmarks and
 documentation outside its own directory, so read it for any terrain change.
 
@@ -15,9 +15,9 @@ stale.
 python -m pytest            # full suite, about 13 minutes; use focused tests while iterating
 python -m ruff check .
 python -m pyright
-dmtools terrain gui         # desktop app
-dmtools world planet | region | view   # planet build, regional detail, projected views
-dmtools world refine-coast             # the refined coast as a new SVG source map
+map-maker terrain gui         # desktop app
+map-maker world planet | region | view   # planet build, regional detail, projected views
+map-maker world refine-coast             # the refined coast as a new SVG source map
 ~~~
 
 - **Python or public-schema changes** need all three checks.
@@ -30,7 +30,7 @@ dmtools world refine-coast             # the refined coast as a new SVG source m
   minutes, unless the user has authorized long experiments. The full test suite is
   the documented gate.
 - **No source edits during a test run:** do not change `.py` files under
-  `src/dmtools/` or `benchmarks/` while pytest runs, including a background run.
+  `src/map_maker/` or `benchmarks/` while pytest runs, including a background run.
   Builds and benchmark comparisons fingerprint those sources at start and finish
   and reject completion when they differ, so tests fail with "changed during".
 
@@ -47,7 +47,7 @@ dmtools world refine-coast             # the refined coast as a new SVG source m
   - ADR-0085: planet relief on a sphere mesh;
   - ADR-0086: regional tiles;
   - ADR-0087: map themes and projections.
-- Code lives in `src/dmtools/terrain/`:
+- Code lives in `src/map_maker/terrain/`:
   - `domain/`, `pipeline/`, `adapters/` and `application/`;
   - the desktop UI in `*_ui.py`;
   - the map theme registry in `adapters/map_views.py`.
@@ -89,7 +89,7 @@ dmtools world refine-coast             # the refined coast as a new SVG source m
 ## Delivery and Git
 
 - **Delivery.** This is a local application: CI validates and keeps test reports,
-  and nothing is deployed. The TTRPG `addon-dm-tools` is a separate product.
+  and nothing is deployed.
 - **Committing.** Commit validated, logical changes locally. Never push, publish
   or deploy without explicit authorization.
 - **Never commit** generated builds (`artifacts/`), private maps, credentials or

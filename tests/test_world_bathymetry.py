@@ -15,30 +15,30 @@ from numpy.typing import NDArray
 from PIL import Image
 from referencing import Registry, Resource
 
-from dmtools.cli import main
-from dmtools.terrain.adapters import world_bathymetry as bundle_files
-from dmtools.terrain.adapters import world_bathymetry_inputs as input_files
-from dmtools.terrain.adapters.build import canonical_json, file_sha256
-from dmtools.terrain.adapters.world_bathymetry_render import BATHYMETRY_LAYERS, render_bathymetry
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application import world_bathymetry as app
-from dmtools.terrain.application.world_context import WorldContextRun
-from dmtools.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
-from dmtools.terrain.domain.world_bathymetry import BathymetryInputs, BathymetrySettings
-from dmtools.terrain.domain.world_context import WorldContextSettings
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.world import prepare_world_map
-from dmtools.terrain.pipeline.world_bathymetry import (
+from map_maker.cli import main
+from map_maker.terrain.adapters import world_bathymetry as bundle_files
+from map_maker.terrain.adapters import world_bathymetry_inputs as input_files
+from map_maker.terrain.adapters.build import canonical_json, file_sha256
+from map_maker.terrain.adapters.world_bathymetry_render import BATHYMETRY_LAYERS, render_bathymetry
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application import world_bathymetry as app
+from map_maker.terrain.application.world_context import WorldContextRun
+from map_maker.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
+from map_maker.terrain.domain.world_bathymetry import BathymetryInputs, BathymetrySettings
+from map_maker.terrain.domain.world_context import WorldContextSettings
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.world import prepare_world_map
+from map_maker.terrain.pipeline.world_bathymetry import (
     bathymetry_values,
     generate_world_bathymetry,
     margin_depth_m,
     sample_water_centres,
 )
-from dmtools.terrain.pipeline.world_context import generate_world_context
-from dmtools.terrain.viewport import MapViewport
+from map_maker.terrain.pipeline.world_context import generate_world_context
+from map_maker.terrain.viewport import MapViewport
 
 ROOT = Path(__file__).parents[1]
-EXAMPLE = ROOT / "examples/world/four-shores.dmbathy.json"
+EXAMPLE = ROOT / "examples/world/four-shores.bathy.json"
 
 
 def world(
@@ -248,18 +248,18 @@ def test_inputs_atomic_save_reopen_and_external_edit_guard(
     run: app.BathymetryRun, tmp_path: Path
 ) -> None:
     context = WorldContextRun(run.result.context, run.runtime)
-    path = tmp_path / "ocean.dmbathy.json"
+    path = tmp_path / "ocean.bathy.json"
     saved = app.save_bathymetry_inputs(run.result.inputs, context, path)
     assert app.open_bathymetry_inputs(path, context) == saved
     path.write_bytes(path.read_bytes() + b" ")
     with pytest.raises(ValueError, match="outside"):
         app.save_bathymetry_inputs(saved.inputs, context, path, saved.sha256)
-    assert not list(tmp_path.glob(".dmbathy-*"))
+    assert not list(tmp_path.glob(".bathy-*"))
     with pytest.raises(ValueError, match="extension"):
         app.save_bathymetry_inputs(saved.inputs, context, tmp_path / "world.json")
     foreign = replace(saved.inputs, world=replace(saved.inputs.world, name="Other"))
     with pytest.raises(ValueError, match="different world"):
-        app.save_bathymetry_inputs(foreign, context, tmp_path / "foreign.dmbathy.json")
+        app.save_bathymetry_inputs(foreign, context, tmp_path / "foreign.bathy.json")
     token = CancellationToken()
     token.cancel()
     with pytest.raises(GenerationCancelled):
@@ -370,7 +370,7 @@ def test_old_producer_must_regenerate_geography_and_cli_build(
     assert new.runtime == run.runtime and new.result.context is not context.context
     with pytest.raises(ValueError, match="Software changed"):
         app.export_bathymetry(replace(run, runtime=old), tmp_path / "relabelled")
-    source = tmp_path / "scenario.dmbathy.json"
+    source = tmp_path / "scenario.bathy.json"
     source.write_bytes(canonical_json(input_files.inputs_document(run.result.inputs)))
     assert main(["world", "bathymetry", str(source), "--output", str(tmp_path / "cli")]) == 0
     assert app.open_bathymetry(tmp_path / "cli").result.inputs == run.result.inputs

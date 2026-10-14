@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     ElevationPoint,
     TerrainBasin,
     TerrainBrushStroke,
@@ -12,7 +12,7 @@ from dmtools.terrain.domain import (
     TerrainRegion,
     TerrainStructure,
 )
-from dmtools.terrain.workbench import InstructionHistory, move_instruction
+from map_maker.terrain.workbench import InstructionHistory, move_instruction
 
 POINT = ElevationPoint((0.5, 0.5), 1200, 80)
 

@@ -37,7 +37,7 @@ build should not need the planet to be regenerated.
    It can add a 30° graticule. Projections are pure functions of the image and
    the view, so any theme can be shown in any projection, deterministically.
 3. **Products.**
-   - `dmtools world view <build>` writes any saved theme in any projection. It
+   - `map-maker world view <build>` writes any saved theme in any projection. It
      first checks the build hash and the theme file.
    - The app's **Globe and polar views** window turns the globe by dragging and
      saves views.

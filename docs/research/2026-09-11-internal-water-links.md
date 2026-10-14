@@ -13,7 +13,7 @@ separated, the existing single-pool rule keeps the whole outlet blocked and all
 its captured contributing area retained. No contact is moved and no isolated
 pool is drained merely because it shares the authored polygon.
 
-The new [internal-water-barrier example](../../examples/terrain/internal-water-barrier.dmterrain.json)
+The new [internal-water-barrier example](../../examples/terrain/internal-water-barrier.terrain.json)
 adds a relative +1,500 m height point with a 100 m influence radius at normalized
 (0.32037, 0.5033112582781457). The public lake is at 750 m. Its canonical mask has
 253 wet nodes in one component, and its shoreline and external outlet stay clear.

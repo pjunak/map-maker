@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from shapely.geometry import LineString, Point
 
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandformSettings,
@@ -15,9 +15,13 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.domain import StructureProfileKnot as Knot
-from dmtools.terrain.pipeline.generate import generate_terrain, prepare_terrain_field
-from dmtools.terrain.pipeline.ridge_crests import CrestBlend, ProfileRidge, validate_ridge_contacts
+from map_maker.terrain.domain import StructureProfileKnot as Knot
+from map_maker.terrain.pipeline.generate import generate_terrain, prepare_terrain_field
+from map_maker.terrain.pipeline.ridge_crests import (
+    CrestBlend,
+    ProfileRidge,
+    validate_ridge_contacts,
+)
 
 COAST = Coastline(((0., 0.), (1., 0.), (1., 1.), (0., 1.), (0., 0.)), "crest-square")
 SETTINGS = TerrainSettings(seed=42, object_scale_km=1000., resolution_px=65, coastal_rise_km=5.)

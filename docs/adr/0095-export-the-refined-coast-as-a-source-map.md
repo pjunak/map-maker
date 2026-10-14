@@ -17,7 +17,7 @@ named `islands`), and merged continents that share a land border.
 
 ## Decision
 
-1. **`dmtools world refine-coast`** traces a world's coast as zoomed maps draw it,
+1. **`map-maker world refine-coast`** traces a world's coast as zoomed maps draw it,
    down to a chosen detail (10 km by default), including the planet's polar land,
    and writes it as a new SVG source map. The master seed is the planet's, since
    the detail depends on it. The destination must not exist.
@@ -27,7 +27,7 @@ named `islands`), and merged continents that share a land border.
    every shape keeps its continent and role.
 3. **Round trip.** The SVG keeps the source's view box and its continent,
    *Land Shapes*, *mainland* and *islands* groups, and declares the detail it
-   carries on its root (`data-dmtools-coast-detail-km`). Importing it fills in
+   carries on its root (`data-map-maker-coast-detail-km`). Importing it fills in
    the world's coast detail (ADR-0090 revision), so zoomed maps add only finer
    detail. The export is refused if the importer could not read it back (point
    or size limits), and checked by parsing it before it is written.

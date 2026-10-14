@@ -3,7 +3,7 @@
 For a saved project, run this before committing time to a detailed build:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe terrain water-budget examples/terrain/flat-outlet.dmterrain.json
+.\.venv\Scripts\map-maker.exe terrain water-budget examples/terrain/flat-outlet.terrain.json
 ```
 
 The command reads the current project and its verified SVG, prepares the same

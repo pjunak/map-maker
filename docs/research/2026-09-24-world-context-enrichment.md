@@ -149,7 +149,7 @@ a reduced ocean heat-transport model with aquaplanet and modern-Earth cases, usi
 wind-driven and eddy-transport parameterizations. Code and experiment data are
 archived. This is a promising intermediate comparator between prescribed ocean
 heat transport and a full ocean model. Its reported low additional cost is within
-that GCM configuration, not evidence of desktop performance in DM Tools or a
+that GCM configuration, not evidence of desktop performance in Map Maker or a
 ready arbitrary-bathymetry plugin. Published 24 April 2026.
 [Bhatnagar et al., 2026](https://gmd.copernicus.org/articles/19/3285/2026/),
 [archived code and data](https://doi.org/10.5281/zenodo.18771594)

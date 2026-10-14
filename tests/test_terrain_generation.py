@@ -9,13 +9,13 @@ import pytest
 from numpy.typing import NDArray
 from PIL import Image
 
-from dmtools.terrain.adapters import (
+from map_maker.terrain.adapters import (
     elevation_legend_colours,
     elevation_palette_rgb,
     render_height_map,
     save_height_map,
 )
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandComponent,
@@ -23,8 +23,8 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.pipeline import generate_terrain
-from dmtools.terrain.pipeline.noise import fractal_value_noise
+from map_maker.terrain.pipeline import generate_terrain
+from map_maker.terrain.pipeline.noise import fractal_value_noise
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def uniform_noise(monkeypatch: pytest.MonkeyPatch) -> None:
         return np.zeros(np.broadcast_shapes(x.shape, y.shape), dtype=np.float64)
 
     monkeypatch.setattr(
-        "dmtools.terrain.pipeline.generate.fractal_value_noise", zero_noise,
+        "map_maker.terrain.pipeline.generate.fractal_value_noise", zero_noise,
     )
 
 
@@ -823,19 +823,19 @@ def test_render_is_transparent_outside_and_png_records_settings(tmp_path: Path) 
 
     with Image.open(destination) as exported:
         assert exported.mode == "RGBA"
-        assert exported.info["dmtools.source"] == "square.svg"
-        assert exported.info["dmtools.render_style"] == "cartographic"
-        assert exported.info["dmtools.colour_palette"] == "dmtools-cartographic-relief@3"
-        assert exported.info["dmtools.colour_scale_maximum_m"] == "10000"
-        assert '"seed": 42' in exported.info["dmtools.settings"]
-        drainage = json.loads(exported.info["dmtools.drainage_diagnostics"])
+        assert exported.info["map-maker.source"] == "square.svg"
+        assert exported.info["map-maker.render_style"] == "cartographic"
+        assert exported.info["map-maker.colour_palette"] == "map-maker-cartographic-relief@3"
+        assert exported.info["map-maker.colour_scale_maximum_m"] == "10000"
+        assert '"seed": 42' in exported.info["map-maker.settings"]
+        drainage = json.loads(exported.info["map-maker.drainage_diagnostics"])
         assert drainage["algorithm_id"] == "canonical-d8-priority-flood-diagnostics@4"
         assert drainage["grid_width"] == 257
         assert drainage["land_cell_count"] > 0
         assert drainage["basin_candidate_count"] == len(
             drainage["basin_candidates"]
         )
-        constraints = json.loads(exported.info["dmtools.constraints"])
+        constraints = json.loads(exported.info["map-maker.constraints"])
         assert constraints == [
             {
                 "elevation_m": 1_200.0,
@@ -917,9 +917,9 @@ def test_scientific_render_records_its_display_contract() -> None:
 
     image = render_height_map(terrain, style="scientific")
 
-    assert image.info["dmtools.render_style"] == "scientific"
-    assert image.info["dmtools.colour_palette"] == "oleron-land@scm-8.0"
-    assert image.info["dmtools.colour_scale_maximum_m"] == "3000"
+    assert image.info["map-maker.render_style"] == "scientific"
+    assert image.info["map-maker.colour_palette"] == "oleron-land@scm-8.0"
+    assert image.info["map-maker.colour_scale_maximum_m"] == "3000"
 
 
 def test_progress_announces_sampling_before_chunk_completion() -> None:

@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from benchmarks.channel_profiles import measure_channels
 from benchmarks.evolution.reference import Snapshot
 from benchmarks.evolution.scenarios import EvolutionFields, FloatArray
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def sample_grid(

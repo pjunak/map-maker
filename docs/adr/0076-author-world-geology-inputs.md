@@ -7,7 +7,7 @@
 
 ## Decision
 
-Introduce a portable, current-only `.dmgeology.json` v1 input recipe. Retain its
+Introduce a portable, current-only `.geology.json` v1 input recipe. Retain its
 complete world-source snapshot and canonical document fingerprint. Require one
 profile per continent and explicit, independently named polygon provinces.
 Resolve these against the existing prepared world coverage, without moving

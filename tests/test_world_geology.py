@@ -11,26 +11,26 @@ import pytest
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-from dmtools.cli import main
-from dmtools.terrain.adapters import world_geology as files
-from dmtools.terrain.adapters.build import canonical_json
-from dmtools.terrain.adapters.world_geology_render import render_geology
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application.world_geology import open_geology, save_geology
-from dmtools.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
-from dmtools.terrain.domain.world_geology import (
+from map_maker.cli import main
+from map_maker.terrain.adapters import world_geology as files
+from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.adapters.world_geology_render import render_geology
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application.world_geology import open_geology, save_geology
+from map_maker.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
+from map_maker.terrain.domain.world_geology import (
     GeologyProfile,
     GeologyProvince,
     WorldGeologyRecipe,
     blank_geology,
 )
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.world import WorldMap, prepare_world_map
-from dmtools.terrain.pipeline.world_geology import resolve_geology
-from dmtools.terrain.viewport import MapViewport
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.world import WorldMap, prepare_world_map
+from map_maker.terrain.pipeline.world_geology import resolve_geology
+from map_maker.terrain.viewport import MapViewport
 
 ROOT = Path(__file__).parents[1]
-EXAMPLE = ROOT / "examples/world/four-shores.dmgeology.json"
+EXAMPLE = ROOT / "examples/world/four-shores.geology.json"
 
 
 def world(scale: float = 1, offset: float = 0) -> WorldMap:
@@ -208,7 +208,7 @@ def test_cancellation_keeps_authored_recipe_unchanged() -> None:
 def test_retained_identity_includes_frame_names_and_assignments(tmp_path: Path) -> None:
     source = world()
     recipe = blank_geology(source.project)
-    path = tmp_path / "inputs.dmgeology.json"
+    path = tmp_path / "inputs.geology.json"
     saved = save_geology(resolve_geology(source, recipe), path)
     for project in (
         replace(source.project, name="Renamed"),
@@ -237,7 +237,7 @@ def test_atomic_roundtrip_external_edit_guard_and_extension(tmp_path: Path) -> N
     source = world()
     recipe = replace(blank_geology(source.project), provinces=(province(),))
     result = resolve_geology(source, recipe)
-    path = tmp_path / "inputs.dmgeology.json"
+    path = tmp_path / "inputs.geology.json"
     saved = save_geology(result, path)
     reopened = open_geology(path)
     assert reopened.coverage.recipe.provinces == recipe.provinces
@@ -249,17 +249,17 @@ def test_atomic_roundtrip_external_edit_guard_and_extension(tmp_path: Path) -> N
     with pytest.raises(ValueError, match="changed outside"):
         save_geology(result, path, saved.sha256)
     assert path.read_text(encoding="utf-8") == "external edit"
-    assert not list(tmp_path.glob(".dmgeology-*"))
+    assert not list(tmp_path.glob(".geology-*"))
     with pytest.raises(ValueError, match="extension"):
-        save_geology(result, tmp_path / "source.dmworld.json")
-    assert not (tmp_path / "source.dmworld.json").exists()
+        save_geology(result, tmp_path / "source.world.json")
+    assert not (tmp_path / "source.world.json").exists()
 
 
 def test_failed_replace_preserves_existing_recipe(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     result = resolve_geology(world(), blank_geology(world().project))
-    path = tmp_path / "inputs.dmgeology.json"
+    path = tmp_path / "inputs.geology.json"
     saved = save_geology(result, path)
     before = path.read_bytes()
 
@@ -270,7 +270,7 @@ def test_failed_replace_preserves_existing_recipe(
     with pytest.raises(OSError, match="disk failure"):
         save_geology(result, path, saved.sha256)
     assert path.read_bytes() == before
-    assert not list(tmp_path.glob(".dmgeology-*"))
+    assert not list(tmp_path.glob(".geology-*"))
 
 
 @pytest.mark.parametrize(
@@ -320,7 +320,7 @@ def test_schema_example_and_cli(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["world", "inspect-geology", str(EXAMPLE)]) == 0
     text = capsys.readouterr().out
     assert "Cross-border belt" in text and "Hypotheses and explicit guidance" in text
-    assert main(["world", "inspect-geology", str(ROOT / "absent.dmgeology.json")]) == 1
+    assert main(["world", "inspect-geology", str(ROOT / "absent.geology.json")]) == 1
 
 
 def test_duplicate_defaults_and_provinces_cannot_silently_replace_each_other() -> None:
@@ -334,7 +334,7 @@ def test_duplicate_defaults_and_provinces_cannot_silently_replace_each_other() -
 
 
 def test_landmarks_round_trip_and_stay_optional() -> None:
-    from dmtools.terrain.domain.world_geology import GeologyLandmark
+    from map_maker.terrain.domain.world_geology import GeologyLandmark
 
     recipe = blank_geology(world().project)
     x0, y0, x1, y1 = recipe.world.frame.bounds

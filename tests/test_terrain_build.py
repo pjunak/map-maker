@@ -14,13 +14,13 @@ from numpy.typing import NDArray
 from PIL import Image
 from referencing import Registry, Resource
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import canonical_json, file_sha256
-from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_project
-from dmtools.terrain.application import build as build_module
-from dmtools.terrain.domain.seeds import RELIEF_STAGE_ID, SEED_POLICY_ID, stage_seed
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.generate import generate_terrain
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import canonical_json, file_sha256
+from map_maker.terrain.adapters.project import load_terrain_project, save_terrain_project
+from map_maker.terrain.application import build as build_module
+from map_maker.terrain.domain.seeds import RELIEF_STAGE_ID, SEED_POLICY_ID, stage_seed
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.generate import generate_terrain
 
 EXAMPLES = Path(__file__).parents[1] / "examples" / "terrain"
 
@@ -29,9 +29,9 @@ EXAMPLES = Path(__file__).parents[1] / "examples" / "terrain"
 def project_path(tmp_path: Path) -> Path:
     inputs = tmp_path / "inputs"
     inputs.mkdir()
-    for name in ("coastline.svg", "example.dmterrain.json"):
+    for name in ("coastline.svg", "example.terrain.json"):
         shutil.copyfile(EXAMPLES / name, inputs / name)
-    path = inputs / "example.dmterrain.json"
+    path = inputs / "example.terrain.json"
     loaded = load_terrain_project(path)
     project = replace(
         loaded.project,
@@ -76,7 +76,7 @@ def test_headless_build_preserves_dem_and_has_repeatable_verified_products(
     )
     schema = next(
         item for item in schemas
-        if item["$id"] == "urn:dmtools:schema:terrain-build:20"
+        if item["$id"] == "urn:map-maker:schema:terrain-build:20"
     )
     validate(document, schema, cls=Draft202012Validator, registry=registry)
     invalid = {**document, "coordinates": {**document["coordinates"], "world_crs": "EPSG:4326"}}
@@ -179,7 +179,7 @@ def test_headless_build_preserves_dem_and_has_repeatable_verified_products(
         assert review.height > expected.routing_grid.height
     with Image.open(first / "scientific.png") as preview:
         assert preview.size == (expected.width, expected.height)
-        assert preview.info["dmtools.render_style"] == "scientific"
+        assert preview.info["map-maker.render_style"] == "scientific"
     assert project_path.read_bytes() == original_project
     assert loaded.coastline_source.path.read_bytes() == original_svg
 
@@ -271,7 +271,7 @@ def test_manifest_publication_failure_leaves_only_pending_manifest(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters import build as artifact_module
+    from map_maker.terrain.adapters import build as artifact_module
 
     def fail_publish(source: Path, target: Path) -> None:
         raise OSError("simulated publication failure")
@@ -297,7 +297,7 @@ def test_cli_build_reports_missing_input_without_completion(
 def test_geotiff_failure_cannot_publish_a_completed_build(
     project_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters import build as artifact_module
+    from map_maker.terrain.adapters import build as artifact_module
 
     def fail_geotiff(*args: object, **kwargs: object) -> None:
         raise OSError("simulated GeoTIFF failure")
@@ -313,9 +313,9 @@ def test_geotiff_failure_cannot_publish_a_completed_build(
 def test_authored_water_build_keeps_ground_and_water_separate_and_repeatable(
     tmp_path: Path,
 ) -> None:
-    loaded = load_terrain_project(EXAMPLES / "basin-water.dmterrain.json")
+    loaded = load_terrain_project(EXAMPLES / "basin-water.terrain.json")
     project = replace(loaded.project, settings=replace(loaded.project.settings, resolution_px=65))
-    path = tmp_path / "water.dmterrain.json"
+    path = tmp_path / "water.terrain.json"
     save_terrain_project(project, loaded.coastline_source, path)
     outputs = [tmp_path / "first", tmp_path / "second"]
     for output in outputs:
@@ -365,9 +365,9 @@ def test_authored_water_build_keeps_ground_and_water_separate_and_repeatable(
 def test_connected_outlet_build_exports_conserved_source_and_terminal_area(
     tmp_path: Path, example: str,
 ) -> None:
-    loaded = load_terrain_project(EXAMPLES / f"{example}.dmterrain.json")
+    loaded = load_terrain_project(EXAMPLES / f"{example}.terrain.json")
     project = replace(loaded.project, settings=replace(loaded.project.settings, resolution_px=65))
-    path = tmp_path / "outlet.dmterrain.json"
+    path = tmp_path / "outlet.terrain.json"
     save_terrain_project(project, loaded.coastline_source, path)
     outputs = [tmp_path / "first", tmp_path / "second"]
     for output in outputs:

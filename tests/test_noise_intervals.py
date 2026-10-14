@@ -24,7 +24,7 @@ from benchmarks.noise_intervals import (
     fade_interval,
 )
 from benchmarks.terrain import ROOT
-from dmtools.terrain.pipeline.noise import (
+from map_maker.terrain.pipeline.noise import (
     _fade,  # pyright: ignore[reportPrivateUsage]
     fractal_value_noise,
 )

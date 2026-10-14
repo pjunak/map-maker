@@ -11,8 +11,8 @@ import rasterio
 from PIL import Image, TiffImagePlugin
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.adapters.geotiff import geotiff_metadata, write_terrain_geotiff
-from dmtools.terrain.pipeline.generate import GeneratedTerrain, generate_terrain
+from map_maker.terrain.adapters.geotiff import geotiff_metadata, write_terrain_geotiff
+from map_maker.terrain.pipeline.generate import GeneratedTerrain, generate_terrain
 
 
 @pytest.fixture(scope="module")

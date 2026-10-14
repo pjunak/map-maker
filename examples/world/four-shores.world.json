@@ -1,0 +1,78 @@
+{
+  "schema": "map-maker.world-project",
+  "version": 1,
+  "importer": "retained-svg-v2",
+  "name": "Four Shores",
+  "source": {
+    "name": "coastlines.svg",
+    "sha256": "4e4ba5a7983988cc19d3b61b02c3c06ae47ad5e72fea1fdf4710c206167aabc2",
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:serif=\"http://www.serif.com/\" width=\"1520\" height=\"840\" viewBox=\"0 0 380 210\">\n  <g id=\"Map-Furniture\"><rect id=\"scale-bar\" x=\"25\" y=\"201\" width=\"50\" height=\"2\"/></g>\n  <g id=\"Westreach\"><g id=\"Land-Shapes-West\" serif:id=\"Land Shapes\">\n    <path id=\"west-main\" fill-rule=\"evenodd\" d=\"M 38 55 C 50 30 92 35 105 45 L 134 42 L 153 63 L 180 75 L 180 105 L 160 117 L 144 110 L 115 126 L 96 106 L 73 110 L 67 92 L 42 88 Z M 87 69 L 87 81 L 102 81 L 102 69 Z\"/>\n    <g id=\"islands\"><path id=\"west-island\" d=\"M 28 95 L 35 97 L 32 105 L 24 101 Z\"/></g>\n  </g></g>\n  <g id=\"Eastreach\"><g id=\"Land-Shapes-East\" serif:id=\"Land Shapes\">\n    <path id=\"east-main\" d=\"M 180 75 L 192 60 L 215 65 L 224 51 C 244 45 262 56 260 68 L 276 78 L 264 91 L 240 95 L 235 113 L 213 123 L 197 110 L 180 105 Z\"/>\n  </g></g>\n  <g id=\"Southmere\"><g id=\"Land-Shapes-South\" serif:id=\"Land Shapes\">\n    <path id=\"south-main\" d=\"M 222 151 C 219 137 234 129 248 136 L 270 132 L 292 154 L 281 174 L 254 177 L 239 165 Z\"/>\n    <g id=\"south-islands\" serif:id=\"islands\"><path id=\"south-island\" d=\"M 308 147 L 316 151 L 314 160 L 305 158 Z\"/></g>\n  </g></g>\n  <g id=\"Seam Isles\"><g id=\"seam-islands\" serif:id=\"Land Shapes\">\n    <path id=\"seam-island\" d=\"M 365 101 L 369 95 L 375 101 L 373 110 L 366 109 Z\"/>\n  </g></g>\n</svg>\n"
+  },
+  "frame": {
+    "projection": "plate-carree",
+    "bounds": [
+      10.0,
+      10.0,
+      370.0,
+      190.0
+    ],
+    "radius_km": 6500.0,
+    "central_meridian_deg": 0.0
+  },
+  "continents": [
+    {
+      "id": "continent-5b504b7489544a65a3d5",
+      "name": "Eastreach"
+    },
+    {
+      "id": "continent-992d020104e84fe8a152",
+      "name": "Westreach"
+    },
+    {
+      "id": "continent-ca8b0d1db687f048e56d",
+      "name": "Southmere"
+    },
+    {
+      "id": "continent-f105099cd894607f931a",
+      "name": "Seam Isles"
+    }
+  ],
+  "assignments": [
+    {
+      "feature_id": "east-main",
+      "continent_id": "continent-5b504b7489544a65a3d5",
+      "role": "mainland"
+    },
+    {
+      "feature_id": "scale-bar",
+      "continent_id": null,
+      "role": "exclude"
+    },
+    {
+      "feature_id": "seam-island",
+      "continent_id": "continent-f105099cd894607f931a",
+      "role": "island"
+    },
+    {
+      "feature_id": "south-island",
+      "continent_id": "continent-ca8b0d1db687f048e56d",
+      "role": "island"
+    },
+    {
+      "feature_id": "south-main",
+      "continent_id": "continent-ca8b0d1db687f048e56d",
+      "role": "mainland"
+    },
+    {
+      "feature_id": "west-island",
+      "continent_id": "continent-992d020104e84fe8a152",
+      "role": "island"
+    },
+    {
+      "feature_id": "west-main",
+      "continent_id": "continent-992d020104e84fe8a152",
+      "role": "mainland"
+    }
+  ],
+  "preparation": "bounded-world-v1"
+}

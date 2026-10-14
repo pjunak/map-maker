@@ -9,8 +9,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from benchmarks.evolution.paths import ChannelPaths, PathNetwork, Sampler, profile
 from benchmarks.evolution.surface import FlowAlignedSurface
-from dmtools.terrain.adapters.render import render_ground_map
-from dmtools.terrain.domain.coordinates import EndpointGrid
+from map_maker.terrain.adapters.render import render_ground_map
+from map_maker.terrain.domain.coordinates import EndpointGrid
 
 
 def render_panel(

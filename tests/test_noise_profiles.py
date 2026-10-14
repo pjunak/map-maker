@@ -19,7 +19,7 @@ from benchmarks.noise_profiles import (
     slab_fractions,
 )
 from benchmarks.terrain import ROOT
-from dmtools.terrain.pipeline.noise import fractal_value_noise
+from map_maker.terrain.pipeline.noise import fractal_value_noise
 
 PATHS = (
     NoisePath((-0.542, 0.386), (4.0, 4.0)),

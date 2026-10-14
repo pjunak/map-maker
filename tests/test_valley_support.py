@@ -15,7 +15,7 @@ from benchmarks.evolution.network_comparison import routing
 from benchmarks.evolution.network_fixture import fixture
 from benchmarks.evolution.valley_comparison import bank_profiles, pinned_bank_conflict
 from benchmarks.evolution.valley_support import prepare_support
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def test_support_has_fixed_physical_scale_and_accounts_for_junctions_and_coast() -> None:

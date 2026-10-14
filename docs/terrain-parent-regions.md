@@ -14,15 +14,15 @@ capability, world placement or a continent-history model.
 
 ## Quick public example
 
-The [local-detail project](../examples/terrain/local-detail.dmterrain.json) uses
+The [local-detail project](../examples/terrain/local-detail.terrain.json) uses
 the existing public coastline and landform instructions with a small 65-node
 longest-side parent and two detail bands. From the repository root, choose new
 output directories:
 
 ```powershell
-.\.venv\Scripts\python.exe -m dmtools terrain build examples/terrain/local-detail.dmterrain.json --output artifacts/detail-parent
-.\.venv\Scripts\python.exe -m dmtools terrain sample-parent artifacts/detail-parent --output artifacts/parent-window --bounds-km 1375 800 1875 1300 --refine 16
-.\.venv\Scripts\python.exe -m dmtools terrain enrich-region artifacts/detail-parent --output artifacts/detail-window --bounds-km 1375 800 1875 1300 --refine 16 --amplitude-m 40 --experimental
+.\.venv\Scripts\python.exe -m map_maker terrain build examples/terrain/local-detail.terrain.json --output artifacts/detail-parent
+.\.venv\Scripts\python.exe -m map_maker terrain sample-parent artifacts/detail-parent --output artifacts/parent-window --bounds-km 1375 800 1875 1300 --refine 16
+.\.venv\Scripts\python.exe -m map_maker terrain enrich-region artifacts/detail-parent --output artifacts/detail-window --bounds-km 1375 800 1875 1300 --refine 16 --amplitude-m 40 --experimental
 ```
 
 Open `artifacts/detail-window/comparison.png`: left is the verified reference,
@@ -196,8 +196,8 @@ numeric results while retaining automatic file/runtime checks:
 
 ```python
 from pathlib import Path
-from dmtools.terrain.application.parent_region import ParentRegionSession
-from dmtools.terrain.domain.regional import RegionalDetailSettings
+from map_maker.terrain.application.parent_region import ParentRegionSession
+from map_maker.terrain.domain.regional import RegionalDetailSettings
 
 with ParentRegionSession(Path("artifacts/detail-parent")) as session:
     for name, refinement in (("near", 8), ("closer", 16), ("revisit", 8)):

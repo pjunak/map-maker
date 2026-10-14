@@ -15,7 +15,7 @@ Duplicating candidate and profile logic would let a forecast drift from review.
 
 ## Decision
 
-Expose `dmtools terrain water-budget PROJECT` as a read-only application
+Expose `map-maker terrain water-budget PROJECT` as a read-only application
 operation. Share immutable terrain-field preparation with normal generation,
 then evaluate the finished Float32 canonical ground without a delivered raster.
 Share normalized shoreline vertices, vector-contained basin neighbours, wet/dry

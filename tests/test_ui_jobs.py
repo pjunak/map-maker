@@ -8,8 +8,8 @@ from collections.abc import Callable, Iterator
 
 import pytest
 
-from dmtools.terrain.pipeline.control import CancellationToken
-from dmtools.terrain.ui_jobs import JobRunner, JobState, LatestWorker, Report, TkPump
+from map_maker.terrain.pipeline.control import CancellationToken
+from map_maker.terrain.ui_jobs import JobRunner, JobState, LatestWorker, Report, TkPump
 
 
 @pytest.fixture

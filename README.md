@@ -1,6 +1,6 @@
-# DM Tools
+# Map Maker
 
-DM Tools is a local-first set of worldbuilding and tabletop tools. Its terrain
+Map Maker is a local-first set of worldbuilding and tabletop tools. Its terrain
 tool turns a world you have drawn (an SVG coastline plus optional geology) into
 deterministic, plausible relief, climate and maps. It runs in Python on your
 computer; any future web interface would call the same engine.
@@ -10,17 +10,17 @@ obsolete features are not supported.
 
 ## What it does
 
-- **Whole-planet maps:** `dmtools world planet`. Your coastline is kept, except that
+- **Whole-planet maps:** `map-maker world planet`. Your coastline is kept, except that
   polar coasts are smoothed in true distance and a pole your land touches is covered.
   The planet's relief comes from plate-driven uplift and river erosion on a sphere
   mesh. That includes mountain belts, rifts, volcanoes, an ocean floor with
   ridges and trenches, lakes and rivers. A provisional climate adds winds,
   rainfall, biomes and Köppen zones. Opt-in extras add volcanic islands and
   fantastical *wonders*. See the [planet guide](docs/world-planet.md).
-- **Map views:** `dmtools world view` and the app's World map view. Any map theme
+- **Map views:** `map-maker world view` and the app's World map view. Any map theme
   (natural atlas, relief, topographic, parchment, climate, plates, sea-floor age,
   drainage basins, geology) can be shown as a flat world, a globe, or a polar view.
-- **Regional detail:** `dmtools world region` and **Zoom to region / province / local** in
+- **Regional detail:** `map-maker world region` and **Zoom to region / province / local** in
   the app.
   About 5 km detail for part of the planet, from cached tiles that agree
   wherever they overlap.
@@ -28,9 +28,9 @@ obsolete features are not supported.
   from import and continents through planet size, optional geology and generation
   to exploring the planet; further tools generate geographic context and
   ocean-depth hypotheses ([world guide](docs/terrain-worlds.md)).
-  `dmtools world refine-coast` exports the
+  `map-maker world refine-coast` exports the
   coast as zoomed maps draw it as a new SVG source map.
-- **Local terrain:** Terrain workspace and `dmtools terrain build`. The original
+- **Local terrain:** Terrain workspace and `map-maker terrain build`. The original
   composed generator and editor for one landmass, with a Float32 DEM, water
   review and headless builds ([builds](docs/terrain-builds.md)).
 
@@ -43,15 +43,15 @@ Git.
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\dmtools.exe terrain gui --world examples/world/four-shores.dmworld.json
+.\.venv\Scripts\map-maker.exe terrain gui --world examples/world/four-shores.world.json
 ```
 
 The same planet from the command line:
 
 ```powershell
-dmtools world planet examples/world/four-shores.dmworld.json --output artifacts/four-shores
-dmtools world view artifacts/four-shores --theme atlas --projection globe --lat 20 --output globe.png
-dmtools world region artifacts/four-shores --lon 10 --lat 5 --radius-km 400 --output artifacts/region
+map-maker world planet examples/world/four-shores.world.json --output artifacts/four-shores
+map-maker world view artifacts/four-shores --theme atlas --projection globe --lat 20 --output globe.png
+map-maker world region artifacts/four-shores --lon 10 --lat 5 --radius-km 400 --output artifacts/region
 ```
 
 Run the checks with `python -m pytest`, `python -m ruff check .` and
@@ -61,7 +61,7 @@ A Git worktree can reuse the main checkout's `.venv`, whose editable install
 points at the main checkout's `src`. The test suite puts its own checkout's `src`
 first, including for the subprocesses it starts. Pyright needs the interpreter
 named explicitly, for example `python -m pyright --pythonpath <main>\.venv\Scripts\python.exe`.
-Outside pytest, `dmtools` and `python -m benchmarks.*` still import the main
+Outside pytest, `map-maker` and `python -m benchmarks.*` still import the main
 checkout's package unless `PYTHONPATH` names the worktree's `src`.
 
 ## Documentation
@@ -70,7 +70,7 @@ checkout's package unless `PYTHONPATH` names the worktree's `src`.
   research.
 - [Current status](docs/research/status.md) and the
   [implementation plan](docs/strategy/README.md).
-- [Terrain tool guide](src/dmtools/terrain/README.md): editor controls and the
+- [Terrain tool guide](src/map_maker/terrain/README.md): editor controls and the
   local generator.
 - [Schemas](schemas/README.md), [ADRs](docs/adr/README.md),
   [backlog](TODO.md) and [dependencies and licenses](docs/DEPENDENCIES.md).
@@ -79,7 +79,7 @@ checkout's package unless `PYTHONPATH` names the worktree's `src`.
 
 | Path | Responsibility |
 |---|---|
-| `src/dmtools/terrain/` | Domain, pipeline, adapters, application layer and desktop UI |
+| `src/map_maker/terrain/` | Domain, pipeline, adapters, application layer and desktop UI |
 | `schemas/` | Versioned public input and manifest schemas |
 | `examples/` | Small public example projects |
 | `tests/` | Unit, contract, integration and deterministic regression tests |

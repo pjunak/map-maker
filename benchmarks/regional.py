@@ -13,9 +13,9 @@ from typing import Any
 import numpy as np
 
 from benchmarks import terrain as fixtures
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
-from dmtools.terrain.pipeline.regional import (
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.pipeline.regional import (
     REGIONAL_SAMPLING_ALGORITHM_ID,
     RegionalTerrainSamples,
     prepare_regional_sampler,
@@ -103,7 +103,7 @@ def main() -> None:
         if (runtime != runtime_identity() or harness != file_sha256(Path(__file__))
                 or fixture_hash != file_sha256(Path(fixtures.__file__))):
             raise RuntimeError("Source/runtime changed during regional measurement")
-        stream.write(canonical_json({"schema": "dmtools.regional-sampling-experiment",
+        stream.write(canonical_json({"schema": "map-maker.regional-sampling-experiment",
                                      "schema_version": 1, "complete": True, "runtime": runtime,
                                      "algorithm": REGIONAL_SAMPLING_ALGORITHM_ID,
                                      "harness_sha256": harness, "fixture_sha256": fixture_hash,

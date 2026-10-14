@@ -42,8 +42,8 @@ from benchmarks.noise_refinement import (
     refine_noise_profile,
 )
 from benchmarks.terrain import ROOT, peak_resident_bytes
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.pipeline.noise import fractal_value_noise
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.pipeline.noise import fractal_value_noise
 
 type ComparisonMethod = BoundMethod | Literal["profile_slabs", "profile_hybrid"]
 COMPARISON_METHODS: tuple[ComparisonMethod, ...] = (*METHODS, "profile_slabs", "profile_hybrid")
@@ -478,7 +478,7 @@ def main() -> None:
         if runtime != runtime_identity() or sources != source_identity():
             raise RuntimeError("Generator, runtime or bound source changed during inspection.")
         report = {
-            "schema": "dmtools.noise-component-bounds",
+            "schema": "map-maker.noise-component-bounds",
             "schema_version": 3,
             "complete": True,
             "runtime": runtime,

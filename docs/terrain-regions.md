@@ -8,7 +8,7 @@ to pick an existing region, change its properties and choose **Apply edit**.
 Drag the selected polygon or one of its vertices to move or reshape the input;
 regenerate to see the result. New-tool controls apply to the next polygon.
 
-Try [the regional example](../examples/terrain/landform-regions.dmterrain.json),
+Try [the regional example](../examples/terrain/landform-regions.terrain.json),
 which references the same small public coastline as the empty example project.
 Regions and the active tool controls are included in project save/open.
 

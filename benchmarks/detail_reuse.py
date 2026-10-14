@@ -14,15 +14,15 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.parent import load_terrain_parent
-from dmtools.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
-from dmtools.terrain.pipeline.detail import (
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.parent import load_terrain_parent
+from map_maker.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
+from map_maker.terrain.pipeline.detail import (
     LOCAL_DETAIL_ALGORITHM_ID,
     DetailedRegion,
     prepare_regional_detail,
 )
-from dmtools.terrain.pipeline.parent import VerifiedTerrainParent, prepare_verified_parent
+from map_maker.terrain.pipeline.parent import VerifiedTerrainParent, prepare_verified_parent
 
 
 def result_identity(detail: DetailedRegion) -> str:

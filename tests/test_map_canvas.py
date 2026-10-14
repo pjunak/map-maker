@@ -10,9 +10,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from dmtools.terrain.adapters.map_projection import MapProjection, displayed_lonlat
-from dmtools.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, frame_view
-from dmtools.terrain.ui_jobs import LatestWorker, TkPump
+from map_maker.terrain.adapters.map_projection import MapProjection, displayed_lonlat
+from map_maker.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, frame_view
+from map_maker.terrain.ui_jobs import LatestWorker, TkPump
 
 
 @pytest.fixture

@@ -20,7 +20,7 @@ from benchmarks.evolution.metrics import sample_grid
 from benchmarks.evolution.network import RiverNetwork
 from benchmarks.evolution.paths import FloatArray
 from benchmarks.evolution.valley_support import VALLEY_SUPPORT_ID, ValleySupport
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 # SciPy currently has no installed type stubs in the base environment. Keep its
 # dynamic API at this numeric boundary; validate all incoming and delivered arrays.

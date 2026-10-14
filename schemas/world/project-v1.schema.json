@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dmtools.local/schemas/world/project-v1.schema.json",
-  "title": "DM Tools world project v1",
+  "$id": "https://map-maker.local/schemas/world/project-v1.schema.json",
+  "title": "Map Maker world project v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "dmtools.world-project"
+      "const": "map-maker.world-project"
     },
     "version": {
       "const": 1

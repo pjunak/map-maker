@@ -14,14 +14,14 @@ from jsonschema import Draft202012Validator, ValidationError, validate
 from PIL import Image
 from referencing import Registry, Resource
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import canonical_json, file_sha256
-from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_project
-from dmtools.terrain.adapters.render import render_ground_map
-from dmtools.terrain.application import regional as application
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.regional import prepare_regional_sampler
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import canonical_json, file_sha256
+from map_maker.terrain.adapters.project import load_terrain_project, save_terrain_project
+from map_maker.terrain.adapters.render import render_ground_map
+from map_maker.terrain.application import regional as application
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.regional import prepare_regional_sampler
 
 ROOT = Path(__file__).parents[1]
 BOUNDS = (100., 100., 200., 200.)
@@ -31,9 +31,9 @@ BOUNDS = (100., 100., 200., 200.)
 def saved_project(tmp_path: Path) -> Path:
     inputs = tmp_path / "inputs"
     inputs.mkdir()
-    for name in ("coastline.svg", "basin-water.dmterrain.json"):
+    for name in ("coastline.svg", "basin-water.terrain.json"):
         shutil.copyfile(ROOT / "examples" / "terrain" / name, inputs / name)
-    path = inputs / "basin-water.dmterrain.json"
+    path = inputs / "basin-water.terrain.json"
     loaded = load_terrain_project(path)
     save_terrain_project(replace(loaded.project,
                                 settings=replace(loaded.project.settings, resolution_px=65)),
@@ -59,7 +59,8 @@ def test_regional_cli_publishes_repeatable_hashed_products(
         Draft202012Validator.check_schema(item)
     registry = Registry[Any]().with_resources(
         (s["$id"], Resource.from_contents(s)) for s in schemas)
-    schema = next(s for s in schemas if s["$id"] == "urn:dmtools:schema:terrain-regional-samples:3")
+    schema = next(
+        s for s in schemas if s["$id"] == "urn:map-maker:schema:terrain-regional-samples:3")
     validate(document, schema, cls=Draft202012Validator, registry=registry)
     for key in ("adds_detail_bands", "conditions_on_parent_dem", "refines_hydrology"):
         assert document["capabilities"][key] is False
@@ -96,8 +97,8 @@ def test_regional_cli_publishes_repeatable_hashed_products(
                             samples.maximum_elevation_m) as buffered):
         assert preview.size == (request.grid().width, request.grid().height)
         np.testing.assert_array_equal(np.asarray(preview), np.asarray(buffered)[rows, columns])
-        assert preview.info["dmtools.numeric_source_sha256"] == file_sha256(first / "samples.npz")
-        assert preview.info["dmtools.water_visibility"] == "none"
+        assert preview.info["map-maker.numeric_source_sha256"] == file_sha256(first / "samples.npz")
+        assert preview.info["map-maker.water_visibility"] == "none"
     assert {p.name: file_sha256(p) for p in saved_project.parent.iterdir()} == inputs_before
 
 

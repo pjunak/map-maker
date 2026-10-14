@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from dmtools.terrain.pipeline.hydrology import D8_NEIGHBOURS, steepest_flow_receivers
+from map_maker.terrain.pipeline.hydrology import D8_NEIGHBOURS, steepest_flow_receivers
 
 type FloatArray = NDArray[np.float64]
 

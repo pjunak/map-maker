@@ -9,11 +9,11 @@ import pytest
 from shapely.geometry import MultiPolygon, Polygon, box
 from shapely.ops import unary_union
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.world_project import world_project_document
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application.world import open_world, save_world
-from dmtools.terrain.domain.world import (
+from map_maker.cli import main
+from map_maker.terrain.adapters.world_project import world_project_document
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application.world import open_world, save_world
+from map_maker.terrain.domain.world import (
     WORLD_PREPARATION,
     WorldAssignment,
     WorldContinent,
@@ -21,7 +21,7 @@ from dmtools.terrain.domain.world import (
     WorldGeometryError,
     WorldProject,
 )
-from dmtools.terrain.pipeline.world import WorldMap, prepare_world_map
+from map_maker.terrain.pipeline.world import WorldMap, prepare_world_map
 
 
 def project(
@@ -143,7 +143,7 @@ def test_narrow_foreign_border_is_disjoint_and_order_independent(tmp_path: Path)
         and other.continents == r.continents
         and other.adjustments == r.adjustments
     )
-    path = tmp_path / "world.dmworld.json"
+    path = tmp_path / "input.world.json"
     save_world(p, path)
     reopened = open_world(path)
     assert reopened.land == r.land and reopened.adjustments == r.adjustments
@@ -202,7 +202,7 @@ def test_tolerated_seam_overlap_preserves_holes_and_never_double_counts() -> Non
 
 def test_preparation_is_reported_by_cli(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     p = project('<path id="a" d="M20 170 H100 V180.0009 H20 Z"/>')
-    path = tmp_path / "world.dmworld.json"
+    path = tmp_path / "input.world.json"
     save_world(p, path)
     assert main(["world", "inspect", str(path)]) == 0
     output = capsys.readouterr().out

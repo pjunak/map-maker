@@ -15,7 +15,7 @@ before any physical land union, climate model or erosion history is introduced.
 
 Add a World workspace alongside local Terrain in the same Tk window. World owns
 source import, continent assignment, explicit full-sphere Plate Carrée metadata,
-validation and a portable `.dmworld.json` project. Terrain retains its local
+validation and a portable `.world.json` project. Terrain retains its local
 input/generation workflow. Startup flags and keyboard actions select the active
 document; dirty-state guards cover both. Future stage names explain direction
 without exposing generation controls whose backend does not exist.
@@ -42,7 +42,7 @@ seam continuously; derived copies split at it without duplicating area. Full
 world latitude bounds, radius and central meridian are explicit inputs.
 
 Save reparses/verifies the snapshot, validates topology and atomically replaces
-only a `.dmworld.json` destination. Open reparses the embedded source; it needs no
+only a `.world.json` destination. Open reparses the embedded source; it needs no
 external SVG. Save/open/import failures preserve the current document or existing
 file. Ownership undo/redo and dirty guards operate independently of Terrain.
 Background operations own results; Tk callbacks and images are released on close.

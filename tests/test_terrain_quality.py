@@ -3,7 +3,7 @@ from dataclasses import asdict
 import numpy as np
 import pytest
 
-from dmtools.terrain.pipeline.quality import measure_terrain_quality
+from map_maker.terrain.pipeline.quality import measure_terrain_quality
 
 
 def test_directional_measurements_distinguish_equal_histograms_and_rotation() -> None:

@@ -20,9 +20,9 @@ derived output.
 
 ## Decision
 
-- Use UTF-8 JSON files ending in `.dmterrain.json` for the first terrain-project
+- Use UTF-8 JSON files ending in `.terrain.json` for the first terrain-project
   contract.
-- Identify the contract with `schema: dmtools.terrain-project` and the integer
+- Identify the contract with `schema: map-maker.terrain-project` and the integer
   `schema_version: 1`. Publish its structure as
   `schemas/terrain/project-v1.schema.json`.
 - Store the coastline as an external SVG path plus the SHA-256 of its exact

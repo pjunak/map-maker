@@ -1,6 +1,6 @@
 # Documentation and research-status audit - 2026-09-13
 
-Scope: the standalone `dm-tools` terrain application, starting from `14c1087`.
+Scope: the standalone `map-maker` terrain application, starting from `14c1087`.
 The source worktree was clean. Campaign geography and historical ADR/research
 findings are outside the edit scope.
 
@@ -40,7 +40,7 @@ its upstream support and paper shortlist were not freshly re-researched.
 Checked 377 local links (including five heading anchors) across all 92 Markdown
 documents, including the two new reports; reviewed changed prose and
 contract claims against schemas/source/tests, inspected Windows CI gates, and
-verified `dmtools terrain build --help`. Accepted ADRs and dated research remain
+verified `map-maker terrain build --help`. Accepted ADRs and dated research remain
 historical evidence; no obsolete schema or compatibility loader was restored.
 Prose-only validation does not imply a new GUI/GIS acceptance run.
 

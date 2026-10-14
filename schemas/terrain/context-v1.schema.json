@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:dmtools:schema:terrain-context:1",
-  "title": "DM Tools terrain world-context binding version 1",
+  "$id": "urn:map-maker:schema:terrain-context:1",
+  "title": "Map Maker terrain world-context binding version 1",
   "description": "Bounded, immutable geographic support transferred into local terrain generation. The binding owns portable numeric samples; the report records how a build used them.",
   "$ref": "#/$defs/binding",
   "$defs": {

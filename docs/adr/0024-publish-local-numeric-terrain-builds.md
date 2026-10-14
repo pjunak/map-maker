@@ -18,7 +18,7 @@ CRS or planetary radius. A georeferenced export must not invent those values.
 
 ## Decision
 
-- Add `dmtools terrain build PROJECT --output NEW_DIRECTORY`, using the same
+- Add `map-maker terrain build PROJECT --output NEW_DIRECTORY`, using the same
   project loader and generation pipeline as the desktop workbench.
 - Save lossless, pickle-free NPY arrays: little-endian Float32 metre elevations,
   a boolean land mask and two little-endian Float64 coordinate vectors in km.

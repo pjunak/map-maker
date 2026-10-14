@@ -2,7 +2,7 @@
 
 These repository-only tools measure the installed Python engine without adding
 runtime dependencies or changing authored projects. Run them from the repository
-root with its development environment; they are not installed as `dmtools`
+root with its development environment; they are not installed as `map-maker`
 commands.
 
 ```powershell
@@ -18,7 +18,7 @@ while measuring them, and avoid concurrent tests or other heavy workloads.
 
 ## Whole-planet relief
 
-The product command is `dmtools world planet` ([guide](../docs/world-planet.md)).
+The product command is `map-maker world planet` ([guide](../docs/world-planet.md)).
 The [planet tools](planet/README.md) generate realistic synthetic test worlds and
 sample geology, and run resolution sweeps of the planet relief.
 
@@ -515,7 +515,7 @@ finer hydrology. See the [measurements](../docs/research/2026-09-24-connected-dr
 
 One fresh process per `--rows` value (default 90, 180, 360), with two deterministic
 source-water graph constructions. The default source is public Four Shores;
-`--source path/to/world.dmworld.json` accepts another retained world without edits.
+`--source path/to/other.world.json` accepts another retained world without edits.
 Records physical area bounds, graph components, fragmented source support, array
 identity/bytes, source/runtime identity and native process peaks. Timings exclude
 source preparation, shore/exposure fields, rendering and serialization. Peaks

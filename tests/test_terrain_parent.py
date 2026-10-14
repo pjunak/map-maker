@@ -19,27 +19,27 @@ from referencing import Registry, Resource
 
 from benchmarks.regional_memory import sample_bounds
 from benchmarks.terrain import fixture
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.parent import load_terrain_parent
-from dmtools.terrain.adapters.parent_region import (
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.parent import load_terrain_parent
+from map_maker.terrain.adapters.parent_region import (
     publish_parent_region_manifest,
     write_parent_region_products,
 )
-from dmtools.terrain.adapters.project import (
+from map_maker.terrain.adapters.project import (
     load_terrain_project,
     project_snapshot_from_json,
     project_snapshot_to_json,
     save_terrain_project,
 )
-from dmtools.terrain.application import parent_region as application
-from dmtools.terrain.application.build import build_terrain_project
-from dmtools.terrain.domain import TerrainProject
-from dmtools.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.detail import prepare_regional_detail
-from dmtools.terrain.pipeline.parent import prepare_verified_parent
-from dmtools.terrain.pipeline.regional import TerrainRegionSampler
+from map_maker.terrain.application import parent_region as application
+from map_maker.terrain.application.build import build_terrain_project
+from map_maker.terrain.domain import TerrainProject
+from map_maker.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.detail import prepare_regional_detail
+from map_maker.terrain.pipeline.parent import prepare_verified_parent
+from map_maker.terrain.pipeline.regional import TerrainRegionSampler
 
 ROOT = Path(__file__).parents[1]
 
@@ -62,7 +62,7 @@ def test_portable_snapshot_round_trip(case: str) -> None:
     project = TerrainProject(coast, settings, tuple(constraints))
     document = json.loads(canonical_json(project_snapshot_to_json(project)))
     assert project_snapshot_from_json(document) == project
-    validate_schema(document, "urn:dmtools:schema:terrain-input-snapshot:4")
+    validate_schema(document, "urn:map-maker:schema:terrain-input-snapshot:4")
     document["constraints"].append({"type": "mystery"})
     with pytest.raises(ValueError):
         project_snapshot_from_json(document)
@@ -73,9 +73,9 @@ def saved_parent(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp("saved-parent")
     inputs = folder / "inputs"
     inputs.mkdir()
-    for name in ("coastline.svg", "basin-water.dmterrain.json"):
+    for name in ("coastline.svg", "basin-water.terrain.json"):
         shutil.copyfile(ROOT / "examples/terrain" / name, inputs / name)
-    path = inputs / "basin-water.dmterrain.json"
+    path = inputs / "basin-water.terrain.json"
     loaded = load_terrain_project(path)
     project = replace(
         loaded.project,
@@ -235,12 +235,12 @@ def test_parent_cli_artifacts_are_repeatable_and_schema_bound(
     )
     assert (first / "manifest.json").read_bytes() == (second / "manifest.json").read_bytes()
     document: dict[str, Any] = json.loads((first / "manifest.json").read_bytes())
-    validate_schema(document, "urn:dmtools:schema:terrain-parent-region:1")
+    validate_schema(document, "urn:map-maker:schema:terrain-parent-region:1")
     for key in ("refines_hydrology", "small_rivers_ready"):
         with pytest.raises(ValidationError):
             validate_schema(
                 {**document, "capabilities": {**document["capabilities"], key: True}},
-                "urn:dmtools:schema:terrain-parent-region:1",
+                "urn:map-maker:schema:terrain-parent-region:1",
             )
     for name, product in document["outputs"].items():
         assert file_sha256(first / name) == product["sha256"]
@@ -686,7 +686,7 @@ def test_cancellation_after_publication_does_not_undo_a_completed_artifact(
 def test_load_admission_precedes_input_parsing_and_numeric_decoding(
     saved_parent: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters import parent as adapter
+    from map_maker.terrain.adapters import parent as adapter
 
     seen: list[adapter.ParentLoadPlan] = []
 
@@ -716,7 +716,7 @@ def test_load_admission_precedes_input_parsing_and_numeric_decoding(
 def test_session_constructor_failure_releases_its_memory(
     saved_parent: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.application.region_memory import RegionalMemoryBudget
+    from map_maker.terrain.application.region_memory import RegionalMemoryBudget
 
     pool = RegionalMemoryBudget()
 
@@ -732,7 +732,7 @@ def test_session_constructor_failure_releases_its_memory(
 def test_admission_rejects_before_preparation_and_can_retry_without_cache_mutation(
     saved_parent: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.application.region_memory import (
+    from map_maker.terrain.application.region_memory import (
         RegionalMemoryAdmissionError,
         RegionalMemoryBudget,
     )
@@ -768,7 +768,7 @@ def test_admission_rejects_before_preparation_and_can_retry_without_cache_mutati
 def test_job_memory_is_released_on_cancel_export_failure_and_source_drift(
     saved_parent: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,
 ) -> None:
-    from dmtools.terrain.application.region_memory import RegionalMemoryBudget
+    from map_maker.terrain.application.region_memory import RegionalMemoryBudget
 
     pool = RegionalMemoryBudget()
     bounds = (1100., 1100., 1700., 1700.)
@@ -818,7 +818,7 @@ def test_cli_memory_budget_rejects_without_creating_output(
 def test_bounded_parent_read_uses_actual_file_size_and_detects_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: int,
 ) -> None:
-    from dmtools.terrain.adapters.parent import _read  # pyright: ignore[reportPrivateUsage]
+    from map_maker.terrain.adapters.parent import _read  # pyright: ignore[reportPrivateUsage]
 
     path = tmp_path / "small.bin"
     path.write_bytes(b"parent payload")
@@ -845,7 +845,7 @@ def test_bounded_parent_read_uses_actual_file_size_and_detects_changes(
 def test_parent_product_larger_than_declared_is_rejected_before_reading(
     saved_parent: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters import parent as adapter
+    from map_maker.terrain.adapters import parent as adapter
 
     folder = tmp_path / "parent"
     shutil.copytree(saved_parent, folder)
@@ -875,13 +875,13 @@ def test_detail_export_bounds_only_review_panels_and_keeps_native_samples(
     document = json.loads(manifest.read_bytes())
     with Image.open(destination / "scientific.png") as scientific:
         assert scientific.size == (3, 2049)
-        assert "dmtools.preview_reduced" not in scientific.info
+        assert "map-maker.preview_reduced" not in scientific.info
     with Image.open(destination / "comparison.png") as comparison:
         assert comparison.size == (900, 1080)
-        assert comparison.info["dmtools.native_size"] == "3x2049"
-        assert comparison.info["dmtools.panel_size"] == "1x1024"
-        assert comparison.info["dmtools.preview_reduced"] == "true"
-        assert comparison.info["dmtools.numeric_source_sha256"] == file_sha256(
+        assert comparison.info["map-maker.native_size"] == "3x2049"
+        assert comparison.info["map-maker.panel_size"] == "1x1024"
+        assert comparison.info["map-maker.preview_reduced"] == "true"
+        assert comparison.info["map-maker.numeric_source_sha256"] == file_sha256(
             destination / "samples.npz",
         )
     with np.load(destination / "samples.npz", allow_pickle=False) as arrays:

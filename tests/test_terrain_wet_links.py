@@ -5,9 +5,13 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Point, box
 
-from dmtools.terrain.pipeline.hydrology import D8_NEIGHBOURS
-from dmtools.terrain.pipeline.water_sampling import SamplingDensity, SamplingFeature, SamplingGuide
-from dmtools.terrain.pipeline.wet_links import review_wet_links
+from map_maker.terrain.pipeline.hydrology import D8_NEIGHBOURS
+from map_maker.terrain.pipeline.water_sampling import (
+    SamplingDensity,
+    SamplingFeature,
+    SamplingGuide,
+)
+from map_maker.terrain.pipeline.wet_links import review_wet_links
 
 
 def _graph(bypass: bool = False) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
@@ -65,9 +69,9 @@ def test_budget_failure_keeps_no_accepted_prefix(
     axis = np.arange(5, dtype=np.float64)
     features: tuple[SamplingGuide, ...] = ()
     if limit == "profile":
-        monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 4)
+        monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 4)
     else:
-        monkeypatch.setattr("dmtools.terrain.pipeline.wet_links.MAX_WET_LINK_SAMPLES",
+        monkeypatch.setattr("map_maker.terrain.pipeline.wet_links.MAX_WET_LINK_SAMPLES",
                             9 if limit == "network" else 10)
         if limit == "refinement":
             features = (SamplingFeature(Point(1.371, 2.), .001, .001),)
@@ -89,7 +93,7 @@ def test_endpoint_identity_and_batched_evaluation(monkeypatch: pytest.MonkeyPatc
     ground = np.full((5, 5), 2., dtype=np.float64)
     axis = np.arange(5, dtype=np.float64)
     sizes: list[int] = []
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 3)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 3)
     def sampler(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float32]:
         sizes.append(len(x))
         return np.full(x.shape, 2., dtype=np.float32)

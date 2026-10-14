@@ -10,29 +10,29 @@ import numpy as np
 import pytest
 from jsonschema import Draft202012Validator
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.adapters.world_context import context_input_sha256, write_world_context
-from dmtools.terrain.adapters.world_context_render import CONTEXT_LAYERS, render_world_context
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application import world_context as application
-from dmtools.terrain.application.world import open_world, save_world
-from dmtools.terrain.domain.models import LandComponent
-from dmtools.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
-from dmtools.terrain.domain.world_context import (
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.adapters.world_context import context_input_sha256, write_world_context
+from map_maker.terrain.adapters.world_context_render import CONTEXT_LAYERS, render_world_context
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application import world_context as application
+from map_maker.terrain.application.world import open_world, save_world
+from map_maker.terrain.domain.models import LandComponent
+from map_maker.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
+from map_maker.terrain.domain.world_context import (
     SPLIT_WATER,
     SUBCELL_LAND,
     SUBCELL_WATER,
     SphericalContextGrid,
     WorldContextSettings,
 )
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.world import component_area_km2, prepare_world_map
-from dmtools.terrain.pipeline.world_context import WorldContext, generate_world_context
-from dmtools.terrain.viewport import MapViewport
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.world import component_area_km2, prepare_world_map
+from map_maker.terrain.pipeline.world_context import WorldContext, generate_world_context
+from map_maker.terrain.viewport import MapViewport
 
 ROOT = Path(__file__).parents[1]
-EXAMPLE = ROOT / "examples/world/four-shores.dmworld.json"
+EXAMPLE = ROOT / "examples/world/four-shores.world.json"
 
 
 def project(body: str, *, scale: float = 1, offset: float = 0) -> WorldProject:
@@ -193,7 +193,7 @@ def test_export_schema_hashes_snapshot_numeric_fields_and_no_overwrite(tmp_path:
     schema = json.loads((ROOT / "schemas/world/context-v4.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(manifest)  # pyright: ignore[reportUnknownMemberType]
     assert manifest["input_sha256"] == context_input_sha256(run.context)
-    assert open_world(target / "world.dmworld.json").project == world.project
+    assert open_world(target / "input.world.json").project == world.project
     for name, record in manifest["outputs"].items():
         assert file_sha256(target / name) == record["sha256"]
         assert (target / name).stat().st_size == record["bytes"]
@@ -233,7 +233,7 @@ def test_source_change_during_cli_build_does_not_publish(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = tmp_path / "world.dmworld.json"
+    source = tmp_path / "input.world.json"
     save_world(open_world(EXAMPLE).project, source)
     original = application.generate_context
 
@@ -410,7 +410,7 @@ def test_integer_frame_coordinates_have_the_same_saved_context_identity(tmp_path
 
 
 def test_shore_free_world_exports_reopens_and_renders_nodata(tmp_path: Path) -> None:
-    from dmtools.terrain.adapters.world_context_render import context_image
+    from map_maker.terrain.adapters.world_context_render import context_image
 
     run = application.generate_context(
         project('<path d="M0 0 H360 V180 H0 Z"/>'), WorldContextSettings(12)

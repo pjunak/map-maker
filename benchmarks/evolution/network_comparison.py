@@ -21,10 +21,10 @@ from benchmarks.evolution.reconstruction import summarize
 from benchmarks.evolution.sensitivity import compare_graphs
 from benchmarks.evolution.surface import FlowAlignedSurface
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
-from dmtools.terrain.pipeline.hydrology import receiver_contributing_area, steepest_flow_receivers
-from dmtools.terrain.pipeline.landforms import regional_incision_budget
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.pipeline.hydrology import receiver_contributing_area, steepest_flow_receivers
+from map_maker.terrain.pipeline.landforms import regional_incision_budget
 
 
 def routing(field: FittedSurface) -> NDArray[np.int64]:

@@ -1,0 +1,233 @@
+{
+  "authoring": {
+    "active_tool": "brush",
+    "tools": {
+      "brush": {
+        "elevation_m": 500.0,
+        "elevation_mode": "relative",
+        "intensity": 0.55,
+        "width_km": 280.0
+      },
+      "height": {
+        "elevation_m": 2500.0,
+        "elevation_mode": "absolute",
+        "radius_km": 120.0
+      },
+      "lake": {
+        "outlet_at_first_vertex": false,
+        "water_level_m": 500.0
+      },
+      "region": {
+        "character": "plain",
+        "elevation_m": 250.0,
+        "feature_size_km": 150.0,
+        "orientation_deg": 0.0,
+        "relief_m": 100.0,
+        "transition_km": 50.0
+      },
+      "ridge": {
+        "elevation_m": 1200.0,
+        "elevation_mode": "relative",
+        "radius_km": 120.0
+      },
+      "valley": {
+        "elevation_m": 700.0,
+        "elevation_mode": "relative",
+        "radius_km": 90.0
+      }
+    }
+  },
+  "coastline": {
+    "path": "coastline.svg",
+    "sha256": "6e180c9522b6c966cfc8f34fdf23de047dbcb32b0dbdf0818e8f0b13d2d8fafb"
+  },
+  "constraints": [
+    {
+      "points": [
+        [
+          0.08,
+          0.23
+        ],
+        [
+          0.19,
+          0.11
+        ],
+        [
+          0.35,
+          0.12
+        ],
+        [
+          0.49,
+          0.31
+        ],
+        [
+          0.43,
+          0.46
+        ],
+        [
+          0.16,
+          0.48
+        ],
+        [
+          0.08,
+          0.23
+        ]
+      ],
+      "settings": {
+        "character": "plateau",
+        "elevation_m": 2200.0,
+        "feature_size_km": 200.0,
+        "orientation_deg": 0.0,
+        "relief_m": 200.0,
+        "transition_km": 180.0
+      },
+      "type": "terrain_region",
+      "holes": []
+    },
+    {
+      "points": [
+        [
+          0.4,
+          0.1
+        ],
+        [
+          0.66,
+          0.03
+        ],
+        [
+          0.91,
+          0.16
+        ],
+        [
+          0.95,
+          0.4
+        ],
+        [
+          0.83,
+          0.62
+        ],
+        [
+          0.59,
+          0.48
+        ],
+        [
+          0.48,
+          0.32
+        ],
+        [
+          0.4,
+          0.1
+        ]
+      ],
+      "settings": {
+        "character": "mountains",
+        "elevation_m": 1000.0,
+        "feature_size_km": 240.0,
+        "orientation_deg": 35.0,
+        "relief_m": 3500.0,
+        "transition_km": 220.0
+      },
+      "type": "terrain_region",
+      "holes": []
+    },
+    {
+      "points": [
+        [
+          0.15,
+          0.52
+        ],
+        [
+          0.37,
+          0.48
+        ],
+        [
+          0.57,
+          0.66
+        ],
+        [
+          0.45,
+          0.84
+        ],
+        [
+          0.2,
+          0.9
+        ],
+        [
+          0.07,
+          0.72
+        ],
+        [
+          0.15,
+          0.52
+        ]
+      ],
+      "settings": {
+        "character": "plain",
+        "elevation_m": 250.0,
+        "feature_size_km": 150.0,
+        "orientation_deg": 0.0,
+        "relief_m": 100.0,
+        "transition_km": 220.0
+      },
+      "type": "terrain_region",
+      "holes": []
+    },
+    {
+      "points": [
+        [
+          0.6,
+          0.5
+        ],
+        [
+          0.81,
+          0.55
+        ],
+        [
+          0.94,
+          0.7
+        ],
+        [
+          0.83,
+          0.9
+        ],
+        [
+          0.59,
+          0.92
+        ],
+        [
+          0.47,
+          0.76
+        ],
+        [
+          0.6,
+          0.5
+        ]
+      ],
+      "settings": {
+        "character": "hills",
+        "elevation_m": 700.0,
+        "feature_size_km": 150.0,
+        "orientation_deg": 0.0,
+        "relief_m": 900.0,
+        "transition_km": 170.0
+      },
+      "type": "terrain_region",
+      "holes": []
+    }
+  ],
+  "schema": "map-maker.terrain-project",
+  "schema_version": 9,
+  "world_context": null,
+  "settings": {
+    "coastal_rise_km": 180.0,
+    "detail_levels": 2,
+    "largest_feature_km": 450.0,
+    "maximum_elevation_m": 4500.0,
+    "object_scale_km": 4000.0,
+    "resolution_px": 65,
+    "roughness": 0.55,
+    "seed": 42,
+    "variability": 0.75,
+    "drainage_density": 1.0
+  }
+}

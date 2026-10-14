@@ -5,8 +5,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from dmtools.terrain.adapters.render import render_drainage_overlay
-from dmtools.terrain.domain import (
+from map_maker.terrain.adapters.render import render_drainage_overlay
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     TerrainBrushStroke,
@@ -14,11 +14,11 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.pipeline.diagnostics import (
+from map_maker.terrain.pipeline.diagnostics import (
     review_drainage_routing,
 )
-from dmtools.terrain.pipeline.generate import GeneratedTerrain, generate_terrain
-from dmtools.terrain.pipeline.hydrology import (
+from map_maker.terrain.pipeline.generate import GeneratedTerrain, generate_terrain
+from map_maker.terrain.pipeline.hydrology import (
     drainage_incision,
 )
 

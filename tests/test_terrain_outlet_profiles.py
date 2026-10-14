@@ -5,8 +5,8 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Point
 
-from dmtools.terrain.pipeline.outlet_profiles import sample_downstream_profile
-from dmtools.terrain.pipeline.water_sampling import SamplingFeature
+from map_maker.terrain.pipeline.outlet_profiles import sample_downstream_profile
+from map_maker.terrain.pipeline.water_sampling import SamplingFeature
 
 
 def test_local_crest_is_measured_from_an_earlier_low_not_the_global_maximum() -> None:
@@ -35,7 +35,7 @@ def test_local_crest_is_measured_from_an_earlier_low_not_the_global_maximum() ->
 def test_entire_path_has_one_budget_even_if_every_edge_would_fit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 5)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 5)
 
     def unexpected(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float32]:
         pytest.fail("An over-budget route must not evaluate a prefix.")

@@ -14,7 +14,7 @@ colour gradient:
 - high-contrast hillshade exposes drainage texture and long ridge forms.
 
 Blue-green rivers add another major cue in the reference, but they are not part
-of its elevation ramp. DM Tools should add them later from derived hydrology,
+of its elevation ramp. Map Maker should add them later from derived hydrology,
 not bake blue drainage-like marks into the DEM colouring.
 
 ## Implementation interpretation

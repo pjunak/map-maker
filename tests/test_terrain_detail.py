@@ -14,26 +14,26 @@ from shapely.geometry import LineString, box
 from shapely.strtree import STRtree
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import ElevationPoint, EndpointGrid, TerrainProject
-from dmtools.terrain.domain.regional import (
+from map_maker.terrain.domain import ElevationPoint, EndpointGrid, TerrainProject
+from map_maker.terrain.domain.regional import (
     RegionalDetailSettings,
     RegionalSamplingRequest,
     detail_cell_window,
     detail_support_window,
 )
-from dmtools.terrain.pipeline import regional
-from dmtools.terrain.pipeline.detail import (
+from map_maker.terrain.pipeline import regional
+from map_maker.terrain.pipeline.detail import (
     DetailedRegion,
     PreparedRegionalDetail,
     prepare_regional_detail,
 )
-from dmtools.terrain.pipeline.detail_basis import (
+from map_maker.terrain.pipeline.detail_basis import (
     edge_coefficients,
     residual_basis,
     terrain_x_weight,
 )
-from dmtools.terrain.pipeline.generate import PreparedTerrainField, generate_terrain
-from dmtools.terrain.pipeline.parent import (
+from map_maker.terrain.pipeline.generate import PreparedTerrainField, generate_terrain
+from map_maker.terrain.pipeline.parent import (
     ParentRouting,
     ParentTerrainData,
     VerifiedTerrainParent,
@@ -451,7 +451,7 @@ def test_failed_probe_batch_can_be_retried_without_stale_support(
 def test_protection_batches_preserve_all_intersections_and_numeric_results(
     detail_field: tuple[PreparedRegionalDetail, tuple[int, int]], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.pipeline import detail as detail_module
+    from map_maker.terrain.pipeline import detail as detail_module
 
     field, origin = detail_field
     left, top = origin

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dmtools.local/schemas/world/geology-v2.schema.json",
-  "title": "DM Tools authored world geology v2",
+  "$id": "https://map-maker.local/schemas/world/geology-v2.schema.json",
+  "title": "Map Maker authored world geology v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "dmtools.world-geology"
+      "const": "map-maker.world-geology"
     },
     "version": {
       "const": 2,
@@ -29,7 +29,7 @@
       "pattern": "^[0-9a-f]{64}$"
     },
     "world": {
-      "$ref": "https://dmtools.local/schemas/world/project-v1.schema.json"
+      "$ref": "https://map-maker.local/schemas/world/project-v1.schema.json"
     },
     "defaults": {
       "type": "array",
@@ -236,7 +236,7 @@
               "type": "null"
             },
             {
-              "$ref": "urn:dmtools:schema:terrain-project:9#/$defs/landformSettings"
+              "$ref": "urn:map-maker:schema:terrain-project:9#/$defs/landformSettings"
             }
           ]
         }

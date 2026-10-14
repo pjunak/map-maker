@@ -8,11 +8,11 @@ from shapely.geometry import Polygon, box
 from benchmarks.evolution.constrained import FittedSurface, HardHeights
 from benchmarks.evolution.network import RiverNetwork
 from benchmarks.evolution.paths import FloatArray
-from dmtools.terrain.domain import LandformSettings
-from dmtools.terrain.domain.evolution import EvolutionGrid
-from dmtools.terrain.domain.models import LandformKind
-from dmtools.terrain.pipeline.hydrology import automatic_incision_budget
-from dmtools.terrain.pipeline.landforms import MetricRegion, regional_incision_limit
+from map_maker.terrain.domain import LandformSettings
+from map_maker.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.models import LandformKind
+from map_maker.terrain.pipeline.hydrology import automatic_incision_budget
+from map_maker.terrain.pipeline.landforms import MetricRegion, regional_incision_limit
 
 FIXTURE_ID = "two-catchment-range-lowland@2"
 

@@ -1,0 +1,213 @@
+{
+  "defaults": [
+    {
+      "continent_id": "continent-5b504b7489544a65a3d5",
+      "profile": {
+        "crust_age_ma": 1200.0,
+        "evolution_duration_ma": null,
+        "landform": {
+          "character": "plain",
+          "elevation_m": 250.0,
+          "feature_size_km": 220.0,
+          "orientation_deg": 0.0,
+          "relief_m": 150.0,
+          "transition_km": 50.0
+        },
+        "rejuvenation_age_ma": null,
+        "setting": "stable-interior"
+      }
+    },
+    {
+      "continent_id": "continent-992d020104e84fe8a152",
+      "profile": {
+        "crust_age_ma": 1200.0,
+        "evolution_duration_ma": null,
+        "landform": {
+          "character": "plain",
+          "elevation_m": 250.0,
+          "feature_size_km": 220.0,
+          "orientation_deg": 0.0,
+          "relief_m": 150.0,
+          "transition_km": 50.0
+        },
+        "rejuvenation_age_ma": null,
+        "setting": "stable-interior"
+      }
+    }
+  ],
+  "provinces": [
+    {
+      "id": "province-belt",
+      "name": "Western mountain belt",
+      "priority": 10,
+      "profile": {
+        "crust_age_ma": 1200.0,
+        "evolution_duration_ma": null,
+        "landform": {
+          "character": "mountains",
+          "elevation_m": 1000.0,
+          "feature_size_km": 160.0,
+          "orientation_deg": 60.0,
+          "relief_m": 3500.0,
+          "transition_km": 65.0
+        },
+        "rejuvenation_age_ma": 30.0,
+        "setting": "active-belt"
+      },
+      "vertices": [
+        [
+          147.0,
+          67.0
+        ],
+        [
+          157.0,
+          60.0
+        ],
+        [
+          177.0,
+          90.0
+        ],
+        [
+          169.0,
+          103.0
+        ],
+        [
+          157.0,
+          85.0
+        ]
+      ]
+    },
+    {
+      "id": "province-lowland",
+      "name": "Nested lowland",
+      "priority": 20,
+      "profile": {
+        "crust_age_ma": null,
+        "evolution_duration_ma": null,
+        "landform": {
+          "character": "plain",
+          "elevation_m": 180.0,
+          "feature_size_km": 150.0,
+          "orientation_deg": 0.0,
+          "relief_m": 70.0,
+          "transition_km": 40.0
+        },
+        "rejuvenation_age_ma": null,
+        "setting": "sedimentary-basin"
+      },
+      "vertices": [
+        [
+          183.0,
+          79.0
+        ],
+        [
+          190.0,
+          78.0
+        ],
+        [
+          192.0,
+          87.0
+        ],
+        [
+          182.0,
+          89.0
+        ]
+      ]
+    },
+    {
+      "id": "province-plateau",
+      "name": "Eastern plateau",
+      "priority": 10,
+      "profile": {
+        "crust_age_ma": null,
+        "evolution_duration_ma": null,
+        "landform": {
+          "character": "plateau",
+          "elevation_m": 1900.0,
+          "feature_size_km": 200.0,
+          "orientation_deg": 0.0,
+          "relief_m": 200.0,
+          "transition_km": 75.0
+        },
+        "rejuvenation_age_ma": null,
+        "setting": "stable-interior"
+      },
+      "vertices": [
+        [
+          179.0,
+          72.0
+        ],
+        [
+          195.0,
+          68.0
+        ],
+        [
+          201.0,
+          87.0
+        ],
+        [
+          194.0,
+          101.0
+        ],
+        [
+          177.0,
+          94.0
+        ]
+      ]
+    }
+  ],
+  "schema": "map-maker.world-geology",
+  "time_reference": "Ma-before-common-present",
+  "version": 2,
+  "world": {
+    "assignments": [
+      {
+        "continent_id": "continent-5b504b7489544a65a3d5",
+        "feature_id": "shape-007e897d13e1e846b244a40d",
+        "role": "mainland"
+      },
+      {
+        "continent_id": "continent-992d020104e84fe8a152",
+        "feature_id": "shape-319b2f642222f848f61a637a",
+        "role": "mainland"
+      },
+      {
+        "continent_id": "continent-992d020104e84fe8a152",
+        "feature_id": "shape-aac2a9daf344efe8e50fe13e",
+        "role": "island"
+      }
+    ],
+    "continents": [
+      {
+        "id": "continent-5b504b7489544a65a3d5",
+        "name": "Eastreach"
+      },
+      {
+        "id": "continent-992d020104e84fe8a152",
+        "name": "Westreach"
+      }
+    ],
+    "frame": {
+      "bounds": [
+        0.0,
+        0.0,
+        360.0,
+        180.0
+      ],
+      "central_meridian_deg": 0.0,
+      "projection": "plate-carree",
+      "radius_km": 2000.0
+    },
+    "importer": "retained-svg-v2",
+    "name": "Landform guidance demonstration",
+    "preparation": "bounded-world-v1",
+    "schema": "map-maker.world-project",
+    "source": {
+      "name": "landform-world.svg",
+      "sha256": "463e0b3c0fe50f15765a754c40d66c13223750a12c57f7ac76b5ce9461a67c34",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 360 180\">\n<g id=\"Westreach\"><path d=\"M140 65 L150 53 L166 55 L175 60 V106 L163 111 L157 105 L147 107 L149 92 L144 83 Z\"/>\n<g id=\"islands\"><path d=\"M138 94 L141 91 L142 96 L139 98 Z\"/></g></g>\n<g id=\"Eastreach\"><path d=\"M175 60 L189 55 L201 62 L203 78 L210 87 L204 103 L189 112 L175 106 Z\"/></g>\n</svg>"
+    },
+    "version": 1
+  },
+  "world_sha256": "8d4ed9dff6b681f0f762723cfc0c23e67b43b3a5116222a21d06a4ace9b378a4"
+}

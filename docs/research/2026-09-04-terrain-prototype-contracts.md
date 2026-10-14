@@ -24,7 +24,7 @@ criteria. More erosion everywhere is unlikely to create the desired diversity.
 
 ## 1. Adding detail currently changes existing band weights
 
-The [noise implementation](../../src/dmtools/terrain/pipeline/noise.py) divides
+The [noise implementation](../../src/map_maker/terrain/pipeline/noise.py) divides
 the accumulated octaves by the sum of their amplitudes. With roughness 0.55,
 changing `detail_levels` from 2 to 6 scales the original two bands by
 `(1 + 0.55) / sum(0.55**i for i in range(6)) = 0.7173568985`.
@@ -50,9 +50,9 @@ Reproduce from the repository root using the existing environment:
 ```python
 from dataclasses import replace
 import numpy as np
-from dmtools.terrain.domain import TerrainSettings
-from dmtools.terrain.pipeline.generate import _base_elevation_fields
-from dmtools.terrain.pipeline.noise import fractal_value_noise
+from map_maker.terrain.domain import TerrainSettings
+from map_maker.terrain.pipeline.generate import _base_elevation_fields
+from map_maker.terrain.pipeline.noise import fractal_value_noise
 
 s = TerrainSettings()
 x, y = np.meshgrid(np.linspace(0, 4000, 129), np.linspace(0, 4000, 129))
@@ -89,7 +89,7 @@ for mountain surface detail within a suitable region.
 [Paper, especially limitations](https://onlinelibrary.wiley.com/doi/full/10.1111/cgf.14992).
 
 Three additional design questions follow; these are our proposals, not claims
-that the paper already solves the DM Tools constraints:
+that the paper already solves the Map Maker constraints:
 
 - **R35 — Blend relief without creating accidental escarpments.** For
   `z = (1-w)zA + wzB`, the gradient includes `(zB-zA) grad(w)`. Even two flat

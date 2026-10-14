@@ -8,11 +8,11 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from dmtools.terrain.adapters import channel_display
-from dmtools.terrain.adapters.channel_display import ChannelDisplay, reach_opacity
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.pipeline.channel_network import ChannelNetwork, build_channel_network
-from dmtools.terrain.pipeline.hydrology import DrainageIncision, drainage_incision
+from map_maker.terrain.adapters import channel_display
+from map_maker.terrain.adapters.channel_display import ChannelDisplay, reach_opacity
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.pipeline.channel_network import ChannelNetwork, build_channel_network
+from map_maker.terrain.pipeline.hydrology import DrainageIncision, drainage_incision
 
 
 @pytest.fixture

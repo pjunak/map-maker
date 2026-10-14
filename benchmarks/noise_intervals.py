@@ -12,7 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 # Inspect the existing lattice primitive without promoting a research API.
-from dmtools.terrain.pipeline.noise import (
+from map_maker.terrain.pipeline.noise import (
     _lattice_values,  # pyright: ignore[reportPrivateUsage]
     noise_band_amplitudes,
 )

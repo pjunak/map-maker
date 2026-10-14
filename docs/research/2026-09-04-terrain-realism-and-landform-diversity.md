@@ -21,7 +21,7 @@ noise, hydrology, and domain modules, their guides, tests documentation, and the
 current roadmap. External evidence was checked on 2026-09-04 using publisher
 pages, author project pages, official repositories, and vendor documentation.
 Paper results and vendor claims below are reported evidence, not measurements
-reproduced in DM Tools. No candidate engine was installed or benchmarked.
+reproduced in Map Maker. No candidate engine was installed or benchmarked.
 
 The comparison covers established GIS/scientific tools, commercial terrain
 applications, research implementations, real elevation data, and learned
@@ -44,14 +44,14 @@ claim that a particular screenshot has been diagnosed.
 | The pipeline clips terrain to nonnegative elevations in several places. | Dry depressions below sea level, submerged fjord beds, and bathymetry require a deliberate elevation/water contract change. R07. |
 | Equal shared-coordinate samples are tested, but point equality is not area-average preservation. | Choose raster sampling semantics and filtered export rules before promising parent/child conservation. R03. |
 
-Relevant code: [generation](../../src/dmtools/terrain/pipeline/generate.py),
-[hydrology](../../src/dmtools/terrain/pipeline/hydrology.py),
-[noise](../../src/dmtools/terrain/pipeline/noise.py), and
-[models](../../src/dmtools/terrain/domain/models.py).
+Relevant code: [generation](../../src/map_maker/terrain/pipeline/generate.py),
+[hydrology](../../src/map_maker/terrain/pipeline/hydrology.py),
+[noise](../../src/map_maker/terrain/pipeline/noise.py), and
+[models](../../src/map_maker/terrain/domain/models.py).
 
 For the current Aethelara source, the fixed 6,000 km sphere and world projection
 were checked against the source workspace's `Maps/SCALE_AND_PROJECTION.md`.
-Keep those constants in project inputs, not as DM Tools defaults. Returning a
+Keep those constants in project inputs, not as Map Maker defaults. Returning a
 processed regional DEM to that frame must preserve coastline coordinates;
 regional metric processing must account for latitude-dependent distortion.
 
@@ -114,7 +114,7 @@ supports treating sinkholes and underground drainage as connected phenomena.
 
 ## Papers worth prototyping
 
-Each entry separates what the source contributes from the proposed DM Tools
+Each entry separates what the source contributes from the proposed Map Maker
 use. Listed code availability does not establish installability or license
 compatibility of its entire dependency stack.
 
@@ -157,7 +157,7 @@ Earlier dated notes are retained as historical evidence.
 The current [Landlab SPACE guide](https://landlab.readthedocs.io/en/latest/tutorials/landscape_evolution/space/SPACE_user_guide_and_examples.html)
 provides concrete sediment and bedrock examples. Begin with those fields and
 known boundaries rather than introducing the entire Landlab model into the
-public DM Tools project schema.
+public Map Maker project schema.
 
 ### Commercial tools as bounded reference workflows
 

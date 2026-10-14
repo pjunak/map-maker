@@ -9,10 +9,10 @@ from numpy.typing import NDArray
 from shapely.geometry import LineString, MultiPolygon, Point, Polygon, box
 
 from benchmarks.water_convergence import probe
-from dmtools.terrain.domain import LandformSettings, TerrainRegion, TerrainSettings
-from dmtools.terrain.pipeline.generate import _constraint_weight, _water_sampling_guides
-from dmtools.terrain.pipeline.landforms import MetricRegion
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.domain import LandformSettings, TerrainRegion, TerrainSettings
+from map_maker.terrain.pipeline.generate import _constraint_weight, _water_sampling_guides
+from map_maker.terrain.pipeline.landforms import MetricRegion
+from map_maker.terrain.pipeline.water_sampling import (
     SamplingDensity,
     SamplingFeature,
     plan_ground_profile,

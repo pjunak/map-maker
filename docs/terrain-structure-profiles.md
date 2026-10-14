@@ -50,16 +50,16 @@ propagated when you edit another branch. The
 
 ## Try the public example
 
-Open [range-lowland.dmterrain.json](../examples/terrain/range-lowland.dmterrain.json)
+Open [range-lowland.terrain.json](../examples/terrain/range-lowland.terrain.json)
 and generate. It contains a main ridge with two peaks and a pass, a descending
 spur and a valley leading into a lowland region on a synthetic 1,000 km square.
 It has no campaign geography. Select one of its lines and open **Profile...**.
 For an isolated ridge junction, open
-[connected-crests.dmterrain.json](../examples/terrain/connected-crests.dmterrain.json).
+[connected-crests.terrain.json](../examples/terrain/connected-crests.terrain.json).
 Its branch meets a protected corner of the main range; profile heights agree there.
 
 ```powershell
-dmtools terrain gui --project examples/terrain/range-lowland.dmterrain.json
+map-maker terrain gui --project examples/terrain/range-lowland.terrain.json
 ```
 
 This is an authoring feature. Automatic branching, regional geology histories,

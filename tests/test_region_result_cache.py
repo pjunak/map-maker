@@ -5,16 +5,16 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from dmtools.terrain.application.region_cache import (
+from map_maker.terrain.application.region_cache import (
     MAX_RESULT_CACHE_BYTES,
     RESULT_CACHE_ENTRY_LIMIT,
     ParentRegionResult,
     RegionResultCache,
     retained_array_bytes,
 )
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
-from dmtools.terrain.pipeline.regional import RegionalTerrainSamples
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
+from map_maker.terrain.pipeline.regional import RegionalTerrainSamples
 
 
 def result() -> ParentRegionResult:

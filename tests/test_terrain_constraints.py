@@ -1,6 +1,6 @@
 import pytest
 
-from dmtools.terrain.domain import ElevationPoint, TerrainBrushStroke, TerrainStructure
+from map_maker.terrain.domain import ElevationPoint, TerrainBrushStroke, TerrainStructure
 
 
 def test_elevation_point_requires_normalized_coordinates() -> None:

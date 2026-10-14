@@ -7,11 +7,11 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
-from dmtools.terrain.domain import TerrainBasin
-from dmtools.terrain.pipeline.flat_routing import FlatRouting, route_flats
-from dmtools.terrain.pipeline.hydrology import D8_NEIGHBOURS
-from dmtools.terrain.pipeline.link_planning import basin_neighbours
-from dmtools.terrain.pipeline.water import MetricBasin, basin_intent_ids
+from map_maker.terrain.domain import TerrainBasin
+from map_maker.terrain.pipeline.flat_routing import FlatRouting, route_flats
+from map_maker.terrain.pipeline.hydrology import D8_NEIGHBOURS
+from map_maker.terrain.pipeline.link_planning import basin_neighbours
+from map_maker.terrain.pipeline.water import MetricBasin, basin_intent_ids
 
 
 def _graph(shape: tuple[int, int]) -> NDArray[np.int64]:

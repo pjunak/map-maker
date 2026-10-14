@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from dmtools.terrain.pipeline.hydrology import (
+from map_maker.terrain.pipeline.hydrology import (
     drainage_incision,
     multiple_flow_accumulation,
     priority_flood_surface,

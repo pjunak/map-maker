@@ -31,7 +31,7 @@ added. [ADR-0082](../adr/0082-own-structure-profiles.md) owns the concrete contr
 
 ## Public comparison and limits
 
-The public [range-lowland project](../../examples/terrain/range-lowland.dmterrain.json)
+The public [range-lowland project](../../examples/terrain/range-lowland.terrain.json)
 uses a synthetic 1,000 km square, a lowland recipe, a main ridge, one connected spur
 and a descending valley. Compare the same project and seed with profiles cleared
 versus authored profiles. The five-generation/preparation probe took 5.303 s.

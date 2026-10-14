@@ -3,8 +3,8 @@
 import pytest
 from PIL import Image
 
-from dmtools.terrain.adapters.viewport import render_viewport
-from dmtools.terrain.viewport import MapViewport
+from map_maker.terrain.adapters.viewport import render_viewport
+from map_maker.terrain.viewport import MapViewport
 
 
 def test_zoom_keeps_the_geographic_point_beneath_the_cursor() -> None:

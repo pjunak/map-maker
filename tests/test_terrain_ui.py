@@ -14,9 +14,9 @@ import pytest
 from PIL import Image
 
 from benchmarks.terrain import fixture
-from dmtools.terrain import ui
-from dmtools.terrain.adapters import load_terrain_project
-from dmtools.terrain.domain import (
+from map_maker.terrain import ui
+from map_maker.terrain.adapters import load_terrain_project
+from map_maker.terrain.domain import (
     ElevationPoint,
     TerrainBasin,
     TerrainBrushStroke,
@@ -24,9 +24,9 @@ from dmtools.terrain.domain import (
     TerrainStructure,
     landform_preset,
 )
-from dmtools.terrain.pipeline import GeneratedTerrain, generate_terrain
-from dmtools.terrain.pipeline.control import CancellationToken
-from dmtools.terrain.workbench import GenerationInputs
+from map_maker.terrain.pipeline import GeneratedTerrain, generate_terrain
+from map_maker.terrain.pipeline.control import CancellationToken
+from map_maker.terrain.workbench import GenerationInputs
 
 
 @pytest.fixture(scope="module")
@@ -105,7 +105,7 @@ def test_save_and_failure_do_not_relabel_stale_reference(
     monkeypatch.setattr(ui.messagebox, "showerror", showerror)
     app._variables["seed"].set(99)
     image = app._image
-    app._events.put(ui._ProjectSavedEvent(Path("test.dmterrain.json"), app._generation_inputs()))
+    app._events.put(ui._ProjectSavedEvent(Path("test.terrain.json"), app._generation_inputs()))
     app._poll_events()
     assert str(app.export_button["state"]) == "disabled"
     app._events.put(ui._ErrorEvent("Failed", "Generation failed", ValueError("test")))
@@ -402,13 +402,13 @@ def test_input_shortcuts_leave_typing_alone_and_busy_workers_lock_inputs(
 def test_save_as_then_save_uses_known_path_and_roundtrips_edits(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    source = Path("examples/terrain/landform-regions.dmterrain.json")
+    source = Path("examples/terrain/landform-regions.terrain.json")
     source_bytes = source.read_bytes()
     app._accept_project(load_terrain_project(source))
     assert not app._document_is_dirty()
     app._set_resolution(257)
     assert app._document_is_dirty() and app.root.title().startswith("* ")
-    destination = tmp_path / "edited.dmterrain.json"
+    destination = tmp_path / "edited.terrain.json"
     dialogs: list[str] = []
     def save_dialog(**_kwargs: object) -> str:
         dialogs.append("save as")
@@ -442,7 +442,7 @@ def test_unsaved_guard_can_cancel_or_discard(
 def test_save_guard_waits_for_success_and_cancelled_dialog_keeps_document_open(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    app._accept_project(load_terrain_project(Path("examples/terrain/landform-regions.dmterrain.json")))
+    app._accept_project(load_terrain_project(Path("examples/terrain/landform-regions.terrain.json")))
     app._project_path = None
     app._variables["seed"].set(24)
     calls: list[str] = []
@@ -455,7 +455,7 @@ def test_save_guard_waits_for_success_and_cancelled_dialog_keeps_document_open(
     monkeypatch.setattr(ui.filedialog, "asksaveasfilename", save_dialog)
     app._guard_unsaved(lambda: calls.append("continued"))
     assert not calls and not app._busy and app._document_is_dirty()
-    destination = str(tmp_path / "saved.dmterrain.json")
+    destination = str(tmp_path / "saved.terrain.json")
     app._guard_unsaved(lambda: calls.append("continued"))
     assert not calls and app._busy
     _wait_for_operation(app)
@@ -465,8 +465,8 @@ def test_save_guard_waits_for_success_and_cancelled_dialog_keeps_document_open(
 def test_failed_or_outdated_save_never_runs_destructive_continuation(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    app._accept_project(load_terrain_project(Path("examples/terrain/landform-regions.dmterrain.json")))
-    app._project_path = tmp_path / "saved.dmterrain.json"
+    app._accept_project(load_terrain_project(Path("examples/terrain/landform-regions.terrain.json")))
+    app._project_path = tmp_path / "saved.terrain.json"
     app._variables["seed"].set(42)
     calls: list[str] = []
     errors: list[object] = []
@@ -504,8 +504,8 @@ def test_select_click_cannot_move_an_instruction_when_the_properties_change_layo
 def test_water_visibility_tracks_zoom_and_style_without_changing_or_exporting_viewport(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
-    from dmtools.terrain.adapters.render import render_height_map, render_height_map_layers
-    from dmtools.terrain.adapters.water_display import WATER_COLOUR, WATER_DISPLAY_ID
+    from map_maker.terrain.adapters.render import render_height_map, render_height_map_layers
+    from map_maker.terrain.adapters.water_display import WATER_COLOUR, WATER_DISPLAY_ID
 
     terrain = app._terrain
     assert terrain is not None
@@ -535,7 +535,7 @@ def test_water_visibility_tracks_zoom_and_style_without_changing_or_exporting_vi
     with Image.open(export) as exported, render_height_map(terrain) as expected:
         assert exported.size == image.size
         assert exported.tobytes() == expected.tobytes()
-        assert exported.info["dmtools.water_visibility"] == WATER_DISPLAY_ID
+        assert exported.info["map-maker.water_visibility"] == WATER_DISPLAY_ID
     app._render_style_label.set("Scientific elevation")
     app._on_render_style_changed()
     assert app._water_display is None
@@ -770,7 +770,7 @@ def test_successful_style_switch_releases_previous_ground_and_water(app: ui.Terr
     _assert_closed(ground, pool)
     assert app._image is not None and app._image.getpixel((0, 0)) is not None
     assert app._water_display is None
-    assert app._image.info["dmtools.render_style"] == "scientific"
+    assert app._image.info["map-maker.render_style"] == "scientific"
 
 
 def test_failed_style_switch_keeps_pixels_water_and_legend(
@@ -1007,7 +1007,7 @@ def test_region_hole_selection_and_vertex_drag_preserve_the_cutout(app: ui.Terra
 def test_line_profile_action_uses_history_and_retains_the_generated_reference(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.domain import StructureProfileKnot as Knot
+    from map_maker.terrain.domain import StructureProfileKnot as Knot
     ridge = TerrainStructure("ridge", ((.2, .4), (.8, .4)), 1200., 40., "relative")
     app._history.append(ridge)
     app._select_instruction(1)
@@ -1032,7 +1032,7 @@ def test_line_profile_action_uses_history_and_retains_the_generated_reference(
 def test_ridge_junction_failure_reaches_editor_without_replacing_reference(
     app: ui.TerrainApp, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.domain import StructureProfileKnot as Knot
+    from map_maker.terrain.domain import StructureProfileKnot as Knot
     main = TerrainStructure("ridge", ((.2, .4), (.8, .4)), 2000., 40.,
                             profile=(Knot(0., 2000.), Knot(1., 2000.)))
     branch = TerrainStructure("ridge", ((.5, .4), (.5, .8)), 1800., 30.,

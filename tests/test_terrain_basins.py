@@ -6,16 +6,16 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from dmtools.terrain.domain import Coastline, TerrainSettings
-from dmtools.terrain.pipeline.basins import (
+from map_maker.terrain.domain import Coastline, TerrainSettings
+from map_maker.terrain.pipeline.basins import (
     ENCLOSED_BOUNDARY,
     ENCLOSED_WATER,
     EXTERIOR_BOUNDARY,
     EXTERIOR_WATER,
     boundary_context,
 )
-from dmtools.terrain.pipeline.diagnostics import DrainageAnalysis, analyze_drainage
-from dmtools.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.diagnostics import DrainageAnalysis, analyze_drainage
+from map_maker.terrain.pipeline.generate import generate_terrain
 
 
 def _analyze(surface: NDArray[np.float64]) -> DrainageAnalysis:

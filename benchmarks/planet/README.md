@@ -1,7 +1,7 @@
 # Planet development tools
 
 Whole-planet relief is a product command since ADR-0085:
-`dmtools world planet` ([guide](../../docs/world-planet.md)). This folder holds the
+`map-maker world planet` ([guide](../../docs/world-planet.md)). This folder holds the
 development fixtures and measurements used to build and check it.
 
 ```powershell
@@ -9,10 +9,10 @@ development fixtures and measurements used to build and check it.
 .\.venv\Scripts\python.exe -m benchmarks.planet.synthetic_world --seed 7 --output artifacts/planet/worlds
 
 # A sample geology recipe for that world (old interiors, young/worn belts, plateaus, basins).
-.\.venv\Scripts\python.exe -m benchmarks.planet.sample_geology artifacts/planet/worlds/fractal-world.dmworld.json --output artifacts/planet/worlds/fractal-world.dmgeology.json
+.\.venv\Scripts\python.exe -m benchmarks.planet.sample_geology artifacts/planet/worlds/fractal-world.world.json --output artifacts/planet/worlds/fractal-world.geology.json
 
 # Resolution sweep: relief statistics should converge as the mesh is refined.
-.\.venv\Scripts\python.exe -m benchmarks.planet.sweep artifacts/planet/worlds/fractal-world.dmworld.json --nodes 50000 200000 800000
+.\.venv\Scripts\python.exe -m benchmarks.planet.sweep artifacts/planet/worlds/fractal-world.world.json --nodes 50000 200000 800000
 
 # Landform scales of a build (range widths, valley spacing, river lengths vs Earth).
 .\.venv\Scripts\python.exe -m benchmarks.planet.scale_metrics my-planet --json scales.json

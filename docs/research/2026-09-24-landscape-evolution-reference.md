@@ -47,7 +47,7 @@ precede that gate. This result does not require a Python-to-Rust rewrite.
 The [command guide](../../benchmarks/evolution/README.md) owns setup, exact model
 parameters and reproducible commands. Implementation lives in
 [`benchmarks/evolution/`](../../benchmarks/evolution/README.md), with
-[domain inputs](../../src/dmtools/terrain/domain/evolution.py) and
+[domain inputs](../../src/map_maker/terrain/domain/evolution.py) and
 [numerical tests](../../tests/test_evolution_reference.py).
 
 ## Frozen experiment and provenance

@@ -7,13 +7,13 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.parent import load_terrain_parent
-from dmtools.terrain.application.parent_region import ParentRegionSession, sample_parent_region
-from dmtools.terrain.application.region_cache import DEFAULT_RESULT_CACHE_BYTES
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.domain.coordinates import Bounds
-from dmtools.terrain.domain.regional import RegionalDetailSettings
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.parent import load_terrain_parent
+from map_maker.terrain.application.parent_region import ParentRegionSession, sample_parent_region
+from map_maker.terrain.application.region_cache import DEFAULT_RESULT_CACHE_BYTES
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.domain.coordinates import Bounds
+from map_maker.terrain.domain.regional import RegionalDetailSettings
 
 
 def workload(grid: EndpointGrid) -> list[tuple[str, Bounds, int]]:

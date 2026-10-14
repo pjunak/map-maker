@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-09-04
-**Deciders:** Project owner and DM Tools maintainers
+**Deciders:** Project owner and Map Maker maintainers
 
 ## Context
 

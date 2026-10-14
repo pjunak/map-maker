@@ -7,14 +7,14 @@ from threading import Barrier
 
 import pytest
 
-from dmtools.terrain.application.region_memory import (
+from map_maker.terrain.application.region_memory import (
     ParentMemoryEstimate,
     RegionalMemoryAdmissionError,
     RegionalMemoryBudget,
     estimate_regional_job,
 )
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
 
 
 @pytest.mark.parametrize("value", [0, -1, True, 1.5])

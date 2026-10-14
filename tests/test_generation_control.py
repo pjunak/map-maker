@@ -8,16 +8,16 @@ import numpy as np
 import pytest
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.application import build as build_application
-from dmtools.terrain.application import regional as regional_application
-from dmtools.terrain.pipeline.control import (
+from map_maker.terrain.application import build as build_application
+from map_maker.terrain.application import regional as regional_application
+from map_maker.terrain.pipeline.control import (
     CancellationToken,
     GenerationCancelled,
     cancellable_progress,
 )
-from dmtools.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.generate import generate_terrain
 
-generation = import_module("dmtools.terrain.pipeline.generate")
+generation = import_module("map_maker.terrain.pipeline.generate")
 
 
 def test_progress_checks_both_sides_of_callback_and_cancelled_tokens_stay_cancelled() -> None:

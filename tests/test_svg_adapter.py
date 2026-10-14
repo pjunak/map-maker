@@ -6,7 +6,7 @@ import pytest
 from shapely.geometry import Point, Polygon
 from svgelements import Path as SvgPath
 
-from dmtools.terrain.adapters.svg import CoastlineInputError, load_svg_coastline
+from map_maker.terrain.adapters.svg import CoastlineInputError, load_svg_coastline
 
 FIXTURES = Path(__file__).parent / "fixtures" / "terrain"
 

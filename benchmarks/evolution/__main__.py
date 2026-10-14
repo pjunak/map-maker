@@ -24,8 +24,8 @@ from benchmarks.evolution.metrics import main_profile, measure
 from benchmarks.evolution.reference import evolve
 from benchmarks.evolution.scenarios import CASES, HistoryCase, history, scenario, scenario_identity
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EVOLUTION_MODEL_ID, EvolutionBudget, EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EVOLUTION_MODEL_ID, EvolutionBudget, EvolutionGrid
 
 
 def worker(path: Path) -> None:

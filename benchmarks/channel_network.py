@@ -12,12 +12,12 @@ from typing import Any
 import numpy as np
 
 from benchmarks import terrain as fixtures
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.channel_display import CHANNEL_DISPLAY_ID, prepare_channel_display
-from dmtools.terrain.adapters.render import render_drainage_overlay, render_height_map
-from dmtools.terrain.adapters.viewport import render_viewport
-from dmtools.terrain.pipeline.channel_network import CHANNEL_NETWORK_ID
-from dmtools.terrain.pipeline.generate import (
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.channel_display import CHANNEL_DISPLAY_ID, prepare_channel_display
+from map_maker.terrain.adapters.render import render_drainage_overlay, render_height_map
+from map_maker.terrain.adapters.viewport import render_viewport
+from map_maker.terrain.pipeline.channel_network import CHANNEL_NETWORK_ID
+from map_maker.terrain.pipeline.generate import (
     AUTOMATIC_VALLEY_ALGORITHM_ID,
     GENERATOR_ALGORITHM_ID,
     generate_terrain,
@@ -115,7 +115,7 @@ def main() -> None:
         raise RuntimeError("Source/runtime changed during drainage-network measurement")
     with (args.output/"report.json").open("xb") as stream:
         stream.write(canonical_json({
-            "schema": "dmtools.channel-network-experiment", "schema_version": 1,
+            "schema": "map-maker.channel-network-experiment", "schema_version": 1,
             "complete": True, "runtime": runtime, "benchmark_source_sha256": source_hash,
             "fixture_source_sha256": fixture_hash, "algorithms": {
                 "generator": GENERATOR_ALGORITHM_ID,

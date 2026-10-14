@@ -15,22 +15,22 @@ from typing import Any
 import numpy as np
 
 from benchmarks import detail_metrics
-from dmtools.terrain.adapters.build import file_sha256, runtime_identity
-from dmtools.terrain.adapters.parent import load_terrain_parent
-from dmtools.terrain.adapters.parent_region import (
+from map_maker.terrain.adapters.build import file_sha256, runtime_identity
+from map_maker.terrain.adapters.parent import load_terrain_parent
+from map_maker.terrain.adapters.parent_region import (
     publish_parent_region_manifest,
     write_parent_region_products,
 )
-from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_project
-from dmtools.terrain.application.build import build_terrain_project
-from dmtools.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
-from dmtools.terrain.pipeline.detail import LOCAL_DETAIL_ALGORITHM_ID, prepare_regional_detail
-from dmtools.terrain.pipeline.parent import prepare_verified_parent
+from map_maker.terrain.adapters.project import load_terrain_project, save_terrain_project
+from map_maker.terrain.application.build import build_terrain_project
+from map_maker.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
+from map_maker.terrain.pipeline.detail import LOCAL_DETAIL_ALGORITHM_ID, prepare_regional_detail
+from map_maker.terrain.pipeline.parent import prepare_verified_parent
 
 PROJECTS = {
-    "example": "example.dmterrain.json",
-    "regional": "landform-regions.dmterrain.json",
-    "water": "basin-water.dmterrain.json",
+    "example": "example.terrain.json",
+    "regional": "landform-regions.terrain.json",
+    "water": "basin-water.terrain.json",
 }
 ROOT = Path(__file__).parents[1]
 
@@ -46,7 +46,7 @@ def _measure(
             loaded_project.project.settings, seed=seed, resolution_px=65, detail_levels=2
         ),
     )
-    path = destination / "project.dmterrain.json"
+    path = destination / "project.terrain.json"
     save_terrain_project(project, loaded_project.coastline_source, path)
     start = perf_counter()
     parent_directory = destination / "parent"

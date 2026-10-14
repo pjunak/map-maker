@@ -5,7 +5,7 @@
 The public examples are a few hand-placed polygons. Whole-world terrain needs
 inputs with realistic coast complexity, a seam-crossing continent, a polar
 landmass, inland seas and many islands. This writes such a world as an SVG in
-the importer's Plate Carree convention plus a reviewed ``.dmworld.json``.
+the importer's Plate Carree convention plus a reviewed ``.world.json``.
 
 Generated worlds are development fixtures, not authored canon.
 """
@@ -23,9 +23,9 @@ from rasterio import features
 from scipy import ndimage
 from shapely.geometry import MultiPolygon, Polygon, shape
 
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application.world import propose_group_assignments, save_world
-from dmtools.terrain.domain.world import WorldFrame, WorldProject
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application.world import propose_group_assignments, save_world
+from map_maker.terrain.domain.world import WorldFrame, WorldProject
 
 type Array = NDArray[np.float64]
 
@@ -253,7 +253,7 @@ def build_world(spec: WorldSpec, directory: Path, name: str) -> Path:
         continents,
         assignments,
     )
-    destination = directory / f"{name}.dmworld.json"
+    destination = directory / f"{name}.world.json"
     save_world(project, destination)
     return destination
 

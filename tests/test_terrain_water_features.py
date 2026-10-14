@@ -8,7 +8,7 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import LineString, Point
 
-from dmtools.terrain.pipeline.water_sampling import SamplingFeature, sample_ground_profile
+from map_maker.terrain.pipeline.water_sampling import SamplingFeature, sample_ground_profile
 
 
 def _flat(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float32]:
@@ -100,7 +100,7 @@ def test_feature_budget_is_checked_before_sampling_and_overlaps_do_not_inflate_i
     # Exact budget acceptance on a small, overlapping feature plan.
     small = replace(feature, influence_radius_km=.1, minimum_radius_km=.1)
     clear = sample_ground_profile(((0., 0.), (1., 0.)), .25, _flat, (small,))
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES",
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES",
                         clear.requested_sample_count)
     assert sample_ground_profile(((0., 0.), (1., 0.)), .25, _flat, (small, small)) == clear
 

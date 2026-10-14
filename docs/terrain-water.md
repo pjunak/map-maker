@@ -10,7 +10,7 @@ Generate terrain to apply retention. Enable **Basin catchments** to locate
 retained areas and the water/land feeding an outlet; teal lines show its connected
 route. **Basin details** reports collected and retained sample counts, contributing
 areas, outlet ground versus water level, shoreline findings and downstream routes. The public
-[water example](../examples/terrain/basin-water.dmterrain.json) contains one lake
+[water example](../examples/terrain/basin-water.terrain.json) contains one lake
 and one dry basin on the synthetic public coastline.
 
 For saved projects, the read-only [water-budget command](terrain-water-budget.md)
@@ -477,7 +477,7 @@ below includes upstream inheritance too. **Basin details** explains both stages
 and the budget result. The review draws up to 12 strongest dry-link/path crests
 per basin, at least 16 display pixels apart; every candidate remains in exported
 diagnostics. These markers report sampled evidence, not a complete ridge map.
-The [dry-barrier example](../examples/terrain/dry-collection-barrier.dmterrain.json)
+The [dry-barrier example](../examples/terrain/dry-collection-barrier.terrain.json)
 adds a relative +150 m point with 100 m influence radius. Finer probes expose a
 131.44 m climb and a clear alternative still carries the donor's contribution.
 
@@ -530,10 +530,10 @@ An imbalance outside the floating-point tolerance fails the build. Per-basin
 captured area equals retained area plus `outlet_contributing_area_km2`. The
 `basin_flow_sha256` and manifest bind the archive to the other products.
 
-The [connected-outlet example](../examples/terrain/connected-outlet.dmterrain.json)
+The [connected-outlet example](../examples/terrain/connected-outlet.terrain.json)
 authors a narrow valley all the way to the public coast. Part of its captured
 area drains through the lake; isolated dry pockets remain retained. The
-[flat-outlet example](../examples/terrain/flat-outlet.dmterrain.json) adds a
+[flat-outlet example](../examples/terrain/flat-outlet.terrain.json) adds a
 zero-relief plateau and narrower height influences to exercise exact flat
 routing alongside retained pits. It uses five detail octaves so the complete dry
 network fits the current sample budget. At six octaves, finer width-detail probes

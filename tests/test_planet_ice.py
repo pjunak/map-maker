@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from dmtools.terrain.pipeline.planet_ice import (
+from map_maker.terrain.pipeline.planet_ice import (
     MELT_FLOOR_C,
     IceSheets,
     equilibrium_line_c,
@@ -14,7 +14,7 @@ from dmtools.terrain.pipeline.planet_ice import (
     nye_thickness,
     surface_balance,
 )
-from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
+from map_maker.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
 
 RADIUS = 6.371e6
 
@@ -107,7 +107,7 @@ def test_only_large_ice_bodies_that_bury_their_bed_are_drawn_as_sheets() -> None
 
 
 def test_bed_relief_for_ice_sheets_does_not_depend_on_the_mesh() -> None:
-    from dmtools.terrain.pipeline.planet_ice import local_relief
+    from map_maker.terrain.pipeline.planet_ice import local_relief
 
     # Hills of 2,000 km wavelength: relief between neighbouring nodes about
     # halves on a mesh twice as fine; relief at a fixed scale stays.
@@ -127,7 +127,7 @@ def test_bed_relief_for_ice_sheets_does_not_depend_on_the_mesh() -> None:
 
 
 def test_ice_rises_steeply_from_its_margin_and_lies_only_inside_it() -> None:
-    from dmtools.terrain.adapters.planet_natural import ice_surface
+    from map_maker.terrain.adapters.planet_natural import ice_surface
 
     margin = np.linspace(-5e3, 60e3, 131)
     thickness = np.full(margin.shape, 2000.0)
@@ -147,7 +147,7 @@ def test_ice_sheets_of_a_planet_without_climate_are_empty() -> None:
 
 
 def test_ice_sheets_show_firn_above_their_equilibrium_line_and_bare_ice_below() -> None:
-    from dmtools.terrain.adapters.planet_natural import IcePixels, PixelClimate, land_colour
+    from map_maker.terrain.adapters.planet_natural import IcePixels, PixelClimate, land_colour
 
     shape = (1, 3)
     points = np.tile([0.0, 0.0, 1.0], (3, 1))

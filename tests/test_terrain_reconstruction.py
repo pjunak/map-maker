@@ -6,8 +6,8 @@ import pytest
 from numpy.typing import NDArray
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.pipeline import generate as generation
-from dmtools.terrain.pipeline.reconstruction import BoundedBicubicGrid
+from map_maker.terrain.pipeline import generate as generation
+from map_maker.terrain.pipeline.reconstruction import BoundedBicubicGrid
 
 type FloatArray = NDArray[np.float64]
 

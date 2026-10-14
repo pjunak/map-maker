@@ -8,12 +8,12 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Point, Polygon
 
-from dmtools.terrain.domain import TerrainBasin
-from dmtools.terrain.pipeline.basin_flow import _collect_basin
-from dmtools.terrain.pipeline.dry_links import route_dry_links
-from dmtools.terrain.pipeline.hydrology import D8_NEIGHBOURS
-from dmtools.terrain.pipeline.water import MetricBasin
-from dmtools.terrain.pipeline.water_sampling import SamplingFeature
+from map_maker.terrain.domain import TerrainBasin
+from map_maker.terrain.pipeline.basin_flow import _collect_basin
+from map_maker.terrain.pipeline.dry_links import route_dry_links
+from map_maker.terrain.pipeline.hydrology import D8_NEIGHBOURS
+from map_maker.terrain.pipeline.water import MetricBasin
+from map_maker.terrain.pipeline.water_sampling import SamplingFeature
 
 
 def _graph(values: list[int]) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
@@ -146,9 +146,9 @@ def test_excessive_network_has_no_evaluation_or_accepted_dry_prefix(
     ground = np.full((6, 6), 10., dtype=np.float64)
     features: tuple[SamplingFeature, ...] = ()
     if limit == "profile":
-        monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 4)
+        monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 4)
     else:
-        monkeypatch.setattr("dmtools.terrain.pipeline.dry_links.MAX_DRY_LINK_SAMPLES",
+        monkeypatch.setattr("map_maker.terrain.pipeline.dry_links.MAX_DRY_LINK_SAMPLES",
                             9 if limit == "network" else 10)
         if limit == "refinement":
             features = (SamplingFeature(Point(1.371, 2.), .001, .001),)
@@ -168,7 +168,7 @@ def test_endpoint_identity_and_bounded_batches(monkeypatch: pytest.MonkeyPatch) 
     axis = np.arange(6, dtype=np.float64)
     ground = np.full((6, 6), 10., dtype=np.float64)
     sizes: list[int] = []
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 3)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 3)
     def sampler(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float32]:
         sizes.append(len(x))
         return np.full(x.shape, 10., dtype=np.float32)

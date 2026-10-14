@@ -3,7 +3,7 @@
 Generate a saved project without opening the desktop workbench:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe terrain build examples/terrain/example.dmterrain.json --output artifacts/example-build
+.\.venv\Scripts\map-maker.exe terrain build examples/terrain/example.terrain.json --output artifacts/example-build
 ```
 
 Choose a **new output directory** for every build. The command rejects an
@@ -75,7 +75,7 @@ print(float(elevation_m[land].min()), float(elevation_m[land].max()))
 ```
 
 `inputs.json` is for provenance; it is not accepted by **Open project**.
-Retain the original `.dmterrain.json` and its SVG to regenerate through the
+Retain the original `.terrain.json` and its SVG to regenerate through the
 supported loader. Portable project bundles remain separate future work.
 
 ## Read the diagnostics

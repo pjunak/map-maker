@@ -10,23 +10,23 @@ import pytest
 from PIL import Image
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.adapters import render as renderer
-from dmtools.terrain.adapters import water_display as water_module
-from dmtools.terrain.adapters.render import (
+from map_maker.terrain.adapters import render as renderer
+from map_maker.terrain.adapters import water_display as water_module
+from map_maker.terrain.adapters.render import (
     compose_height_map,
     render_height_map,
     render_height_map_layers,
     save_height_map,
 )
-from dmtools.terrain.adapters.viewport import render_viewport
-from dmtools.terrain.adapters.water_display import (
+from map_maker.terrain.adapters.viewport import render_viewport
+from map_maker.terrain.adapters.water_display import (
     WATER_COLOUR,
     WATER_DISPLAY_ID,
     WaterDisplay,
     prepare_water_display,
 )
-from dmtools.terrain.pipeline import generate_terrain
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline import generate_terrain
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 
 
 def _display(wet: np.ndarray) -> WaterDisplay:
@@ -151,11 +151,11 @@ def test_export_scale_metadata_and_scientific_ground_are_separate(tmp_path: Path
         assert cartographic.getpixel((25, 25)) == (*WATER_COLOUR, 255)
         assert cartographic.getpixel((40, 40)) == image.getpixel((40, 40))
         assert scientific.tobytes() == dry_scientific.tobytes()
-        assert scientific.info["dmtools.water_visibility"] == "none"
+        assert scientific.info["map-maker.water_visibility"] == "none"
         destination = tmp_path / "water.png"
         save_height_map(composed, terrain, destination)
         with Image.open(destination) as saved:
-            assert saved.info["dmtools.water_visibility"] == WATER_DISPLAY_ID
+            assert saved.info["map-maker.water_visibility"] == WATER_DISPLAY_ID
             assert saved.tobytes() == cartographic.tobytes()
         # View rendering must not affect a later full-map export.
         with water.render((-100., -100., 500., 500.), (80, 60)):

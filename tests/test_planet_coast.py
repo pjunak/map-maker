@@ -12,11 +12,11 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.pipeline.planet_coast import Coastline, coastline
-from dmtools.terrain.pipeline.planet_forcing import source_xy
-from dmtools.terrain.pipeline.planet_patch import inverse_aeqd
-from dmtools.terrain.pipeline.world import WorldMap
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.pipeline.planet_coast import Coastline, coastline
+from map_maker.terrain.pipeline.planet_forcing import source_xy
+from map_maker.terrain.pipeline.planet_patch import inverse_aeqd
+from map_maker.terrain.pipeline.world import WorldMap
 
 SEED = 20261006
 
@@ -121,7 +121,7 @@ def test_land_cut_by_the_frame_stays_joined_across_the_seam(world: WorldMap) -> 
 def test_a_coast_drawn_with_detail_only_gains_finer_detail(world: WorldMap) -> None:
     from dataclasses import replace
 
-    from dmtools.terrain.pipeline.planet_coast import displace
+    from map_maker.terrain.pipeline.planet_coast import displace
 
     full = coastline(world)
     drawn = coastline(replace(world, project=replace(world.project, coast_detail_km=10.0)))

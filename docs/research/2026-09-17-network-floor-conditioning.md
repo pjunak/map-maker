@@ -103,7 +103,7 @@ sampled rise is still 315.33 m, and no continuous descent is certified.
 
 The maintained `benchmarks.terrain` harness ran five public cases at 513 px,
 seeds 42 and 20260902, three fresh-process repeats per version: 60 runs. Baseline
-source was extracted with `git archive a55c9cd src/dmtools` and selected through
+source was extracted with `git archive a55c9cd src/map_maker` and selected through
 `PYTHONPATH` in separate processes. Sources stayed fixed throughout measurement;
 no tests or other terrain workload ran during timing. File export is excluded.
 Runtime was CPython 3.14.7 / Windows 11 AMD64; reports retain full source,

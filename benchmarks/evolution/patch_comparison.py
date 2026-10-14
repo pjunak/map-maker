@@ -24,8 +24,8 @@ from benchmarks.evolution.valley_patches import (
 )
 from benchmarks.evolution.valley_support import prepare_support
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def inspect_surface(

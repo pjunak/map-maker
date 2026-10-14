@@ -1,6 +1,6 @@
 # Whole-planet relief, climate and biomes (experimental)
 
-`dmtools world planet` turns a saved world (`.dmworld.json`) into a whole-planet
+`map-maker world planet` turns a saved world (`.world.json`) into a whole-planet
 map. It produces:
 - relief made by uplift and river erosion;
 - an ocean floor;
@@ -10,7 +10,7 @@ map. It produces:
 - river lines.
 
 The planet keeps your coastline, except near the poles (see below); zoomed maps
-only add detail finer than you drew it. An optional geology recipe (`.dmgeology.json`)
+only add detail finer than you drew it. An optional geology recipe (`.geology.json`)
 says where mountains, plateaus, old worn ranges and basins should be. The
 generator honours those elevations approximately and lets erosion shape every
 valley and divide.
@@ -106,7 +106,7 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   your map already carries that detail, for example one exported from a planet's
   refined coast, enter the finest detail it carries as **Coast detail already
   drawn** in the Planet step: zoomed maps then keep its coast unsmoothed and add
-  only finer detail. `dmtools world refine-coast` makes such a map: see
+  only finer detail. `map-maker world refine-coast` makes such a map: see
   [The refined coast as a source map](#the-refined-coast-as-a-source-map).
 - Volcanoes, impact craters and chasms are drawn sharply, chasm outlines down to
   the map's own scale. Closed hollows deeper than 10 m (crater troughs, chasm
@@ -133,8 +133,8 @@ a few minutes.
 A saved build can be viewed the same way from the command line:
 
 ```powershell
-dmtools world view my-planet --theme atlas --projection globe --lon 40 --lat 20 --graticule --output globe.png
-dmtools world view my-planet --theme koppen --projection north-polar --limit 30 --output arctic.png
+map-maker world view my-planet --theme atlas --projection globe --lon 40 --lat 20 --graticule --output globe.png
+map-maker world view my-planet --theme koppen --projection north-polar --limit 30 --output arctic.png
 ```
 
 `--theme` is a build image's name without `.png`: `atlas`, `relief`, `koppen`,
@@ -150,8 +150,8 @@ file ([ADR-0087](adr/0087-map-themes-and-projections.md)).
 ## Run it from the command line
 
 ```powershell
-dmtools world planet my-world.dmworld.json --output my-planet
-dmtools world planet my-world.dmworld.json --geology my-world.dmgeology.json --output my-planet-geo
+map-maker world planet my-world.world.json --output my-planet
+map-maker world planet my-world.world.json --geology my-world.geology.json --output my-planet-geo
 ```
 
 The output folder must not exist. Progress is printed. A cancelled or failed run
@@ -184,7 +184,7 @@ Typical times on a 16-thread desktop:
 Regional detail for an exported planet:
 
 ```powershell
-dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-region
+map-maker world region my-planet --lon 61 --lat -39.6 --radius-km 500 --output my-region
 ```
 
 Tiles are cached in `my-planet.tiles/` beside the build and reused by later regions.
@@ -199,7 +199,7 @@ windows at the same level agree wherever they overlap
 | 3 local | 200 m | up to 60 km | a few valleys, a town's surroundings |
 
 ```powershell
-dmtools world region my-planet --lon 61 --lat -39.6 --radius-km 120 --level 2 --output my-province
+map-maker world region my-planet --lon 61 --lat -39.6 --radius-km 120 --level 2 --output my-province
 ```
 
 The first deep window takes a few minutes, because it also generates the coarser
@@ -211,7 +211,7 @@ Zoomed maps draw your coast with more detail than you drew, and the planet
 reshapes polar land. To see, edit or adopt that coast, export it as a new SVG:
 
 ```powershell
-dmtools world refine-coast my-world.dmworld.json --output my-world-refined.svg
+map-maker world refine-coast my-world.world.json --output my-world-refined.svg
 ```
 
 - `--detail-km` sets the finest coast wavelength drawn (10 km by default; finer
@@ -259,7 +259,7 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 | `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
 | `volcanoes.geojson` | Volcano points with kind (stratovolcano, shield, caldera, seamount), setting (arc, hotspot, rift, intraplate), activity, age, summit height and size. |
 | `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields, and ice thickness and mass balance. |
-| `world.dmworld.json`, `geology.dmgeology.json` | Snapshots of the inputs used. |
+| `input.world.json`, `input.geology.json` | Snapshots of the inputs used. |
 | `manifest.json` | Settings, stage seeds, input hashes, runtime, calibration, metrics and output hashes ([schema](../schemas/world/planet-build-v1.schema.json)). |
 
 **Aligning with your drawing.** Images and the GeoTIFF cover exactly your SVG

@@ -8,8 +8,8 @@ import numpy as np
 from benchmarks.channel_profiles import measure_channels
 from benchmarks.evolution.reference import LandlabReference, Snapshot
 from benchmarks.evolution.scenarios import EvolutionFields
-from dmtools.terrain.domain.evolution import EvolutionEpoch, EvolutionHistory
-from dmtools.terrain.domain.models import (
+from map_maker.terrain.domain.evolution import EvolutionEpoch, EvolutionHistory
+from map_maker.terrain.domain.models import (
     Coastline,
     LandformSettings,
     TerrainConstraint,
@@ -17,7 +17,7 @@ from dmtools.terrain.domain.models import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.pipeline.generate import prepare_terrain_field
+from map_maker.terrain.pipeline.generate import prepare_terrain_field
 
 
 def baseline(

@@ -5,7 +5,7 @@ origin and aspect ratio; `object_scale_km` sets the **longest dimension**, not
 necessarily the width. Axes increase source-right and source-down.
 
 `LocalMetricFrame` in
-[the domain](../src/dmtools/terrain/domain/coordinates.py) owns this conversion:
+[the domain](../src/map_maker/terrain/domain/coordinates.py) owns this conversion:
 
 ```text
 scale = longest_side_km / max(source_width, source_height)
@@ -59,7 +59,7 @@ reference, core, buffered and complete-source canonical routing grids.
 
 [World projects](terrain-worlds.md) now declare a full-world spherical Plate Carrée
 frame, radius in kilometres and central meridian. `WorldFrame` in
-[the world domain](../src/dmtools/terrain/domain/world.py) owns reversible
+[the world domain](../src/map_maker/terrain/domain/world.py) owns reversible
 source-to-sphere conversion and great-circle distances:
 
 ```text

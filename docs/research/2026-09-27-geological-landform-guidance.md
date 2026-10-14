@@ -30,8 +30,8 @@ compatibility loader or private-map rewrite is included.
 
 ## Small public comparison
 
-Inputs are the committed [example world](../../examples/world/landform-world.dmworld.json)
-and [recipe](../../examples/world/landform-world.dmgeology.json): two contiguous
+Inputs are the committed [example world](../../examples/world/landform-world.world.json)
+and [recipe](../../examples/world/landform-world.geology.json): two contiguous
 continent labels, an island, a western mountain belt, eastern plateau and nested
 lowland. The world radius is 2,000 km; seed 42, 257 pixels and coastal rise 80 km.
 These invented inputs are demonstrations, not Aethelara lore or physical calibration.

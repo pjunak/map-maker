@@ -18,7 +18,7 @@ one quarter of the evaluator's narrowest core radius. Width taper and attached
 absolute-point factors come from the evaluator. Failed budgets return no partial
 evidence. The sampler remains a typed Python stage, with no new dependency.
 
-The new [200 m example](../../examples/terrain/narrow-shoreline-gap.dmterrain.json)
+The new [200 m example](../../examples/terrain/narrow-shoreline-gap.terrain.json)
 is blocked with 11 low samples outside the opening. Its boundary uses 1,151
 samples, 69 more than the 1,082-station baseline, with a smallest local spacing
 limit of 50 m. The exact low point is sampled. Both 200 m and 20 m cases retain

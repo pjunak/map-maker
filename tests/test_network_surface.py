@@ -18,9 +18,9 @@ from benchmarks.evolution.constrained import (
 from benchmarks.evolution.network import RiverNetwork
 from benchmarks.evolution.network_fixture import fixture, valley_target
 from benchmarks.evolution.paths import FloatArray, measure_paths
-from dmtools.terrain.domain import LandformSettings
-from dmtools.terrain.domain.evolution import EvolutionGrid
-from dmtools.terrain.pipeline.landforms import regional_incision_budget, regional_incision_limit
+from map_maker.terrain.domain import LandformSettings
+from map_maker.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.pipeline.landforms import regional_incision_budget, regional_incision_limit
 
 
 @pytest.mark.parametrize("spacing", [1000.0, 500.0, 250.0])

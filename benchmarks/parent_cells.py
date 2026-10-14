@@ -10,7 +10,7 @@ from math import isfinite
 import numpy as np
 from numpy.typing import NDArray
 
-from dmtools.terrain.domain.regional import REGIONAL_SAMPLE_LIMIT
+from map_maker.terrain.domain.regional import REGIONAL_SAMPLE_LIMIT
 
 PARENT_CELL_METHOD_ID = "parent-cell-bubble-projection@1"
 PARENT_RESTRICTION_ID = "endpoint-bilinear-trapezoid@1"

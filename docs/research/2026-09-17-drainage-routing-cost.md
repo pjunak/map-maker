@@ -48,7 +48,7 @@ introduced; the scalar reference in tests is an independent selection oracle.
 
 ## Reproducible measurements
 
-Save the baseline source with `git archive b281a14 src/dmtools` and import it
+Save the baseline source with `git archive b281a14 src/map_maker` and import it
 through an isolated Python path. Use the same maintained terrain benchmark,
 fixtures and environment for both versions. Keep all generated evidence ignored
 under `artifacts/routing-cost-2026-09-17/`. Freeze runtime/benchmark source during

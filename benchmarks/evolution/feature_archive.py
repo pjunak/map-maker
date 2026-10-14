@@ -17,11 +17,11 @@ from benchmarks.evolution.feature_surface import FEATURE_MODEL_ID, FeatureSurfac
 from benchmarks.evolution.network import RiverNetwork
 from benchmarks.evolution.valley_boundaries import HeadTransition
 from benchmarks.evolution.valley_patches import PatchSettings, ValleyPatches
-from dmtools.terrain.adapters.build import canonical_json
-from dmtools.terrain.adapters.numeric import read_numeric_archive
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.adapters.numeric import read_numeric_archive
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
-FORMAT = "dmtools.experimental.feature-surface"
+FORMAT = "map-maker.experimental.feature-surface"
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_ARRAY_BYTES = 8 * 1024 * 1024
 

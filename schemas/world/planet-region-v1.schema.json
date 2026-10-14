@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dmtools.local/schemas/world/planet-region-v1.schema.json",
-  "title": "DM Tools experimental regional planet detail v1",
+  "$id": "https://map-maker.local/schemas/world/planet-region-v1.schema.json",
+  "title": "Map Maker experimental regional planet detail v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,7 +10,7 @@
     "region_sha256"
   ],
   "properties": {
-    "schema": { "const": "dmtools.planet-region" },
+    "schema": { "const": "map-maker.planet-region" },
     "version": { "type": "integer", "const": 1 },
     "status": { "const": "experimental" },
     "algorithm": { "const": "planet-blended-tiles-v8" },

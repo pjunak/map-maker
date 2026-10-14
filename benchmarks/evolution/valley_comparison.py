@@ -24,8 +24,8 @@ from benchmarks.evolution.paths import PROFILE_TOLERANCE_M, Sampler, measure_pat
 from benchmarks.evolution.reconstruction import summarize
 from benchmarks.evolution.valley_support import VALLEY_SUPPORT_ID, ValleySupport, prepare_support
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def bank_profiles(support: ValleySupport, sampler: Sampler) -> dict[str, Any]:

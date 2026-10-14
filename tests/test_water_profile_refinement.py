@@ -13,7 +13,7 @@ from shapely.geometry import Point
 
 from benchmarks.profile_refinement import refine_profile, validate_refinement
 from benchmarks.terrain import ROOT
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.pipeline.water_sampling import (
     GroundSamplingPlan,
     SamplingFeature,
     plan_ground_profile,

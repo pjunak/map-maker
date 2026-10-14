@@ -1,7 +1,7 @@
 # Depression handling and channel conflicts - 2026-09-10
 
 This follow-up narrows the next hydrology work using primary literature,
-current tool documentation and measured DM Tools fixtures. It adds no external
+current tool documentation and measured Map Maker fixtures. It adds no external
 runtime dependency and does not change authored geography.
 
 ## Research findings
@@ -15,7 +15,7 @@ hierarchy. Our implementation does not claim to run this algorithm.
 
 [Lindsay (2016), hybrid breaching/filling](https://jblindsay.github.io/ghrg/pubs/Lindsay-HP-preprint.pdf)
 describes complete, selective and constrained breaching. Depth and length
-limits allow control over channel modification. For DM Tools, an incision
+limits allow control over channel modification. For Map Maker, an incision
 allowance is therefore a constraint to retain during outlet proposals, rather
 than a parameter to silently expand until a path works. The current edge-local
 cut deficit is not a complete breach profile or a route-length calculation.

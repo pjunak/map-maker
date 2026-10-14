@@ -9,21 +9,21 @@ from numpy.typing import NDArray
 from shapely.affinity import rotate
 from shapely.geometry import Polygon, box
 
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandformSettings,
     TerrainRegion,
     TerrainSettings,
 )
-from dmtools.terrain.pipeline.generate import _water_sampling_guides, generate_terrain
-from dmtools.terrain.pipeline.landform_weights import regional_weights
-from dmtools.terrain.pipeline.landforms import (
+from map_maker.terrain.pipeline.generate import _water_sampling_guides, generate_terrain
+from map_maker.terrain.pipeline.landform_weights import regional_weights
+from map_maker.terrain.pipeline.landforms import (
     prepare_regions,
     regional_elevation_fields,
     regional_incision_budget,
 )
-from dmtools.terrain.pipeline.water_sampling import SamplingDensity
+from map_maker.terrain.pipeline.water_sampling import SamplingDensity
 
 SETTINGS = TerrainSettings(seed=42, object_scale_km=1000., coastal_rise_km=5.)
 LAND = box(0., 0., 1000., 1000.)

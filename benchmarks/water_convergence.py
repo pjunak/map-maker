@@ -21,8 +21,8 @@ from benchmarks import profile_convergence, profile_refinement
 from benchmarks.profile_convergence import DEFAULT_REFINEMENTS, compare_profile, validate_comparison
 from benchmarks.profile_refinement import refine_profile, validate_refinement
 from benchmarks.terrain import ROOT, numeric_hashes, peak_resident_bytes
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.domain import (
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandformSettings,
@@ -31,8 +31,8 @@ from dmtools.terrain.domain import (
     TerrainRegion,
     TerrainSettings,
 )
-from dmtools.terrain.pipeline import generate
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.pipeline import generate
+from map_maker.terrain.pipeline.water_sampling import (
     WATER_SAMPLING_ALGORITHM_ID,
     GroundSampler,
     SamplingFeature,
@@ -322,7 +322,7 @@ def main() -> None:
         if runtime != runtime_identity() or sources != source_identity():
             raise RuntimeError("Generator, runtime or comparison source changed during inspection.")
         report = {
-            "schema": "dmtools.water-profile-convergence",
+            "schema": "map-maker.water-profile-convergence",
             "schema_version": 2,
             "complete": True,
             "runtime": runtime,

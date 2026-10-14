@@ -100,7 +100,7 @@ The maintained `benchmarks.terrain` harness ran the example, regional, authored,
 outlet and archipelago fixtures at 513 px, seeds 42 and 20260902, with three
 fresh-process repeats per version: 60 runs total. No test suite or other terrain
 workload ran concurrently. Baseline source came from
-`git archive 79ceeff src/dmtools` and was selected in a separate process through
+`git archive 79ceeff src/map_maker` and was selected in a separate process through
 `PYTHONPATH`; the new source stayed frozen during measurement. The harness checks repeat hashes
 and records source/runtime identities. File export is excluded from timing.
 

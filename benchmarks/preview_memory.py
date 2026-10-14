@@ -12,9 +12,9 @@ from time import perf_counter
 from PIL import Image, ImageDraw
 
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.render import compose_height_map
-from dmtools.terrain.adapters.water_display import WaterDisplay
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.render import compose_height_map
+from map_maker.terrain.adapters.water_display import WaterDisplay
 
 
 def pixel_digest(image: Image.Image) -> str:

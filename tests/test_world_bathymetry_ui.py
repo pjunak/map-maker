@@ -10,16 +10,16 @@ from typing import cast
 
 import pytest
 
-from dmtools.terrain import ui
-from dmtools.terrain import world_bathymetry_ui as module
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.application.world_bathymetry import BathymetryRun
-from dmtools.terrain.application.world_context import WorldContextRun, generate_context
-from dmtools.terrain.domain.world_bathymetry import BathymetryInputs
-from dmtools.terrain.domain.world_context import WorldContextSettings
-from dmtools.terrain.pipeline.control import CancellationToken, ProgressCallback
-from dmtools.terrain.world_bathymetry_ui import BathymetryEditor
+from map_maker.terrain import ui
+from map_maker.terrain import world_bathymetry_ui as module
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.application.world_bathymetry import BathymetryRun
+from map_maker.terrain.application.world_context import WorldContextRun, generate_context
+from map_maker.terrain.domain.world_bathymetry import BathymetryInputs
+from map_maker.terrain.domain.world_context import WorldContextSettings
+from map_maker.terrain.pipeline.control import CancellationToken, ProgressCallback
+from map_maker.terrain.world_bathymetry_ui import BathymetryEditor
 
 EXAMPLES = Path(__file__).parents[1] / "examples/world"
 
@@ -50,7 +50,7 @@ def app() -> Iterator[ui.TerrainApp]:
     root.withdraw()
     application = ui.TerrainApp(root)
     application.world_workspace.accept_world(
-        open_world(EXAMPLES / "four-shores.dmworld.json"), EXAMPLES / "four-shores.dmworld.json"
+        open_world(EXAMPLES / "four-shores.world.json"), EXAMPLES / "four-shores.world.json"
     )
     yield application
     if not application._closed:
@@ -90,7 +90,7 @@ def test_generates_missing_context_and_reuses_window(app: ui.TerrainApp) -> None
 def test_generate_stale_export_and_parent_source_isolation(
     app: ui.TerrainApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = EXAMPLES / "four-shores.dmworld.json"
+    source = EXAMPLES / "four-shores.world.json"
     before = file_sha256(source)
     editor = edit(app)
     parent_context = app.world_workspace.context_run
@@ -129,7 +129,7 @@ def test_saved_inputs_external_change_and_generated_snapshot_save_target(
 ) -> None:
     editor = edit(app)
     editor.values["basin_depth_m"].set("5000")
-    path = tmp_path / "ocean.dmbathy.json"
+    path = tmp_path / "ocean.bathy.json"
     monkeypatch.setattr(module.filedialog, "asksaveasfilename", reply(str(path)))
     editor.save()
     wait(editor)
@@ -175,7 +175,7 @@ def test_invalid_inputs_close_guard_and_save_before_continue(
     editor.generate()
     assert not editor.busy
     editor.values["shelf_width_km"].set("150")
-    path = tmp_path / "saved.dmbathy.json"
+    path = tmp_path / "saved.bathy.json"
     monkeypatch.setattr(module.filedialog, "asksaveasfilename", reply(str(path)))
     editor.guard(lambda: continued.append(True))
     wait(editor)

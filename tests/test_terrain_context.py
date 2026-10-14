@@ -11,41 +11,41 @@ import pytest
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import runtime_identity
-from dmtools.terrain.adapters.parent import load_terrain_parent
-from dmtools.terrain.adapters.project import (
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import runtime_identity
+from map_maker.terrain.adapters.parent import load_terrain_parent
+from map_maker.terrain.adapters.project import (
     load_terrain_project,
     project_snapshot_from_json,
     project_snapshot_to_json,
 )
-from dmtools.terrain.adapters.terrain_context import context_from_json, context_to_json
-from dmtools.terrain.adapters.world_context_sampling import (
+from map_maker.terrain.adapters.terrain_context import context_from_json, context_to_json
+from map_maker.terrain.adapters.world_context_sampling import (
     bind_world_context,
     sample_geographic_context,
 )
-from dmtools.terrain.adapters.world_project import write_world_project
-from dmtools.terrain.adapters.world_projection import project_landmass
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application.build import build_terrain_project
-from dmtools.terrain.application.world import propose_group_assignments
-from dmtools.terrain.application.world_context import (
+from map_maker.terrain.adapters.world_project import write_world_project
+from map_maker.terrain.adapters.world_projection import project_landmass
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application.build import build_terrain_project
+from map_maker.terrain.application.world import propose_group_assignments
+from map_maker.terrain.application.world_context import (
     WorldContextRun,
     export_context,
     generate_context,
 )
-from dmtools.terrain.application.world_terrain import create_world_terrain_project
-from dmtools.terrain.domain import ElevationPoint, TerrainProject, TerrainSettings
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
-from dmtools.terrain.domain.terrain_context import TerrainWorldContext
-from dmtools.terrain.domain.world import WorldFrame, WorldProject
-from dmtools.terrain.domain.world_context import WorldContextSettings
-from dmtools.terrain.domain.world_terrain import WorldTerrainSource
-from dmtools.terrain.pipeline.generate import generate_terrain, prepare_terrain_field
-from dmtools.terrain.pipeline.parent import prepare_verified_parent
-from dmtools.terrain.pipeline.regional import prepare_regional_sampler, sampling_source_id
-from dmtools.terrain.pipeline.terrain_context import PreparedWorldContext, context_arrays
-from dmtools.terrain.pipeline.world_landmass import select_landmass
+from map_maker.terrain.application.world_terrain import create_world_terrain_project
+from map_maker.terrain.domain import ElevationPoint, TerrainProject, TerrainSettings
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.domain.terrain_context import TerrainWorldContext
+from map_maker.terrain.domain.world import WorldFrame, WorldProject
+from map_maker.terrain.domain.world_context import WorldContextSettings
+from map_maker.terrain.domain.world_terrain import WorldTerrainSource
+from map_maker.terrain.pipeline.generate import generate_terrain, prepare_terrain_field
+from map_maker.terrain.pipeline.parent import prepare_verified_parent
+from map_maker.terrain.pipeline.regional import prepare_regional_sampler, sampling_source_id
+from map_maker.terrain.pipeline.terrain_context import PreparedWorldContext, context_arrays
+from map_maker.terrain.pipeline.world_landmass import select_landmass
 
 ROOT = Path(__file__).parents[1]
 type Control = tuple[WorldContextRun, WorldTerrainSource, TerrainWorldContext]
@@ -178,14 +178,14 @@ def test_project_cli_build_and_parent_replay_are_self_contained(
     control: Control, tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
     run, source, bound = control
-    world_file = tmp_path / "world.dmworld.json"
+    world_file = tmp_path / "input.world.json"
     write_world_project(source.world, world_file)
     context_file = export_context(run, tmp_path / "context")
     target = tmp_path / "terrain"
     assert main(["world", "terrain", str(world_file), "--continent", "A", "--context",
                  str(context_file), "--output", str(target), "--resolution", "65"]) == 0
     assert "context" in capsys.readouterr().out.lower()
-    path = target / "terrain.dmterrain.json"
+    path = target / "terrain.terrain.json"
     loaded = load_terrain_project(path)
     assert loaded.project.world_context == bound
     snapshot = json.loads(json.dumps(project_snapshot_to_json(loaded.project)))
@@ -204,7 +204,7 @@ def test_project_cli_build_and_parent_replay_are_self_contained(
         (json.loads(path.read_text(encoding="utf-8")), "terrain-project:9"),
         (snapshot, "terrain-input-snapshot:4"), (document, "terrain-build:20"),
     ):
-        schema = next(s for s in schemas if s["$id"] == f"urn:dmtools:schema:{identity}")
+        schema = next(s for s in schemas if s["$id"] == f"urn:map-maker:schema:{identity}")
         Draft202012Validator(schema, registry=registry).validate(value)
     # A completed parent must replay without the original world, context or project folder.
     world_file.rename(tmp_path / "world-moved.json")
@@ -259,12 +259,12 @@ def test_distance_bounds_are_continuous_across_both_sampling_stencils(control: C
 def test_matching_geology_is_bound_and_mismatched_geology_rejected(
     control: Control, tmp_path: Path,
 ) -> None:
-    from dmtools.terrain.adapters.world_geology import read_geology, write_geology
-    from dmtools.terrain.domain.world_geology import blank_geology
+    from map_maker.terrain.adapters.world_geology import read_geology, write_geology
+    from map_maker.terrain.domain.world_geology import blank_geology
 
     run, source, _bound = control
     recipe = blank_geology(source.world)
-    path = tmp_path / "recipe.dmgeology.json"
+    path = tmp_path / "recipe.geology.json"
     digest = write_geology(recipe, path, None)
     created = create_world_terrain_project(source.world, source.world.continents[0].id,
                                            tmp_path / "with-geology", context=run,

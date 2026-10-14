@@ -51,7 +51,7 @@ no seam and no ocean. Climate needs a whole-world relief.
      CRS. Land/sea in rasters comes from the vector coastline.
    - Ocean-floor values are display bathymetry until a separate decision couples
      the bathymetry product.
-7. **Publication.** `dmtools world planet` publishes a new directory with the
+7. **Publication.** `map-maker world planet` publishes a new directory with the
    manifest written last ([schema](../../schemas/world/planet-build-v1.schema.json)).
 8. **Numba.** Numba 0.68 becomes a runtime dependency for compiled graph kernels.
    Planet manifests record the Numba and llvmlite versions.

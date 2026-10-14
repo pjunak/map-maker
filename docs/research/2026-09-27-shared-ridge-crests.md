@@ -41,7 +41,7 @@ implementation. It uses public inputs, identical seeds/settings and native
 257-pixel grids. The total probe took **20.509 s**. The enlarged comparison uses
 nearest-neighbor display at 2x, identical scientific colours and elevation limits.
 
-For the ridge-only controls derived from `range-lowland.dmterrain.json`:
+For the ridge-only controls derived from `range-lowland.terrain.json`:
 
 | Extent | Seed | Old maximum crest-control error | New error |
 |---|---:|---:|---:|
@@ -53,7 +53,7 @@ For the ridge-only controls derived from `range-lowland.dmterrain.json`:
 
 These are sampled controls on the actual Float32 field, not a continuous-surface
 certificate or a naturalness score. In the public
-[connected-crests example](../../examples/terrain/connected-crests.dmterrain.json),
+[connected-crests example](../../examples/terrain/connected-crests.terrain.json),
 the main ridge's distance from the authored corner junction falls from **75 km
 to 0 km**. The image changes from a rounded, disconnected main crest to a joined
 crest and spur. Mean absolute land-height change is 99.229 m.

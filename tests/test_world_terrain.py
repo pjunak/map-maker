@@ -14,22 +14,22 @@ from referencing import Registry, Resource
 from shapely.geometry import Point, Polygon
 from shapely.ops import unary_union
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_project
-from dmtools.terrain.adapters.svg import load_svg_coastline_source
-from dmtools.terrain.adapters.world_project import write_world_project
-from dmtools.terrain.adapters.world_projection import project_landmass
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.adapters.world_terrain_source import source_document, source_svg
-from dmtools.terrain.application.build import build_terrain_project
-from dmtools.terrain.application.world import propose_group_assignments
-from dmtools.terrain.application.world_terrain import create_world_terrain_project
-from dmtools.terrain.domain import TerrainSettings
-from dmtools.terrain.domain.world import WorldFrame, WorldProject
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.generate import generate_terrain
-from dmtools.terrain.pipeline.world import prepare_world_map
-from dmtools.terrain.pipeline.world_landmass import select_landmass
+from map_maker.cli import main
+from map_maker.terrain.adapters.project import load_terrain_project, save_terrain_project
+from map_maker.terrain.adapters.svg import load_svg_coastline_source
+from map_maker.terrain.adapters.world_project import write_world_project
+from map_maker.terrain.adapters.world_projection import project_landmass
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.adapters.world_terrain_source import source_document, source_svg
+from map_maker.terrain.application.build import build_terrain_project
+from map_maker.terrain.application.world import propose_group_assignments
+from map_maker.terrain.application.world_terrain import create_world_terrain_project
+from map_maker.terrain.domain import TerrainSettings
+from map_maker.terrain.domain.world import WorldFrame, WorldProject
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.world import prepare_world_map
+from map_maker.terrain.pipeline.world_landmass import select_landmass
 
 ROOT = Path(__file__).parents[1]
 
@@ -99,7 +99,7 @@ def test_fixed_metric_scale_and_portable_folder(tmp_path: Path) -> None:
         save_terrain_project(changed, created.loaded.coastline_source, tmp_path / "bad.json")
     moved = tmp_path / "moved"
     shutil.move(str(created.loaded.path.parent), moved)
-    loaded = load_terrain_project(moved / "terrain.dmterrain.json")
+    loaded = load_terrain_project(moved / "terrain.terrain.json")
     assert loaded.coastline_source.world_terrain == created.source
     assert loaded.project == created.loaded.project
     document = json.loads(loaded.path.read_text())
@@ -168,7 +168,7 @@ def test_cancellation_does_not_publish_and_existing_output_is_preserved(tmp_path
         create_world_terrain_project(world, continent(world), target,
                                      cancellation=token, progress=cancel)
     assert (target / "coastline.svg").exists()
-    assert not (target / "terrain.dmterrain.json").exists()
+    assert not (target / "terrain.terrain.json").exists()
     original = (target / "coastline.svg").read_bytes()
     with pytest.raises(FileExistsError):
         create_world_terrain_project(world, continent(world), target)
@@ -187,13 +187,13 @@ def test_visible_svg_and_metadata_cannot_silently_disagree(tmp_path: Path) -> No
 def test_cli_creates_buildable_world_terrain(tmp_path: Path,
                                            capsys: pytest.CaptureFixture[str]) -> None:
     world = compact_world()
-    source = tmp_path / "world.dmworld.json"
+    source = tmp_path / "input.world.json"
     write_world_project(world, source)
     target = tmp_path / "terrain"
     assert main(["world", "terrain", str(source), "--continent", "A", "--output", str(target),
                  "--resolution", "65", "--seed", "42"]) == 0
     assert "Terrain project ready" in capsys.readouterr().out
-    project = target / "terrain.dmterrain.json"
+    project = target / "terrain.terrain.json"
     manifest = build_terrain_project(project, tmp_path / "build")
     data = json.loads(manifest.read_text())
     assert data["inputs"]["svg_sha256"] == load_terrain_project(project).coastline_source.sha256

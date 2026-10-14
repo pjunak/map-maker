@@ -10,17 +10,17 @@ from numpy.typing import NDArray
 from shapely import contains_xy
 from shapely.geometry import Point, Polygon
 
-from dmtools.terrain.adapters import load_terrain_project
-from dmtools.terrain.adapters.render import (
+from map_maker.terrain.adapters import load_terrain_project
+from map_maker.terrain.adapters.render import (
     render_basin_catchment_overlay,
     render_basin_outflow_overlay,
 )
-from dmtools.terrain.domain import TerrainBasin, TerrainStructure
-from dmtools.terrain.pipeline import GeneratedTerrain, generate_terrain
-from dmtools.terrain.pipeline.basin_flow import BasinCatchmentClass, resolve_basin_outflow
-from dmtools.terrain.pipeline.hydrology import drainage_incision
-from dmtools.terrain.pipeline.water import MetricBasin, basin_intent_ids, prepare_basins
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.domain import TerrainBasin, TerrainStructure
+from map_maker.terrain.pipeline import GeneratedTerrain, generate_terrain
+from map_maker.terrain.pipeline.basin_flow import BasinCatchmentClass, resolve_basin_outflow
+from map_maker.terrain.pipeline.hydrology import drainage_incision
+from map_maker.terrain.pipeline.water import MetricBasin, basin_intent_ids, prepare_basins
+from map_maker.terrain.pipeline.water_sampling import (
     GroundSampler,
     GroundSamplingPlan,
     SamplingFeature,
@@ -193,7 +193,7 @@ def test_basin_connection_and_conservation(case: str, monkeypatch: pytest.Monkey
         # Every existing grid height is identical: only finer evidence changes the decision.
         np.testing.assert_array_equal(sampler(x, y), ground.astype(np.float32))
     if case == "subgrid_budget":
-        monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 10)
+        monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 10)
     review, flow = resolve_basin_outflow(basins, ids, ground, routing, land, receivers,
         flags, axis, axis, polygon, (lake,), (outlet_height,), sampler, features)
     record = review.basins[0]
@@ -334,7 +334,7 @@ def test_real_outlet_revalidates_and_preserves_ground_across_resolution_and_clos
     example: str,
 ) -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  f"examples/terrain/{example}.dmterrain.json").project
+                                  f"examples/terrain/{example}.terrain.json").project
     settings = replace(project.settings, resolution_px=65)
     terrain = generate_terrain(project.coastline, settings, constraints=project.constraints)
     refined = generate_terrain(project.coastline, replace(settings, resolution_px=129),
@@ -394,7 +394,7 @@ def test_public_subgrid_shoreline_opening_is_rejected_and_marked_across_resoluti
     example: str,
 ) -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  f"examples/terrain/{example}.dmterrain.json").project
+                                  f"examples/terrain/{example}.terrain.json").project
     terrain = generate_terrain(project.coastline, replace(project.settings, resolution_px=65),
                                constraints=project.constraints)
     refined = generate_terrain(project.coastline, replace(project.settings, resolution_px=129),
@@ -402,7 +402,7 @@ def test_public_subgrid_shoreline_opening_is_rejected_and_marked_across_resoluti
     assert terrain.water.review == refined.water.review
     if example == "narrow-shoreline-gap":
         # Controlled ablation: the same generated field with only the extra stations disabled.
-        with patch("dmtools.terrain.pipeline.water_sampling._feature_windows", return_value=[]):
+        with patch("map_maker.terrain.pipeline.water_sampling._feature_windows", return_value=[]):
             fixed = generate_terrain(project.coastline, replace(project.settings, resolution_px=65),
                                      constraints=project.constraints)
         assert fixed.basin_outflow.summary.connected_outlet_count == 1
@@ -437,7 +437,7 @@ def test_public_subgrid_shoreline_opening_is_rejected_and_marked_across_resoluti
 
 def test_real_downstream_climb_blocks_transfer_and_is_marked_across_resolutions() -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  "examples/terrain/downstream-barrier.dmterrain.json").project
+                                  "examples/terrain/downstream-barrier.terrain.json").project
     terrain = generate_terrain(project.coastline, replace(project.settings, resolution_px=65),
                                constraints=project.constraints)
     refined = generate_terrain(project.coastline, replace(project.settings, resolution_px=129),
@@ -474,7 +474,7 @@ def test_real_downstream_climb_blocks_transfer_and_is_marked_across_resolutions(
 
 def test_real_internal_barrier_separates_water_without_changing_ground() -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  "examples/terrain/internal-water-barrier.dmterrain.json").project
+                                  "examples/terrain/internal-water-barrier.terrain.json").project
     settings = replace(project.settings, resolution_px=65)
     terrain = generate_terrain(project.coastline, settings, constraints=project.constraints)
     refined = generate_terrain(project.coastline, replace(settings, resolution_px=129),
@@ -485,7 +485,7 @@ def test_real_internal_barrier_separates_water_without_changing_ground() -> None
         features: tuple[SamplingGuide, ...] = (),
     ) -> GroundSamplingPlan:
         return plan_ground_profile(vertices, spacing)
-    with patch("dmtools.terrain.pipeline.wet_links.plan_ground_profile", baseline_plan):
+    with patch("map_maker.terrain.pipeline.wet_links.plan_ground_profile", baseline_plan):
         baseline = generate_terrain(project.coastline, settings, constraints=project.constraints)
     lake = next(r for r in terrain.water.review.basins if r.source.kind == "lake")
     old = next(r for r in baseline.water.review.basins if r.source.kind == "lake")
@@ -518,8 +518,8 @@ def test_real_internal_barrier_separates_water_without_changing_ground() -> None
 
 def test_unresolved_wet_network_retains_captured_area(monkeypatch: pytest.MonkeyPatch) -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  "examples/terrain/flat-outlet.dmterrain.json").project
-    monkeypatch.setattr("dmtools.terrain.pipeline.wet_links.MAX_WET_LINK_SAMPLES", 1)
+                                  "examples/terrain/flat-outlet.terrain.json").project
+    monkeypatch.setattr("map_maker.terrain.pipeline.wet_links.MAX_WET_LINK_SAMPLES", 1)
     terrain = generate_terrain(project.coastline, replace(project.settings, resolution_px=65),
                                constraints=project.constraints)
     lake = next(r for r in terrain.water.review.basins if r.source.kind == "lake")
@@ -533,7 +533,7 @@ def test_unresolved_wet_network_retains_captured_area(monkeypatch: pytest.Monkey
 
 def test_real_dry_barrier_reroutes_without_changing_the_field_or_capture() -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  "examples/terrain/dry-collection-barrier.dmterrain.json").project
+                                  "examples/terrain/dry-collection-barrier.terrain.json").project
     settings = replace(project.settings, resolution_px=65)
     def omit_new_core(
         vertices: tuple[tuple[float, float], ...], spacing: float,
@@ -542,7 +542,7 @@ def test_real_dry_barrier_reroutes_without_changing_the_field_or_capture() -> No
         return plan_ground_profile(vertices, spacing,
                                    tuple(f for f in features if not isinstance(f, SamplingFeature)
                                          or f.influence_radius_km != .1))
-    with patch("dmtools.terrain.pipeline.dry_links.plan_ground_profile", omit_new_core):
+    with patch("map_maker.terrain.pipeline.dry_links.plan_ground_profile", omit_new_core):
         baseline = generate_terrain(project.coastline, settings, constraints=project.constraints)
     terrain = generate_terrain(project.coastline, settings, constraints=project.constraints)
     lake = next(b for b in terrain.water.review.basins if b.source.kind == "lake")
@@ -574,10 +574,10 @@ def test_dry_budget_keeps_verified_water_and_retains_every_dry_donor(
     monkeypatch: pytest.MonkeyPatch, budget_case: str,
 ) -> None:
     project = load_terrain_project(Path(__file__).parents[1] /
-                                  "examples/terrain/flat-outlet.dmterrain.json").project
+                                  "examples/terrain/flat-outlet.terrain.json").project
     settings = replace(project.settings, resolution_px=65)
     if budget_case == "forced":
-        monkeypatch.setattr("dmtools.terrain.pipeline.dry_links.MAX_DRY_LINK_SAMPLES", 1)
+        monkeypatch.setattr("map_maker.terrain.pipeline.dry_links.MAX_DRY_LINK_SAMPLES", 1)
     else:
         settings = replace(settings, detail_levels=6)
     terrain = generate_terrain(project.coastline, settings, constraints=project.constraints)

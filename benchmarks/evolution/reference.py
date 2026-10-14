@@ -10,7 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from benchmarks.evolution.scenarios import EvolutionFields, FloatArray, frozen
-from dmtools.terrain.domain.evolution import EvolutionBudget, EvolutionEpoch, EvolutionHistory
+from map_maker.terrain.domain.evolution import EvolutionBudget, EvolutionEpoch, EvolutionHistory
 
 
 class EvolutionBudgetExceeded(RuntimeError):

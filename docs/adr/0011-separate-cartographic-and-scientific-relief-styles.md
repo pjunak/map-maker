@@ -22,7 +22,7 @@ should not replace the ordered scientific view for numerical inspection.
 
 - Provide two switchable rendering styles in the preview toolbar:
   `Cartographic relief` and `Scientific elevation`.
-- Make `Cartographic relief` the everyday default. Use an original DM Tools
+- Make `Cartographic relief` the everyday default. Use an original Map Maker
   hypsometric ramp with green lowlands, yellow transition terrain, brown
   uplands, dark high mountains, and pale highest summits.
 - Apply stronger render-only vertical exaggeration and hillshade contrast to

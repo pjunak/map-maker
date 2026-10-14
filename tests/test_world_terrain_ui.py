@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from dmtools.terrain import ui, world_terrain_ui, world_ui
-from dmtools.terrain.adapters import load_svg_coastline_source, save_terrain_project
-from dmtools.terrain.application.world import open_world
+from map_maker.terrain import ui, world_terrain_ui, world_ui
+from map_maker.terrain.adapters import load_svg_coastline_source, save_terrain_project
+from map_maker.terrain.application.world import open_world
 
 ROOT = Path(__file__).parents[1]
 
@@ -31,7 +31,7 @@ def app() -> Iterator[ui.TerrainApp]:
     root.withdraw()
     application = ui.TerrainApp(root)
     application.world_workspace.accept_world(
-        open_world(ROOT / "examples/world/four-shores.dmworld.json"), None,
+        open_world(ROOT / "examples/world/four-shores.world.json"), None,
     )
     root.update()
     yield application
@@ -62,7 +62,7 @@ def test_create_button_opens_saved_project_with_fixed_world_scale(
     assert view.busy
     assert str(panel.create_button["state"]) == "disabled"
     wait(app)
-    assert app._project_path == target / "terrain.dmterrain.json"
+    assert app._project_path == target / "terrain.terrain.json"
     assert app._coastline_source is not None
     assert app._coastline_source.world_terrain is not None
     assert not app._world_active()
@@ -139,9 +139,9 @@ def test_open_prepared_reloads_latest_saved_instructions(
 def test_geology_step_landforms_reach_the_terrain_project(
     app: ui.TerrainApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters.world_geology import write_geology
-    from dmtools.terrain.domain import TerrainRegion, landform_preset
-    from dmtools.terrain.domain.world_geology import GeologyProfile, blank_geology
+    from map_maker.terrain.adapters.world_geology import write_geology
+    from map_maker.terrain.domain import TerrainRegion, landform_preset
+    from map_maker.terrain.domain.world_geology import GeologyProfile, blank_geology
 
     view = app.world_workspace
     panel = view.terrain_panel
@@ -150,7 +150,7 @@ def test_geology_step_landforms_reach_the_terrain_project(
     value = replace(value, defaults=tuple(replace(
         d, profile=GeologyProfile(landform=landform_preset("plateau")),
     ) for d in value.defaults))
-    path = tmp_path / "recipe.dmgeology.json"
+    path = tmp_path / "recipe.geology.json"
     write_geology(value, path, None)
     view.start_geology(path)
     wait(app)
@@ -191,7 +191,7 @@ def test_context_survives_handoff_save_and_generation(app: ui.TerrainApp, tmp_pa
     wait(app)
     saved = view.terrain_panel.created
     assert saved is not None
-    from dmtools.terrain.adapters.project import load_terrain_project
+    from map_maker.terrain.adapters.project import load_terrain_project
 
     reopened = load_terrain_project(saved.loaded.path)
     assert reopened.project.world_context == app._world_context

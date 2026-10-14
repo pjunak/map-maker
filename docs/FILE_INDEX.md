@@ -1,6 +1,6 @@
 # Complete documentation file inventory
 
-Updated 2026-10-13. Scope: every version-controlled Markdown document in DM Tools,
+Updated 2026-10-13. Scope: every version-controlled Markdown document in Map Maker,
 plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
@@ -32,7 +32,7 @@ Contribution instructions and repository entry points; these are not terrain set
 | [AGENTS.md](../AGENTS.md) | Repository contribution, scientific integrity, validation and Git instructions. |
 | [README.md](../README.md) | Product status, installation, launch commands and repository layout. |
 | [TODO.md](../TODO.md) | Complete grouped feature/research backlog, including R01-R49 and WC/LE checkpoints. |
-| [src/dmtools/terrain/AGENTS.md](../src/dmtools/terrain/AGENTS.md) | Terrain-specific contracts and implementation/testing instructions. |
+| [src/map_maker/terrain/AGENTS.md](../src/map_maker/terrain/AGENTS.md) | Terrain-specific contracts and implementation/testing instructions. |
 
 ## Active plans and indexes (13)
 
@@ -80,7 +80,7 @@ Current user workflows and numeric/file semantics, with future limits labelled i
 | [docs/world-bathymetry.md](world-bathymetry.md) | Explicit ocean selection, shelf/slope/basin hypotheses, numerical depth/error/support and portable input/result workflow. |
 | [docs/world-context.md](world-context.md) | Generate spherical geography, inspect water/resolution support and export context products. |
 | [docs/world-geology.md](world-geology.md) | Author continent defaults and independent province hypotheses; priority, time, coverage and portable recipe contracts. |
-| [src/dmtools/terrain/README.md](../src/dmtools/terrain/README.md) | Current desktop authoring workflow, tools and shortcuts. |
+| [src/map_maker/terrain/README.md](../src/map_maker/terrain/README.md) | Current desktop authoring workflow, tools and shortcuts. |
 
 ## Developer and reference guides (9)
 
@@ -93,9 +93,9 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [benchmarks/planet/README.md](../benchmarks/planet/README.md) | Whole-planet sphere-mesh erosion harness, synthetic test worlds and metrics. |
 | [examples/README.md](../examples/README.md) | Public example projects and their supported behaviors. |
 | [schemas/README.md](../schemas/README.md) | Current world-source, geographic-context and local-terrain formats. |
-| [src/dmtools/terrain/adapters/README.md](../src/dmtools/terrain/adapters/README.md) | File-format/render/export adapter responsibilities. |
-| [src/dmtools/terrain/domain/README.md](../src/dmtools/terrain/domain/README.md) | Dependency-light domain values and validation responsibilities. |
-| [src/dmtools/terrain/pipeline/README.md](../src/dmtools/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
+| [src/map_maker/terrain/adapters/README.md](../src/map_maker/terrain/adapters/README.md) | File-format/render/export adapter responsibilities. |
+| [src/map_maker/terrain/domain/README.md](../src/map_maker/terrain/domain/README.md) | Dependency-light domain values and validation responsibilities. |
+| [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
 ## Architecture decision records (95)

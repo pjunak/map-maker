@@ -3,7 +3,7 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from dmtools.terrain.pipeline.detail import DetailedRegion
+from map_maker.terrain.pipeline.detail import DetailedRegion
 
 
 def _power(values: NDArray[np.float64], factor: int) -> tuple[float, float]:

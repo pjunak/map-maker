@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:dmtools:schema:terrain-parent-region:1",
+  "$id": "urn:map-maker:schema:terrain-parent-region:1",
   "title": "Verified parent regional generation version 1",
   "type": "object",
   "additionalProperties": false,
@@ -29,7 +29,7 @@
       "$ref": "#/$defs/hash"
     },
     "runtime": {
-      "$ref": "urn:dmtools:schema:terrain-build:20#/properties/runtime"
+      "$ref": "urn:map-maker:schema:terrain-build:20#/properties/runtime"
     },
     "request": {
       "type": "object",
@@ -124,7 +124,7 @@
       }
     },
     "schema": {
-      "const": "dmtools.terrain-parent-region"
+      "const": "map-maker.terrain-parent-region"
     },
     "schema_version": {
       "const": 1
@@ -155,25 +155,25 @@
       ],
       "properties": {
         "build_id": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "manifest_sha256": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "elevation_sha256": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "routing_sha256": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "input_snapshot_sha256": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "project_sha256": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "svg_sha256": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/hash"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/hash"
         },
         "replay_algorithm": {
           "const": "verified-parent-field-replay@1"
@@ -394,16 +394,16 @@
       ],
       "properties": {
         "samples.npz": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
         },
         "inputs.json": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
         },
         "scientific.png": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
         },
         "comparison.png": {
-          "$ref": "urn:dmtools:schema:terrain-build:20#/$defs/product"
+          "$ref": "urn:map-maker:schema:terrain-build:20#/$defs/product"
         }
       }
     }

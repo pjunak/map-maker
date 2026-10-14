@@ -14,7 +14,7 @@ from shapely.geometry import Point
 from benchmarks.profile_convergence import compare_profile, validate_comparison
 from benchmarks.terrain import ROOT
 from benchmarks.water_convergence import CASES, fixture
-from dmtools.terrain.pipeline.water_sampling import SamplingFeature, plan_ground_profile
+from map_maker.terrain.pipeline.water_sampling import SamplingFeature, plan_ground_profile
 
 
 def test_shifted_probes_find_a_barrier_missed_by_the_baseline() -> None:

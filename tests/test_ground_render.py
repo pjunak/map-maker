@@ -8,10 +8,10 @@ import pytest
 from numpy.typing import NDArray
 from PIL import Image
 
-from dmtools.terrain.adapters import render
-from dmtools.terrain.adapters.palettes import CARTOGRAPHIC_RELIEF_MAX_ELEVATION_M
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.adapters import render
+from map_maker.terrain.adapters.palettes import CARTOGRAPHIC_RELIEF_MAX_ELEVATION_M
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 
 
 @pytest.mark.parametrize("style", ["scientific", "cartographic"])
@@ -48,8 +48,8 @@ def test_tiles_match_whole_grid_stencils_and_do_not_change_inputs(
     with render.render_ground_map(ground, land, grid, 6000., style=style) as image:
         np.testing.assert_array_equal(np.asarray(image), expected)
         assert image.size == (shape[1], shape[0])
-        assert image.info["dmtools.render_style"] == style
-        assert image.info["dmtools.water_visibility"] == "none"
+        assert image.info["map-maker.render_style"] == style
+        assert image.info["map-maker.water_visibility"] == "none"
     assert sizes and (ground.tobytes(), land.tobytes()) == before
 
 

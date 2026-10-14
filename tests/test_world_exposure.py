@@ -10,8 +10,8 @@ from shapely.affinity import affine_transform
 from shapely.geometry import GeometryCollection, box
 from shapely.geometry.base import BaseGeometry
 
-from dmtools.terrain.domain.world import WorldFrame
-from dmtools.terrain.domain.world_context import (
+from map_maker.terrain.domain.world import WorldFrame
+from map_maker.terrain.domain.world_context import (
     MIXED_COAST,
     SphericalContextGrid,
     WorldContextSettings,
@@ -19,8 +19,8 @@ from dmtools.terrain.domain.world_context import (
     exposure_steps,
     shore_spacing_km,
 )
-from dmtools.terrain.pipeline import world_exposure as stage
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline import world_exposure as stage
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 
 
 def grid(rows: int = 24, radius: float = 1000, meridian: float = 0) -> SphericalContextGrid:

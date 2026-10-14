@@ -11,11 +11,11 @@ from shapely.geometry import box
 
 from benchmarks.channel_profiles import measure_channels
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import LandformSettings
-from dmtools.terrain.domain.seeds import LANDFORM_STAGE_ID, stage_seed
-from dmtools.terrain.pipeline import generate as generation
-from dmtools.terrain.pipeline import routing_edges
-from dmtools.terrain.pipeline.hydrology import (
+from map_maker.terrain.domain import LandformSettings
+from map_maker.terrain.domain.seeds import LANDFORM_STAGE_ID, stage_seed
+from map_maker.terrain.pipeline import generate as generation
+from map_maker.terrain.pipeline import routing_edges
+from map_maker.terrain.pipeline.hydrology import (
     D8_NEIGHBOURS,
     automatic_incision_budget,
     land_outlet_mask,
@@ -24,7 +24,7 @@ from dmtools.terrain.pipeline.hydrology import (
     steepest_flow_accumulation,
     steepest_flow_receivers,
 )
-from dmtools.terrain.pipeline.landforms import MetricRegion, regional_incision_budget
+from map_maker.terrain.pipeline.landforms import MetricRegion, regional_incision_budget
 
 type FloatArray = NDArray[np.float64]
 

@@ -10,13 +10,13 @@ import pytest
 from jsonschema import validate
 from shapely.geometry import LineString
 
-from dmtools.terrain.adapters import (
+from map_maker.terrain.adapters import (
     load_svg_coastline_source,
     load_terrain_project,
     save_terrain_project,
 )
-from dmtools.terrain.adapters.project import project_snapshot_from_json, project_snapshot_to_json
-from dmtools.terrain.domain import (
+from map_maker.terrain.adapters.project import project_snapshot_from_json, project_snapshot_to_json
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandformSettings,
@@ -25,15 +25,15 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     StructureProfileKnot as Knot,
 )
-from dmtools.terrain.pipeline.generate import (
+from map_maker.terrain.pipeline.generate import (
     _structure_profile,
     generate_terrain,
     prepare_terrain_field,
 )
-from dmtools.terrain.workbench import InstructionHistory, move_instruction
+from map_maker.terrain.workbench import InstructionHistory, move_instruction
 
 COAST = Coastline(((0., 0.), (1., 0.), (1., 1.), (0., 1.), (0., 0.)), "profile-square")
 SETTINGS = TerrainSettings(seed=42, object_scale_km=1000., resolution_px=65, coastal_rise_km=5.)
@@ -130,7 +130,7 @@ def test_hard_points_coast_ceiling_order_and_shared_samples_remain_authoritative
 def test_profile_roundtrip_snapshot_schema_and_history(tmp_path: Path) -> None:
     source = load_svg_coastline_source(Path(__file__).parent / "fixtures/terrain/closed-coast.svg")
     project = TerrainProject(source.coastline, SETTINGS, (RIDGE,))
-    path = tmp_path / "range.dmterrain.json"
+    path = tmp_path / "range.terrain.json"
     save_terrain_project(project, source, path)
     assert load_terrain_project(path).project == project
     snapshot = json.loads(json.dumps(project_snapshot_to_json(project)))
@@ -153,8 +153,8 @@ def test_profile_roundtrip_snapshot_schema_and_history(tmp_path: Path) -> None:
 def test_narrow_pass_informs_longitudinal_water_sampling() -> None:
     from shapely.geometry import Point
 
-    from dmtools.terrain.pipeline.generate import _water_sampling_guides
-    from dmtools.terrain.pipeline.water_sampling import SamplingDensity, plan_ground_profile
+    from map_maker.terrain.pipeline.generate import _water_sampling_guides
+    from map_maker.terrain.pipeline.water_sampling import SamplingDensity, plan_ground_profile
     narrow = replace(RIDGE, profile=(Knot(0., 2000.), Knot(.5, 1000.),
                                     Knot(.5005, 2000.), Knot(1., 2000.)))
     field = prepare_terrain_field(COAST, SETTINGS, (PLAIN, narrow), None)
@@ -174,14 +174,14 @@ def test_narrow_pass_informs_longitudinal_water_sampling() -> None:
 def test_profile_build_reopens_as_a_verified_parent_with_identical_ground(
     tmp_path: Path, example_name: str, middle_height: float,
 ) -> None:
-    from dmtools.terrain.adapters.build import runtime_identity
-    from dmtools.terrain.adapters.parent import load_terrain_parent
-    from dmtools.terrain.application.build import build_terrain_project
-    from dmtools.terrain.pipeline.parent import prepare_verified_parent
-    example = Path(__file__).parents[1] / f"examples/terrain/{example_name}.dmterrain.json"
+    from map_maker.terrain.adapters.build import runtime_identity
+    from map_maker.terrain.adapters.parent import load_terrain_parent
+    from map_maker.terrain.application.build import build_terrain_project
+    from map_maker.terrain.pipeline.parent import prepare_verified_parent
+    example = Path(__file__).parents[1] / f"examples/terrain/{example_name}.terrain.json"
     loaded = load_terrain_project(example)
     project = replace(loaded.project, settings=replace(loaded.project.settings, resolution_px=65))
-    source = tmp_path / "profile.dmterrain.json"
+    source = tmp_path / "profile.terrain.json"
     save_terrain_project(project, loaded.coastline_source, source)
     output = tmp_path / "build"
     build_terrain_project(source, output)

@@ -30,8 +30,8 @@ right follows the open step; in the Geology step it shows the geology map.
 From the repository root after the installation in [README](../README.md):
 
 ```powershell
-.\.venv\Scripts\dmtools.exe terrain gui --world examples/world/four-shores.dmworld.json
-.\.venv\Scripts\dmtools.exe world inspect examples/world/four-shores.dmworld.json
+.\.venv\Scripts\map-maker.exe terrain gui --world examples/world/four-shores.world.json
+.\.venv\Scripts\map-maker.exe world inspect examples/world/four-shores.world.json
 ```
 
 The example has four invented continents, two touching mainlands, separately
@@ -39,10 +39,10 @@ owned islands, an inland hole, excluded map furniture and an island crossing the
 longitude seam. Its 6,500 km sphere is a demonstration, not a default planet.
 **Save As** creates your working copy. No original SVG is needed to reopen it.
 
-`dmtools terrain gui` opens the World workspace. To start directly in Terrain:
+`map-maker terrain gui` opens the World workspace. To start directly in Terrain:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe terrain gui --project examples/terrain/example.dmterrain.json
+.\.venv\Scripts\map-maker.exe terrain gui --project examples/terrain/example.terrain.json
 ```
 
 `--world` and `--project` are mutually exclusive startup choices. Both workspaces
@@ -69,13 +69,13 @@ remain available in the same window, with separate documents and dirty states.
 The equivalent command is:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe world terrain examples/world/four-shores.dmworld.json --continent Southmere --context artifacts/four-shores-context --output artifacts/southmere-terrain
-.\.venv\Scripts\dmtools.exe terrain gui --project artifacts/southmere-terrain/terrain.dmterrain.json
-.\.venv\Scripts\dmtools.exe terrain build artifacts/southmere-terrain/terrain.dmterrain.json --output artifacts/southmere-build
+.\.venv\Scripts\map-maker.exe world terrain examples/world/four-shores.world.json --continent Southmere --context artifacts/four-shores-context --output artifacts/southmere-terrain
+.\.venv\Scripts\map-maker.exe terrain gui --project artifacts/southmere-terrain/terrain.terrain.json
+.\.venv\Scripts\map-maker.exe terrain build artifacts/southmere-terrain/terrain.terrain.json --output artifacts/southmere-build
 ```
 
 `--seed` and `--resolution` set the new project's initial generation settings.
-Add `--geology PATH.dmgeology.json` to transfer explicit landforms. This file must
+Add `--geology PATH.geology.json` to transfer explicit landforms. This file must
 match the current world; it is reread at creation. Continent defaults and priority
 provinces become editable terrain regions, with nested cutouts preserved as holes.
 The chosen recipe is retained inside the prepared source, so it is not another
@@ -85,7 +85,7 @@ The world, projection and optional geology recipe must match exactly. Preparatio
 resamples immutable context support into the saved terrain project, so the external
 context bundle is not needed to reopen, build or replay it.
 A continent ID may replace its name. Keep **coastline.svg** beside
-**terrain.dmterrain.json** when moving the folder. The SVG contains visible
+**terrain.terrain.json** when moving the folder. The SVG contains visible
 projected paths plus the original world snapshot, membership and projection;
 the original world file is not needed to reopen the terrain project.
 
@@ -151,7 +151,7 @@ retained in the source SVG, not encoded as a global raster CRS.
    leave **Coast detail already drawn** blank for a hand-drawn map. For a map
    that already carries refined coast detail, such as one exported from a
    planet's refined coast, enter the finest detail it carries in km (a
-   `dmtools world refine-coast` export fills it in), so zoomed maps add only finer
+   `map-maker world refine-coast` export fills it in), so zoomed maps add only finer
    detail.
 6. Click **Next** (or **Check now**). Tiny export overflow and narrow border
    overlaps are handled in derived coverage, and shared land within one continent
@@ -160,7 +160,7 @@ retained in the source SVG, not encoded as a global raster CRS.
    cross-continent conflicts, invalid shapes, unassigned objects and substantial
    out-of-frame land still require correction; the check then returns to the
    Source map step with those shapes selected.
-7. **Save As** a `.dmworld.json` file. Reopen it to review the same source and
+7. **Save As** a `.world.json` file. Reopen it to review the same source and
    membership. Save rechecks the original snapshot and geometry before replacing
    an existing file atomically. Failed validation leaves the existing file intact.
 

@@ -16,7 +16,7 @@ from benchmarks.profile_convergence import (
     profile_metrics,
     reference_difference,
 )
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.pipeline.water_sampling import (
     GroundSampler,
     GroundSamplingPlan,
     profile_positions,

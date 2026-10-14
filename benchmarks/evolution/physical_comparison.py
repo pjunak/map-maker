@@ -24,7 +24,7 @@ from benchmarks.evolution.reconstruction import STATION_SPACINGS_M, summarize
 from benchmarks.evolution.sensitivity import sensitivity_pairs
 from benchmarks.evolution.surface import FlowAlignedSurface
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import file_sha256
+from map_maker.terrain.adapters.build import file_sha256
 
 
 def matched_gates(control: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:

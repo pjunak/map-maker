@@ -14,33 +14,33 @@ from referencing import Registry, Resource
 from shapely.geometry import Point, Polygon
 from shapely.ops import unary_union
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import canonical_json
-from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_project
-from dmtools.terrain.adapters.world_geology import (
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.adapters.project import load_terrain_project, save_terrain_project
+from map_maker.terrain.adapters.world_geology import (
     geology_document,
     geology_from_bytes,
     read_geology,
     write_geology,
 )
-from dmtools.terrain.adapters.world_project import write_world_project
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.adapters.world_terrain_source import source_document
-from dmtools.terrain.application.world import propose_group_assignments
-from dmtools.terrain.application.world_terrain import (
+from map_maker.terrain.adapters.world_project import write_world_project
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.adapters.world_terrain_source import source_document
+from map_maker.terrain.application.world import propose_group_assignments
+from map_maker.terrain.application.world_terrain import (
     WorldTerrainCreated,
     create_world_terrain_project,
 )
-from dmtools.terrain.domain import LandformKind, TerrainRegion, TerrainSettings, landform_preset
-from dmtools.terrain.domain.world import WorldFrame, WorldProject
-from dmtools.terrain.domain.world_geology import (
+from map_maker.terrain.domain import LandformKind, TerrainRegion, TerrainSettings, landform_preset
+from map_maker.terrain.domain.world import WorldFrame, WorldProject
+from map_maker.terrain.domain.world_geology import (
     GeologyProfile,
     GeologyProvince,
     WorldGeologyRecipe,
     blank_geology,
 )
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.generate import generate_terrain
 
 ROOT = Path(__file__).parents[1]
 SETTINGS = TerrainSettings(seed=42, resolution_px=65, coastal_rise_km=5)
@@ -74,7 +74,7 @@ def recipe(source: WorldProject, kind: LandformKind = "plain") -> WorldGeologyRe
 
 
 def create(tmp_path: Path, value: WorldGeologyRecipe, name: str = "terrain") -> WorldTerrainCreated:
-    path = tmp_path / (name + ".dmgeology.json")
+    path = tmp_path / (name + ".geology.json")
     write_geology(value, path, None)
     return create_world_terrain_project(
         value.world, value.world.continents[0].id, tmp_path / name,
@@ -174,8 +174,8 @@ def test_recipe_snapshot_survives_relocation_and_later_region_edits(tmp_path: Pa
     save_terrain_project(edited, made.loaded.coastline_source, made.loaded.path)
     target = tmp_path / "moved"
     shutil.move(str(made.loaded.path.parent), target)
-    (tmp_path / "terrain.dmgeology.json").unlink()
-    loaded = load_terrain_project(target / "terrain.dmterrain.json")
+    (tmp_path / "terrain.geology.json").unlink()
+    loaded = load_terrain_project(target / "terrain.terrain.json")
     assert loaded.project == edited
     assert loaded.coastline_source.world_terrain is not None
     assert loaded.coastline_source.world_terrain.geology == value
@@ -191,7 +191,7 @@ def test_invalid_or_cancelled_transfer_never_publishes(tmp_path: Path, reason: s
         value = replace(value, defaults=tuple(replace(d, profile=replace(
             d.profile, landform=replace(landform_preset("plateau"), elevation_m=99999),
         )) for d in value.defaults))
-    path = tmp_path / "recipe.dmgeology.json"
+    path = tmp_path / "recipe.geology.json"
     write_geology(value, path, None)
     token = CancellationToken()
 
@@ -239,13 +239,13 @@ def test_landform_input_is_strict(field: str, bad: object) -> None:
 def test_cli_applies_explicit_recipe(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     source = world()
     value = recipe(source, "mountains")
-    project, guidance = tmp_path / "world.dmworld.json", tmp_path / "world.dmgeology.json"
+    project, guidance = tmp_path / "input.world.json", tmp_path / "world.geology.json"
     write_world_project(source, project)
     write_geology(value, guidance, None)
     assert main(["world", "terrain", str(project), "--continent", "A",
                  "--geology", str(guidance), "--output", str(tmp_path / "terrain")]) == 0
     assert "Landform regions: 1" in capsys.readouterr().out
-    loaded = load_terrain_project(tmp_path / "terrain/terrain.dmterrain.json")
+    loaded = load_terrain_project(tmp_path / "terrain/terrain.terrain.json")
     assert isinstance(loaded.project.constraints[0], TerrainRegion)
     assert loaded.project.constraints[0].settings.character == "mountains"
 
@@ -253,7 +253,7 @@ def test_cli_applies_explicit_recipe(tmp_path: Path, capsys: pytest.CaptureFixtu
 def test_reordered_world_records_reuse_the_same_canonical_recipe(tmp_path: Path) -> None:
     source = world(split=True)
     value = recipe(source)
-    path = tmp_path / "recipe.dmgeology.json"
+    path = tmp_path / "recipe.geology.json"
     write_geology(value, path, None)
     reordered = replace(source, continents=tuple(reversed(source.continents)),
                         assignments=tuple(reversed(source.assignments)))

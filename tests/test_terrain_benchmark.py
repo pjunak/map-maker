@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from benchmarks.terrain import DEFAULT_CASES, ROOT, fixture, peak_resident_bytes
-from dmtools.terrain.domain import ElevationPoint, TerrainBasin
+from map_maker.terrain.domain import ElevationPoint, TerrainBasin
 
 
 def test_benchmark_report_is_repeatable_and_measures_native_process_memory(tmp_path: Path) -> None:

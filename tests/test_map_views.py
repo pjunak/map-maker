@@ -2,14 +2,14 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from dmtools.terrain.adapters.map_parchment import ParchmentInputs
-from dmtools.terrain.adapters.map_projection import (
+from map_maker.terrain.adapters.map_parchment import ParchmentInputs
+from map_maker.terrain.adapters.map_projection import (
     SPACE,
     MapProjection,
     projected_lonlat,
     reproject,
 )
-from dmtools.terrain.adapters.map_views import PREVIEW_LAYERS, THEME_BY_ID, THEMES, theme_file
+from map_maker.terrain.adapters.map_views import PREVIEW_LAYERS, THEME_BY_ID, THEMES, theme_file
 
 
 def _lonlat_image(columns: int = 720) -> Image.Image:
@@ -95,7 +95,7 @@ def _parchment_inputs(z: np.ndarray, land: np.ndarray) -> ParchmentInputs:
 
 
 def test_parchment_maps_draw_mountains_on_rugged_ground_and_repeat_exactly() -> None:
-    from dmtools.terrain.adapters.map_parchment import PAPER, parchment_image
+    from map_maker.terrain.adapters.map_parchment import PAPER, parchment_image
 
     rows, columns = 160, 320
     y, x = np.mgrid[0:rows, 0:columns]

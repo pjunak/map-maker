@@ -13,18 +13,18 @@ from pathlib import Path
 
 import numpy as np
 
-from dmtools.terrain.adapters.world_geology import write_geology
-from dmtools.terrain.adapters.world_project import read_world_project
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.domain.models import LandformSettings, Point2D
-from dmtools.terrain.domain.world import WorldFrame
-from dmtools.terrain.domain.world_geology import (
+from map_maker.terrain.adapters.world_geology import write_geology
+from map_maker.terrain.adapters.world_project import read_world_project
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.domain.models import LandformSettings, Point2D
+from map_maker.terrain.domain.world import WorldFrame
+from map_maker.terrain.domain.world_geology import (
     ContinentGeology,
     GeologyProfile,
     GeologyProvince,
     WorldGeologyRecipe,
 )
-from dmtools.terrain.pipeline.world import WorldMap
+from map_maker.terrain.pipeline.world import WorldMap
 
 
 def _centroid(world: WorldMap, continent_id: str) -> tuple[float, float]:

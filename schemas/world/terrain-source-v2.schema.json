@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dmtools.local/schemas/world/terrain-source-v2.schema.json",
-  "title": "DM Tools world terrain source v2",
+  "$id": "https://map-maker.local/schemas/world/terrain-source-v2.schema.json",
+  "title": "Map Maker world terrain source v2",
   "description": "Canonical metadata in a prepared SVG. Runtime also verifies visible paths, retained world identity, geometry, ownership, and physical scale.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "schema": {
-      "const": "dmtools.world-terrain-source"
+      "const": "map-maker.world-terrain-source"
     },
     "version": {
       "const": 2
@@ -16,7 +16,7 @@
       "const": "world-landmass-aeqd@2"
     },
     "world": {
-      "$ref": "https://dmtools.local/schemas/world/project-v1.schema.json"
+      "$ref": "https://map-maker.local/schemas/world/project-v1.schema.json"
     },
     "world_sha256": {
       "type": "string",
@@ -93,7 +93,7 @@
       ]
     },
     "coastline": {
-      "$ref": "urn:dmtools:schema:terrain-input-snapshot:4#/properties/coastline"
+      "$ref": "urn:map-maker:schema:terrain-input-snapshot:4#/properties/coastline"
     },
     "geology": {
       "anyOf": [
@@ -112,7 +112,7 @@
               "const": "explicit-geology-landforms@1"
             },
             "recipe": {
-              "$ref": "https://dmtools.local/schemas/world/geology-v2.schema.json"
+              "$ref": "https://map-maker.local/schemas/world/geology-v2.schema.json"
             }
           }
         }

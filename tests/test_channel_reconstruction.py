@@ -7,13 +7,13 @@ from numpy.typing import NDArray
 
 from benchmarks.channel_profiles import measure_channels
 from benchmarks.terrain import fixture
-from dmtools.terrain.pipeline import generate as generation
-from dmtools.terrain.pipeline.channel_floor import ChannelFloorReconstruction
-from dmtools.terrain.pipeline.channel_reconstruction import (
+from map_maker.terrain.pipeline import generate as generation
+from map_maker.terrain.pipeline.channel_floor import ChannelFloorReconstruction
+from map_maker.terrain.pipeline.channel_reconstruction import (
     ChannelReconstruction,
     channel_diagonals,
 )
-from dmtools.terrain.pipeline.reconstruction import BoundedBicubicGrid
+from map_maker.terrain.pipeline.reconstruction import BoundedBicubicGrid
 
 
 def _field(

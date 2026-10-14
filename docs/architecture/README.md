@@ -1,6 +1,6 @@
 # Architecture overview
 
-DM Tools is a modular Python application with local desktop and command-line
+Map Maker is a modular Python application with local desktop and command-line
 interfaces. A future service could wrap the same application operations, but
 hosting is not a committed delivery step for the current local tool.
 
@@ -28,7 +28,7 @@ scientific engines; core contracts must not depend on those concrete libraries.
 ## Planet path (current product path)
 
 ```text
-world.dmworld.json (+ geology recipe)
+<name>.world.json (+ geology recipe)
    -> pipeline/planet.py: sphere mesh, plates and forcing, uplift + stream-power
       erosion, climate coupling, lakes, volcanoes and wonders
    -> PlanetResult (node elevation is authoritative, ADR-0085)

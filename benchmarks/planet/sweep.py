@@ -12,10 +12,10 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-from dmtools.terrain.adapters.world_geology import read_geology
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.domain.planet import PlanetSettings
-from dmtools.terrain.pipeline.planet import generate_planet
+from map_maker.terrain.adapters.world_geology import read_geology
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.domain.planet import PlanetSettings
+from map_maker.terrain.pipeline.planet import generate_planet
 
 
 def main() -> None:

@@ -31,7 +31,7 @@ from the map or new campaign canon.
 
 ## Primary papers and what they contribute
 
-| Source | Relevant evidence | Decision for DM Tools |
+| Source | Relevant evidence | Decision for Map Maker |
 |---|---|---|
 | [Braun and Willett, 2013: efficient implicit stream-power solver](https://doi.org/10.1016/j.geomorph.2012.10.008) | A graph-ordered implicit incision method with linear work for the solver pass | First river-incision reference; routing and all time steps still have a cost |
 | [Cordonnier et al., 2016: uplift and fluvial terrain generation](https://onlinelibrary.wiley.com/doi/10.1111/cgf.12820) ([author PDF](https://www.cs.purdue.edu/cgvlab/www/resources/papers/Cordonnier-Computer_Graphics_Forum-2016-Large_Scale_Terrain_Generation_from_Tectonic_Uplift_and_Fluvial_.pdf)) | User-painted uplift drives a stream graph and related terrain reconstruction | Strong precedent for author-controlled generation through geological processes; useful design reference, not an exact-constraint guarantee |
@@ -90,7 +90,7 @@ numerical defect in an engine we have not run.
 
 The current recommendation is based on component fit and the cheapest useful
 comparison, not a claim that Landlab is faster or produces better terrain than
-these alternatives. No paper's published speedup is a DM Tools benchmark.
+these alternatives. No paper's published speedup is a Map Maker benchmark.
 
 ## Windows and Python dependency probe
 

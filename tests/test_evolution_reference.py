@@ -10,7 +10,7 @@ import pytest
 from benchmarks.evolution.metrics import measure
 from benchmarks.evolution.reference import EvolutionBudgetExceeded, LandlabReference, evolve
 from benchmarks.evolution.scenarios import EvolutionFields, scenario
-from dmtools.terrain.domain.evolution import (
+from map_maker.terrain.domain.evolution import (
     EvolutionBudget,
     EvolutionEpoch,
     EvolutionGrid,

@@ -24,7 +24,7 @@ from benchmarks.evolution.valley_layout import relocate_guides
 from benchmarks.evolution.valley_patches import PatchSettings, prepare_patches
 from benchmarks.evolution.valley_support import prepare_support
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import canonical_json, file_sha256
+from map_maker.terrain.adapters.build import canonical_json, file_sha256
 
 
 def parent_identity(f: NetworkFixture) -> str:

@@ -7,9 +7,9 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
-from dmtools.terrain.domain import TerrainBasin
-from dmtools.terrain.pipeline.water import prepare_basins
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.domain import TerrainBasin
+from map_maker.terrain.pipeline.water import prepare_basins
+from map_maker.terrain.pipeline.water_sampling import (
     review_shorelines,
     sample_ground_positions,
     sample_ground_profile,
@@ -19,7 +19,7 @@ from dmtools.terrain.pipeline.water_sampling import (
 def test_profile_includes_corners_and_midpoints_with_bounded_spacing_and_batches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 2)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 2)
     batches: list[int] = []
 
     def sample(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float32]:
@@ -44,7 +44,7 @@ def test_profile_includes_corners_and_midpoints_with_bounded_spacing_and_batches
 def test_budget_exceeded_does_not_evaluate_or_return_partial_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 10)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 10)
 
     def unexpected(x: NDArray[np.float64], y: NDArray[np.float64]) -> NDArray[np.float32]:
         pytest.fail("Budget must be checked before evaluation.")
@@ -123,7 +123,7 @@ def test_exact_coordinate_reuse_preserves_every_station_and_float_bits(
     if strided:
         positions = positions[::-1]
     original = positions.tobytes()
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 2)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.SAMPLE_BATCH_SIZE", 2)
     seen: list[bytes] = []
     batches: list[int] = []
 

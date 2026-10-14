@@ -64,7 +64,7 @@ Landlab 2.11.0 requires Python 3.11 or newer, publishes a CPython 3.14 Windows
 wheel, and uses the MIT license. Its grid, flow-routing, depression-handling,
 and landscape-evolution components make it the lowest-friction Python
 comparison adapter for the in-project hydrology and future stream-power spikes.
-Its data model should not replace the public DM Tools domain model.
+Its data model should not replace the public Map Maker domain model.
 
 Source: [Landlab package](https://pypi.org/project/landlab/).
 
@@ -150,7 +150,7 @@ it computes indicators from climate data but does not generate a fantasy
 planet's climate.
 
 Recommendation: use both as references and possible validation adapters. Keep
-the first interactive model small, explicit, and owned by DM Tools.
+the first interactive model small, explicit, and owned by Map Maker.
 
 Sources: [Climlab package](https://pypi.org/project/climlab/) and
 [xclim package](https://pypi.org/project/xclim/).

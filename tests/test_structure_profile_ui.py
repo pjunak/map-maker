@@ -6,9 +6,9 @@ from collections.abc import Iterator
 
 import pytest
 
-from dmtools.terrain.domain import StructureProfileKnot as Knot
-from dmtools.terrain.domain import TerrainStructure
-from dmtools.terrain.structure_profile_ui import StructureProfileDialog
+from map_maker.terrain.domain import StructureProfileKnot as Knot
+from map_maker.terrain.domain import TerrainStructure
+from map_maker.terrain.structure_profile_ui import StructureProfileDialog
 
 
 @pytest.fixture

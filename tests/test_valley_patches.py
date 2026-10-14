@@ -19,7 +19,7 @@ from benchmarks.evolution.valley_patches import (
     project_hard_heights,
     swept_profile,
 )
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 @pytest.fixture(scope="module")

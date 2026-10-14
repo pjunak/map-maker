@@ -1,7 +1,7 @@
 # Planet climate v0 and relief coupling — 2026-10-06
 
 Status: **experimental**. It was first built in the research harness and is now
-`dmtools/terrain/pipeline/planet_climate.py` (ADR-0085).
+`map_maker/terrain/pipeline/planet_climate.py` (ADR-0085).
 It is provisional and explainable, not a general circulation model. Its biome
 labels are provisional. It builds on the
 [whole-planet relief harness](2026-10-06-whole-planet-erosion-relief.md).

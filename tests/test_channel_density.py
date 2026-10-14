@@ -6,9 +6,9 @@ import numpy as np
 import pytest
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import TerrainSettings
-from dmtools.terrain.pipeline.generate import generate_terrain
-from dmtools.terrain.pipeline.hydrology import drainage_incision
+from map_maker.terrain.domain import TerrainSettings
+from map_maker.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.hydrology import drainage_incision
 
 
 @pytest.mark.parametrize("density", [0., .249, 2.001, float("nan"), float("inf")])

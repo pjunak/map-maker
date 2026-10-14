@@ -39,7 +39,7 @@ window boundary pins it. ADR-0048 requires overlapping requests to agree.
    - a per-user cache for planets generated in the app.
 5. **Biomes.** Regional biomes are re-derived per pixel from parent climate,
    lapse-corrected to the fine relief.
-6. **Outputs.** `dmtools world region` and the World-tab **Zoom detail** action
+6. **Outputs.** `map-maker world region` and the World-tab **Zoom detail** action
    publish a window. It contains:
    - a Float32 GeoTIFF in a local azimuthal-equidistant CRS on the world sphere;
    - relief and atlas previews;

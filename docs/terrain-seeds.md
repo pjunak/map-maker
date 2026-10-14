@@ -2,7 +2,7 @@
 
 All terrain generation uses `named-stage-sha256@1`. The workbench exposes one
 numeric master Seed; there is no seed-policy selector or direct-master mode.
-The public [example](../examples/terrain/example.dmterrain.json) uses the same
+The public [example](../examples/terrain/example.terrain.json) uses the same
 implementation as programmatic calls and headless builds.
 
 Only the current formats in the [schema index](../schemas/README.md) are supported. Older saves
@@ -12,7 +12,7 @@ may replace this behavior without compatibility modes or migrations.
 
 The master must be an unsigned 32-bit integer; booleans and floating-point
 values are rejected. Python callers use `stage_seed(master_seed, stage_id)`
-from `dmtools.terrain.domain.seeds`.
+from `map_maker.terrain.domain.seeds`.
 
 ## Stable stage identity
 

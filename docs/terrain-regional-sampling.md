@@ -13,7 +13,7 @@ replay and opt-in experimental added detail.
 From the repository root, choose a new output directory:
 
 ```powershell
-.\.venv\Scripts\python.exe -m dmtools terrain sample-region examples/terrain/landform-regions.dmterrain.json --output artifacts/regional-demo --bounds-km 1000 800 2000 1800 --refine 4
+.\.venv\Scripts\python.exe -m map_maker terrain sample-region examples/terrain/landform-regions.terrain.json --output artifacts/regional-demo --bounds-km 1000 800 2000 1800 --refine 4
 ```
 
 Bounds are `x0 y0 x1 y1` in kilometres in the project's existing local plane:

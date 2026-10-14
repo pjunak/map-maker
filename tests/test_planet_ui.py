@@ -13,10 +13,10 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from dmtools.terrain import ui
-from dmtools.terrain.adapters.map_projection import PROJECTIONS
-from dmtools.terrain.adapters.map_views import PREVIEW_LAYERS, THEMES, MapTheme
-from dmtools.terrain.domain.planet import PlanetSettings
+from map_maker.terrain import ui
+from map_maker.terrain.adapters.map_projection import PROJECTIONS
+from map_maker.terrain.adapters.map_views import PREVIEW_LAYERS, THEMES, MapTheme
+from map_maker.terrain.domain.planet import PlanetSettings
 
 EXAMPLES = Path(__file__).parents[1] / "examples/world"
 SMALL = PlanetSettings(nodes=6_000, duration_myr=4.0, step_kyr=250.0, climate_passes=1)
@@ -66,7 +66,7 @@ def globe_current(app: ui.TerrainApp) -> bool:
 
 def planet_app(app: ui.TerrainApp) -> None:
     view = app.world_workspace
-    view.load_world(EXAMPLES / "four-shores.dmworld.json")
+    view.load_world(EXAMPLES / "four-shores.world.json")
     wait(app)
     view.generate_planet(SMALL)
     wait(app)
@@ -76,10 +76,10 @@ def planet_app(app: ui.TerrainApp) -> None:
 def test_planet_maps_follow_the_registry_in_every_projection(
     app: ui.TerrainApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from dmtools.terrain import world_view
+    from map_maker.terrain import world_view
 
     view = app.world_workspace
-    view.load_world(EXAMPLES / "four-shores.dmworld.json")
+    view.load_world(EXAMPLES / "four-shores.world.json")
     wait(app)
     panel, maps = view.result_panel, view.map_view
     assert str(panel.export_button["state"]) == "disabled"
@@ -155,7 +155,7 @@ def test_planet_maps_follow_the_registry_in_every_projection(
 
 def test_planet_cancel_and_changed_inputs_never_install_results(app: ui.TerrainApp) -> None:
     view = app.world_workspace
-    view.load_world(EXAMPLES / "four-shores.dmworld.json")
+    view.load_world(EXAMPLES / "four-shores.world.json")
     wait(app)
     view.generate_planet(SMALL)
     view.cancel_job()
@@ -193,8 +193,8 @@ def test_planet_panel_chooses_wonder_kinds(app: ui.TerrainApp) -> None:
 
 
 def test_planet_probe_describes_sea_land_climate_and_lakes(app: ui.TerrainApp) -> None:
-    from dmtools.terrain.map_probes import PlanetProbe
-    from dmtools.terrain.pipeline.planet_koppen import KOPPEN
+    from map_maker.terrain.map_probes import PlanetProbe
+    from map_maker.terrain.pipeline.planet_koppen import KOPPEN
 
     planet_app(app)
     run = app.world_workspace.planet_run
@@ -219,8 +219,8 @@ def test_planet_probe_describes_sea_land_climate_and_lakes(app: ui.TerrainApp) -
 def test_zoom_to_region_drills_down_in_the_map_and_reuses_cached_tiles(
     app: ui.TerrainApp, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from dmtools.terrain import world_ui
-    from dmtools.terrain.domain.planet import RegionalSettings
+    from map_maker.terrain import world_ui
+    from map_maker.terrain.domain.planet import RegionalSettings
 
     monkeypatch.setattr(world_ui, "user_tile_cache", lambda: tmp_path / "cache")
     monkeypatch.setattr(world_ui, "REGION_PIXELS", 160)

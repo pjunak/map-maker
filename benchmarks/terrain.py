@@ -15,10 +15,10 @@ from typing import Any
 
 import numpy as np
 
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.adapters.project import load_terrain_project
-from dmtools.terrain.adapters.render import render_height_map
-from dmtools.terrain.domain import (
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.adapters.project import load_terrain_project
+from map_maker.terrain.adapters.render import render_height_map
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LandComponent,
@@ -28,8 +28,8 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.pipeline.generate import GeneratedTerrain, generate_terrain
-from dmtools.terrain.pipeline.quality import measure_terrain_quality
+from map_maker.terrain.pipeline.generate import GeneratedTerrain, generate_terrain
+from map_maker.terrain.pipeline.quality import measure_terrain_quality
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CASES = ("example", "square", "archipelago", "authored", "regional", "water", "outlet",
@@ -94,7 +94,7 @@ def fixture(
                 "shoreline": "shoreline-gap", "narrow": "narrow-shoreline-gap",
                 "downstream": "downstream-barrier", "internal": "internal-water-barrier",
                 "dry": "dry-collection-barrier"}[case]
-        project = load_terrain_project(ROOT / f"examples/terrain/{name}.dmterrain.json").project
+        project = load_terrain_project(ROOT / f"examples/terrain/{name}.terrain.json").project
         return (
             project.coastline,
             replace(project.settings, resolution_px=resolution, seed=seed),
@@ -351,7 +351,7 @@ def main() -> None:
         if benchmark_hash != file_sha256(Path(__file__)):
             raise RuntimeError("Benchmark source changed during benchmark")
         report = {
-            "schema": "dmtools.terrain-benchmark",
+            "schema": "map-maker.terrain-benchmark",
             "schema_version": 1,
             "complete": True,
             "runtime": runtime,

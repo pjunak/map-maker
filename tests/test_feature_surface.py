@@ -19,7 +19,7 @@ from benchmarks.evolution.feature_surface import FeatureSurface
 from benchmarks.evolution.network_fixture import fixture
 from benchmarks.evolution.valley_layout import relocate_guides
 from benchmarks.evolution.valley_patches import PatchSettings, prepare_patches
-from dmtools.terrain.adapters.build import canonical_json
+from map_maker.terrain.adapters.build import canonical_json
 
 
 @pytest.fixture(scope="module")
@@ -361,7 +361,7 @@ def test_hostile_numeric_headers_and_members_are_bounded(
                 pytest.fail("A mismatched huge header reached NumPy allocation.")
             return original(stream, *args, **kwargs)
 
-        monkeypatch.setattr("dmtools.terrain.adapters.numeric.np.load", guarded)
+        monkeypatch.setattr("map_maker.terrain.adapters.numeric.np.load", guarded)
     elif fault == "oversized-member":
         # A small compressed file still declares an excessive expanded member.
         members["cap_m.npy"] = b"0" * 1_000_000

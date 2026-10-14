@@ -15,7 +15,7 @@ from benchmarks.noise_profiles import (
     enclose_noise_profile,
     ordered_rise_upper_bound,
 )
-from dmtools.terrain.pipeline.noise import fractal_value_noise
+from map_maker.terrain.pipeline.noise import fractal_value_noise
 
 REFINEMENT_METHOD_ID = "bounded-noise-profile-refinement@1"
 MAX_SAMPLES = 65_536

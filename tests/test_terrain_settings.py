@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from dmtools.terrain.domain import TerrainSettings
+from map_maker.terrain.domain import TerrainSettings
 
 
 @pytest.mark.parametrize("field", ["object_scale_km", "maximum_elevation_m",

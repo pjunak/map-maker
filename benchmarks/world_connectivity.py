@@ -11,12 +11,12 @@ from time import perf_counter
 import numpy as np
 
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.domain.world_context import SphericalContextGrid, WorldContextSettings
-from dmtools.terrain.pipeline.world_context import source_water_connectivity
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.domain.world_context import SphericalContextGrid, WorldContextSettings
+from map_maker.terrain.pipeline.world_context import source_water_connectivity
 
-DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "examples/world/four-shores.dmworld.json"
+DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / "examples/world/four-shores.world.json"
 
 
 def measure(source: Path, rows: int) -> dict[str, object]:

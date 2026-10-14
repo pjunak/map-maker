@@ -39,8 +39,8 @@ rebuild a parent after updating the generator package.
 
 ```python
 from pathlib import Path
-from dmtools.terrain.application.parent_region import ParentRegionSession
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.application.parent_region import ParentRegionSession
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 
 stop = CancellationToken()
 # The controlling UI/thread may call stop.cancel() while write is running.

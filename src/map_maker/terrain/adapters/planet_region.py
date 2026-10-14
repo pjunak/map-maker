@@ -1,0 +1,978 @@
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+"""Tile cache and regional window products for planet detail (experimental M6)."""
+
+import json
+import os
+from dataclasses import asdict, dataclass
+from functools import cache, partial
+from hashlib import sha256
+from pathlib import Path
+from typing import Any, cast
+
+import numpy as np
+import rasterio
+from affine import Affine
+from numpy.typing import NDArray
+from PIL import Image
+from rasterio.crs import CRS
+from scipy.ndimage import (
+    binary_erosion,
+    distance_transform_edt,
+    gaussian_filter,
+    label,
+    map_coordinates,
+    maximum,
+    minimum_position,
+)
+
+from map_maker.terrain.adapters.build import canonical_json, file_sha256
+from map_maker.terrain.adapters.map_parchment import parchment_image
+from map_maker.terrain.adapters.map_topographic import topographic_image
+from map_maker.terrain.adapters.planet_natural import (
+    HYPSOMETRIC,
+    ICE_SMOOTHING_SPACINGS,
+    ICE_UNDULATION_FINEST_M,
+    LAKE,
+    REGION_FALLS_SLOPE,
+    RIVER,
+    SALT_FLAT,
+    IcePixels,
+    PixelClimate,
+    erg_cover,
+    ice_surface,
+    ice_undulation,
+    land_colour,
+    paint_falls,
+    parchment_inputs,
+    ramp,
+    river_coverage,
+    sea_depth_colour,
+    shading,
+    vegetation,
+)
+from map_maker.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
+from map_maker.terrain.pipeline.planet_climate import potential_evapotranspiration
+from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m, window_finest_m
+from map_maker.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
+from map_maker.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
+from map_maker.terrain.pipeline.planet_patch import inverse_aeqd
+from map_maker.terrain.pipeline.planet_regional import (
+    LAKE_CORE_COVER,
+    RegionalParent,
+    RegionalResult,
+)
+from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface
+from map_maker.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
+from map_maker.terrain.pipeline.planet_wonders import (
+    WonderCover,
+    wonder_cover,
+    wonder_relief,
+)
+
+type F64 = NDArray[np.float64]
+type B = NDArray[np.bool_]
+
+REGION_SCHEMA = "map-maker.planet-region"
+REGION_VERSION = 1
+# Display-only regional relief (never exported). Regional pixels are a few
+# hundred metres, far below the 5 km tile mesh, so mountains need sub-tile
+# ridges and valleys; slopes need far less exaggeration than the world preview.
+REGION_EXAGGERATION = 1.3
+REGION_MOSAIC_WAVELENGTH_M = 8e3
+MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
+DUNE_SPACING_M = 2500.0
+DUNE_HEIGHT_M = 45.0
+TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
+ROUTE_PAD = 1.25  # rivers are routed over this multiple of a window's radius
+POND_DEPTH_M = 10.0  # filled depressions deeper than this hold water or a playa
+PLAYA_SHARE = 0.25  # a playa bed spans this share of its basin's depth
+PLAYA_MIN_M = 20.0
+PLAYA_MAX_M = 400.0
+POND_LAKE_ARIDITY = 0.65  # ponds hold standing water above this P/PET
+LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
+# Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
+REGION_SLOPE_SCALE = 3.5
+REGION_DETAIL_SEED = 17
+REGION_DETAIL_WAVELENGTH_M = 30e3  # at level 1 (5 km mesh); scales with spacing
+REGION_DETAIL_SPACING_M = 5000.0
+REGION_DETAIL_EXPONENT = 1.2  # how fast unresolved relief shrinks with finer meshes
+DETAIL_MEAN_SAMPLES = 20_000
+REGION_DETAIL_FLOOR_M = 70.0
+REGION_DETAIL_SHARE = 0.6  # detail amplitude per metre of tile height
+REGION_CARVE_ERODIBILITY = 0.4  # K * dt for valley carving (m^0)
+REGION_CARVE_STEPS = 4
+
+
+class TileStore:
+    """Tiles for one parent and one set of regional settings, written atomically."""
+
+    def __init__(
+        self, root: Path, parent_sha256: str, settings: RegionalSettings, level: int = 1
+    ) -> None:
+        key = sha256(
+            canonical_json(
+                {
+                    "parent": parent_sha256,
+                    "algorithm": REGIONAL_ALGORITHM,
+                    "level": level,
+                    "settings": asdict(settings),
+                }
+            )
+        ).hexdigest()[:24]
+        self.directory = root / key
+        self.key = key
+
+    def path(self, tile: int) -> Path:
+        return self.directory / f"tile-{tile:05d}.npz"
+
+    def has(self, tile: int) -> bool:
+        return self.path(tile).is_file()
+
+    def save(self, tile: int, result: RegionalResult) -> None:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        pending = self.directory / f".tile-{tile:05d}-{os.getpid()}.npz"
+        with pending.open("wb") as stream:
+            np.savez_compressed(
+                stream,
+                allow_pickle=False,
+                xyz=result.region.mesh.xyz.astype("<f8"),
+                triangles=result.region.mesh.triangles.astype("<i4"),
+                elevation_m=np.where(result.land, result.elevation_m, 0.0).astype("<f8"),
+            )
+            stream.flush()
+            os.fsync(stream.fileno())
+        pending.replace(self.path(tile))
+
+    def load(self, tile: int, radius_m: float) -> TileSurface:
+        with np.load(self.path(tile), allow_pickle=False) as data:
+            mesh = mesh_from_triangles(
+                data["xyz"].astype(np.float64), data["triangles"].astype(np.int64), radius_m
+            )
+            return TileSurface(mesh, data["elevation_m"].astype(np.float64))
+
+
+@dataclass(frozen=True)
+class RegionWindow:
+    centre: tuple[float, float]
+    radius_m: float
+    pixels: int
+    elevation_m: F64  # (pixels, pixels); NaN outside the window circle
+    land: B
+    climate: PixelClimate | None
+    rivers: F64  # anti-aliased river coverage 0..1
+    points: F64  # pixel unit vectors (pixels * pixels, 3)
+    tiles: tuple[int, ...]
+    planet_m: float
+    lapse_c_per_km: float
+    volcanic: F64  # 0..1 cover of young volcanic edifices near summits
+    lakes: B  # lake water (parent lakes with shores on the regional relief)
+    salt: B  # dry salt pans of hot, arid closed lakes
+    basalt: F64  # 0..1 flood-basalt cover
+    wind: F64 | None  # (pixels, pixels, 2) annual mean wind (east, north) in m/s
+    playa: B  # dry closed basins of the regional relief (ephemeral lakes)
+    detail_spacing_m: float = 5000.0  # node spacing of the detail level shown
+    seed: int = 0  # planet master seed: display detail belongs to the world
+    cover: WonderCover | None = None  # lava, ash and glow of the wonders
+    ice_surface_m: F64 | None = None  # ice-sheet surface (ADR-0093); NaN off the ice
+    ice_balance_m: F64 | None = None  # its surface mass balance (m of ice a year)
+
+    @property
+    def pixel_m(self) -> float:
+        return 2 * self.radius_m / self.pixels
+
+
+def window_points(
+    lon: float, lat: float, radius_m: float, pixels: int, planet_m: float
+) -> tuple[F64, B]:
+    centres = (np.arange(pixels) + 0.5) / pixels * 2 * radius_m - radius_m
+    gx, gy = np.meshgrid(centres, -centres)
+    return inverse_aeqd(gx.ravel(), gy.ravel(), lon, lat, planet_m), np.hypot(gx, gy) <= radius_m
+
+
+def compose_window(
+    parent: RegionalParent,
+    grid: TileGrid,
+    tiles: dict[int, TileSurface],
+    centre: tuple[float, float],
+    radius_km: float,
+    pixels: int,
+    river_km2: float,
+    *,
+    spacing_m: float = 5000.0,
+    pad: float = ROUTE_PAD,
+) -> RegionWindow:
+    """A regional window, composed over a padded square and cropped to its circle.
+
+    River routing has to start somewhere, and where it starts depends on the
+    window. Routing over ``pad`` times the radius keeps that start outside the
+    visible map: rivers inside follow the tile surface, which does not depend
+    on the window, so overlapping windows draw the same rivers.
+    """
+    extra = round(pixels * (pad - 1) / 2)
+    size = pixels + 2 * extra
+    padded = _compose(
+        parent, grid, tiles, centre, radius_km * 1e3 * size / pixels, size, river_km2,
+        spacing_m,
+    )
+    return crop_window(padded, extra, pixels)
+
+
+def crop_window(window: RegionWindow, extra: int, pixels: int) -> RegionWindow:
+    """The central ``pixels`` square of a padded window, masked to its circle."""
+    if extra == 0:
+        return window
+    rows = slice(extra, extra + pixels)
+    radius_m = window.pixel_m * pixels / 2
+    centres = (np.arange(pixels) + 0.5) * window.pixel_m - radius_m
+    gx, gy = np.meshgrid(centres, -centres)
+    circle = np.hypot(gx, gy) <= radius_m
+
+    def cut[T: np.generic](values: NDArray[T]) -> NDArray[T]:
+        return values[rows, rows]
+
+    climate = window.climate
+    if climate is not None:
+        climate = PixelClimate(
+            cut(climate.temperature_c), cut(climate.warm_season_c),
+            cut(climate.precipitation_mm), cut(climate.pet_mm),
+            None if climate.growing_mm is None else cut(climate.growing_mm),
+        )
+    size = window.pixels
+    return RegionWindow(
+        window.centre,
+        radius_m,
+        pixels,
+        np.where(circle, cut(window.elevation_m), np.nan),
+        cut(window.land) & circle,
+        climate,
+        np.where(circle, cut(window.rivers), 0.0),
+        window.points.reshape(size, size, 3)[rows, rows].reshape(-1, 3),
+        window.tiles,
+        window.planet_m,
+        window.lapse_c_per_km,
+        cut(window.volcanic),
+        cut(window.lakes) & circle,
+        cut(window.salt) & circle,
+        cut(window.basalt),
+        None if window.wind is None else window.wind[rows, rows],
+        cut(window.playa) & circle,
+        window.detail_spacing_m,
+        window.seed,
+        None if window.cover is None else window.cover.crop(rows),
+        (
+            None
+            if window.ice_surface_m is None
+            else np.where(circle, cut(window.ice_surface_m), np.nan)
+        ),
+        None if window.ice_balance_m is None else cut(window.ice_balance_m),
+    )
+
+
+def _compose(
+    parent: RegionalParent,
+    grid: TileGrid,
+    tiles: dict[int, TileSurface],
+    centre: tuple[float, float],
+    radius_m: float,
+    pixels: int,
+    river_km2: float,
+    spacing_m: float,
+) -> RegionWindow:
+    planet_m = parent.mesh.radius_m
+    points, inside = window_points(*centre, radius_m, pixels, planet_m)
+    from map_maker.terrain.pipeline.planet_tiles import blend
+
+    surfaces = tiles
+    finest = window_finest_m(spacing_m, 2 * radius_m / pixels)
+    land = coastline(parent.world).contains(points, finest, parent.settings.seed)
+    land = land.reshape(pixels, pixels) & inside
+    floor = parent.sea_floor_m
+    if floor is None:
+        floor = np.where(parent.land, 0.0, -2000.0)
+    sea = parent.sample(points, floor).reshape(pixels, pixels)
+    elevation = np.zeros(pixels * pixels)
+    elevation[inside.ravel()] = blend(grid, surfaces, points[inside.ravel()])
+    elevation = elevation.reshape(pixels, pixels)
+    volcanic = np.zeros((pixels, pixels))
+    if parent.volcanoes is not None and parent.volcanic_m is not None:
+        # Draw volcanoes sharply at pixel scale on the regional relief and sea floor.
+        sharp = edifice_height(points, planet_m, parent.volcanoes).reshape(pixels, pixels)
+        floor_only = sea - parent.sample(
+            points, np.where(parent.land, 0.0, parent.volcanic_m)
+        ).reshape(pixels, pixels)
+        sea = sea_floor_with_volcanoes(
+            points, planet_m, parent.volcanoes, floor_only.ravel()
+        ).reshape(pixels, pixels)
+        elevation = np.where(land, elevation + sharp, elevation)
+        # Opt-in volcanic islands rise from the sea floor beyond the authored coast.
+        islands = inside & ~land & (sea > 0)
+        land = land | islands
+        volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
+    else:
+        islands = np.zeros((pixels, pixels), dtype=bool)
+    wonders = parent.wonders
+    if wonders is not None and len(wonders):
+        elevation = np.where(
+            land,
+            elevation + wonder_relief(points, planet_m, wonders, finest).reshape(pixels, pixels),
+            elevation,
+        )
+    elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
+    elevation = np.where(islands, sea, elevation)
+    elevation = np.where(inside, elevation, np.nan)
+    climate = regional_climate(parent, points, elevation, land)
+    pixel_m = 2 * radius_m / pixels
+    ice_surface, ice_balance = window_ice(parent, points, elevation, land, pixel_m, spacing_m)
+    flow = window_flow(parent, points, elevation, land, inside, pixel_m)
+    # Lakes fill the regional relief up to the parent lake level, so shores
+    # follow the fine terrain (and a crater's sharp trough) instead of the
+    # coarse parent mesh.
+    cover, level, closed = parent.lakes_at(points, level_finest_m(spacing_m))
+    lakes = lake_water(
+        flow.z, land & inside, flow.filled,
+        cover.reshape(pixels, pixels) > LAKE_CORE_COVER, level.reshape(pixels, pixels),
+    )
+    salt = lakes & closed.reshape(pixels, pixels)
+    flow, basin_depth = lake_flow(flow, lakes, salt, level.reshape(pixels, pixels))
+    # Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
+    # calderas) hold water or a playa: rivers end there instead of crossing a
+    # filled flat.
+    ponds = land & inside & ~lakes & (basin_depth > POND_DEPTH_M)
+    depth = np.where(ponds, basin_depth, 0.0)
+    coverage = window_rivers(flow, lakes | ponds, river_km2)
+    # Ponds are closed basins: lakes where it is wet enough, playas where it is dry.
+    dry = np.zeros_like(ponds)
+    if climate is not None:
+        dry = (
+            climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < POND_LAKE_ARIDITY
+        )
+    # A wet basin fills to its spill level; a dry one keeps only an ephemeral
+    # lake bed in its lowest part, flat and bright (a playa or salar).
+    playa = ponds & dry & playa_beds(ponds, depth)
+    lakes = lakes | (ponds & ~dry)
+    salt = salt | (ponds & ~dry)
+    cover = (
+        None
+        if wonders is None
+        or (found := wonder_cover(points, planet_m, wonders, finest)) is None
+        else found.reshape((pixels, pixels))
+    )
+    if cover is not None:
+        # An erupting vent holds molten rock, never water.
+        molten = cover.glow > 0.2
+        lakes, salt, playa = lakes & ~molten, salt & ~molten, playa & ~molten
+    if ice_surface is not None:
+        # Ice sheets hold no open water; their meltwater runs beneath them.
+        iced = ice_surface > elevation
+        lakes, salt, playa = lakes & ~iced, salt & ~iced, playa & ~iced
+        coverage = np.where(iced, 0.0, coverage)
+    coverage = np.where(land & ~lakes, coverage, 0.0)
+    return RegionWindow(
+        centre,
+        radius_m,
+        pixels,
+        elevation,
+        land,
+        climate,
+        coverage,
+        points,
+        tuple(sorted(tiles)),
+        planet_m,
+        parent.settings.climate.lapse_c_per_km,
+        volcanic,
+        lakes,
+        salt,
+        (
+            np.zeros((pixels, pixels))
+            if parent.flood_basalt is None
+            else np.clip(parent.sample(points, parent.flood_basalt), 0, 1).reshape(pixels, pixels)
+        ),
+        (
+            None
+            if parent.wind_east is None or parent.wind_north is None
+            else np.stack(
+                (parent.sample(points, parent.wind_east), parent.sample(points, parent.wind_north)),
+                axis=-1,
+            ).reshape(pixels, pixels, 2)
+        ),
+        playa,
+        spacing_m,
+        parent.settings.seed,
+        cover,
+        ice_surface,
+        ice_balance,
+    )
+
+
+def window_ice(
+    parent: RegionalParent, points: F64, elevation: F64, land: B, pixel_m: float, spacing_m: float
+) -> tuple[F64 | None, F64 | None]:
+    """Ice-sheet surface (NaN off the ice) and mass balance of a window, or Nones.
+
+    The planet's ice rests on the window's bed smoothed over the planet's mesh
+    spacing: thick ice does not follow small bed relief. Its margin is refined
+    down to the level's detail, like lake outlines.
+    """
+    found = parent.ice_at(points, level_finest_m(spacing_m))
+    if found is None:
+        return None, None
+    shape = elevation.shape
+    margin, thickness, balance = (v.reshape(shape) for v in found)
+    if not np.any(land & (margin > 0)):
+        return None, None
+    mesh = parent.mesh if parent.planet_mesh is None else parent.planet_mesh
+    sigma = ICE_SMOOTHING_SPACINGS * mesh.spacing_m / pixel_m
+    bed = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0)
+    waves = ice_undulation(
+        points, mesh.radius_m, max(2 * pixel_m, ICE_UNDULATION_FINEST_M)
+    ).reshape(shape)
+    on_ice, surface = ice_surface(
+        margin, thickness, bed, partial(_wide_blur, sigma=sigma), waves
+    )
+    return np.where(land & on_ice, surface, np.nan), balance
+
+
+def _wide_blur(values: F64, sigma: float) -> F64:
+    """Gaussian blur that stays cheap for sigmas of hundreds of pixels."""
+    step = max(1, int(sigma / 4))
+    if step == 1:
+        return gaussian_filter(values, sigma, mode="nearest")
+    coarse = gaussian_filter(values[::step, ::step], sigma / step, mode="nearest")
+    rows, columns = values.shape
+    # Coarse sample k lies on fine pixel k * step.
+    r = np.clip(np.arange(rows) / step, 0, (rows - 1) // step)
+    c = np.clip(np.arange(columns) / step, 0, (columns - 1) // step)
+    return map_coordinates(coarse, np.meshgrid(r, c, indexing="ij"), order=1, mode="nearest")
+
+
+def playa_beds(ponds: B, depth: F64) -> B:
+    """The lowest part of each closed basin, where an ephemeral lake bed lies."""
+    found = cast(tuple[NDArray[np.int32], int], label(ponds))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    if not count:
+        return np.zeros_like(ponds)
+    deepest = np.zeros(count + 1)
+    deepest[1:] = np.asarray(maximum(depth, labels, np.arange(1, count + 1)), dtype=np.float64)
+    bed = np.clip(PLAYA_SHARE * deepest, PLAYA_MIN_M, PLAYA_MAX_M)
+    return ponds & (depth >= deepest[labels] - bed[labels])
+
+
+@dataclass(frozen=True)
+class WindowFlow:
+    """Drainage routed on a window's blended relief."""
+
+    z: F64  # routed relief: elevation inside the window, 0 outside
+    outlet: B  # sea and the area outside the window
+    receiver: NDArray[np.int64]  # flat indices, -1 at outlets
+    area_m2: F64  # drainage area, with the water entering from beyond the window
+    filled: F64  # relief with closed depressions filled to their spill level
+    links: tuple[tuple[int, int], ...]  # splitting rivers: (split pixel, branch pixel)
+    inflow_m2: F64  # drainage area entering at each pixel from beyond the window
+    pixel_m: float
+
+    @classmethod
+    def route(
+        cls,
+        z: F64,
+        outlet: B,
+        pixel_m: float,
+        inflow_m2: F64,
+        links: tuple[tuple[int, int], ...] = (),
+    ) -> WindowFlow:
+        receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow_m2)
+        return cls(z, outlet, receiver, area, filled, links, inflow_m2, pixel_m)
+
+    def rerouted(self, z: F64, outlet: B) -> WindowFlow:
+        """The same water routed over other relief and outlets."""
+        return WindowFlow.route(z, outlet, self.pixel_m, self.inflow_m2, self.links)
+
+
+def window_flow(
+    parent: RegionalParent, points: F64, elevation: F64, land: B, inside: B, pixel_m: float
+) -> WindowFlow:
+    """One drainage network over the whole window, with no seams between tiles.
+
+    Rivers entering from outside the window carry the parent's upstream area,
+    spread over the rim pixels the parent river crosses.
+    """
+    pixels = elevation.shape[0]
+    z = np.where(inside, np.nan_to_num(elevation, nan=0.0), 0.0)
+    outlet = ~inside | ~land
+    # Parent drainage area at the rim: rivers entering from beyond the window.
+    rim = inside & ~np.asarray(binary_erosion(inside), dtype=bool)
+    upstream = parent.sample(points, parent.area_m2).reshape(pixels, pixels)
+    inflow = np.where(rim & land, upstream * pixel_m / parent.mesh.spacing_m, 0.0)
+    # A splitting river's branch starts with its share of the river's water.
+    links: list[tuple[int, int]] = []
+    forks = None if parent.wonders is None else parent.wonders.forks
+    if forks is not None and len(forks):
+        for a, b, carried in zip(forks.split_xyz, forks.branch_xyz, forks.area_m2, strict=True):
+            ends = [int(np.argmax(points @ end)) for end in (a, b)]
+            if all(points[k] @ end > np.cos(pixel_m / parent.mesh.radius_m)
+                   for k, end in zip(ends, (a, b), strict=True)):
+                inflow.ravel()[ends[1]] += carried
+                links.append((ends[0], ends[1]))
+    return WindowFlow.route(z, outlet, pixel_m, inflow, tuple(links))
+
+
+def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
+    """Parent lakes as water standing on the regional relief at the lake level.
+
+    Water covers ground up to ``level`` (plus LAKE_SHORE_M) that is connected to
+    a lake's ``core`` (where the tiles hold the parent lake) and lies in a basin
+    that spills no lower than the level, so it does not run out down the outlet
+    valley. Shores are contours of the fine relief, not of the parent's lake
+    cover, which is linear, so straight, inside each parent triangle.
+    """
+    wet = land & (z <= level + LAKE_SHORE_M) & (filled >= level - LAKE_SHORE_M)
+    found = cast(tuple[NDArray[np.int32], int], label(wet))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    keep = np.zeros(count + 1, dtype=bool)
+    keep[labels[wet & core]] = True
+    keep[0] = False
+    return keep[labels]
+
+
+def lake_flow(flow: WindowFlow, lakes: B, closed: B, level: F64) -> tuple[WindowFlow, F64]:
+    """Drainage with the window's lakes, and the depth of its closed depressions.
+
+    Routing fills each depression up to wherever the window lets it spill. For
+    a lake's basin that can lie above the lake's level, so depressions are
+    measured with every lake as a sink: the ground between a lake and its
+    basin's spill is no pond. Closed lakes are where their basin's water ends.
+    Rivers route through open lakes, so outflows keep their upstream area, over
+    an outflow lowered to the lake's level (``lake_outflows``).
+    """
+    if not lakes.any():
+        return flow, flow.filled - flow.z
+    inward, _, basins = grid_flow(
+        flow.z, flow.outlet | lakes, flow.pixel_m, np.zeros_like(flow.z)
+    )
+    routed = lake_outflows(flow, inward, lakes & ~closed, level)
+    return flow.rerouted(routed, flow.outlet | (lakes & closed)), basins - flow.z
+
+
+def lake_outflows(flow: WindowFlow, inward: NDArray[np.int64], lakes: B, level: F64) -> F64:
+    """Routed relief with each lake's outflow lowered to the lake's level.
+
+    A lake's routed path out, from its last-filled pixel, may cross the filled
+    basin to a pour point above the lake's level, where the tiles do not hold
+    the parent's outflow. Drainage would then cross that flat towards the pour
+    point instead of entering the lake. The outflow is lowered to the level
+    along the basin's floor from the lake up to the pour point (``inward``,
+    receivers with every lake a sink, leads down that floor into the lake),
+    then along the routed path until the filled relief is down to the lake's
+    shore. The basin then drains into the lake and the lake out over the pour
+    point. Only routing uses this relief.
+    """
+    found = cast(tuple[NDArray[np.int32], int], label(lakes))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    if not count:
+        return flow.z
+    relief, filled, outlet = flow.z.ravel(), flow.filled.ravel(), flow.outlet.ravel()
+    z, ids, columns = relief.copy(), labels.ravel(), flow.z.shape[1]
+    starts = minimum_position(flow.filled, labels, np.arange(1, count + 1))
+    for lake, (row, column) in enumerate(cast(list[tuple[int, int]], starts), start=1):
+        start = row * columns + column
+        top = float(level.ravel()[start])
+        path: list[int] = []
+        node = int(flow.receiver[start])
+        while node >= 0 and not outlet[node] and filled[node] > top + LAKE_SHORE_M:
+            path.append(node)
+            node = int(flow.receiver[node])
+        if not path:
+            continue
+        # The pour point is where the path leaves the filled basin.
+        crest = int(np.argmin(filled[path] > relief[path]))
+        floor: list[int] = []
+        node = path[crest - 1] if crest else -1
+        while node >= 0 and ids[node] != lake:
+            floor.append(node)
+            node = int(inward[node])
+        # Where the floor does not lead back to this lake, keep the routed path.
+        channel = path[crest:] + (floor if node >= 0 else path[:crest])
+        z[channel] = np.minimum(z[channel], top)
+    return z.reshape(flow.z.shape)
+
+
+def window_rivers(flow: WindowFlow, water: B, river_km2: float) -> F64:
+    """River coverage on the window's drainage; rivers end in ``water``."""
+    z, receiver, area, pixel_m = flow.z, flow.receiver, flow.area_m2, flow.pixel_m
+    pixels = z.shape[0]
+    flat = np.arange(pixels * pixels)
+    x = (flat % pixels + 0.5).astype(np.float64)
+    y = (flat // pixels + 0.5).astype(np.float64)
+    stop = (flow.outlet | water).ravel()
+    major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
+    # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
+    # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
+    discharge = area * MEANDER_RUNOFF_M_YR / 3.156e7
+    wavelength = 11 * 4.8 * np.sqrt(discharge) / pixel_m
+    target = np.maximum(receiver, 0)
+    drop = z.ravel() - z.ravel()[target]
+    run = np.hypot(flat % pixels - target % pixels, flat // pixels - target // pixels) * pixel_m
+    gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
+    return river_coverage(
+        x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
+        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=flow.links,
+    )
+
+
+def regional_climate(
+    parent: RegionalParent, points: F64, elevation: F64, land: B
+) -> PixelClimate | None:
+    """Parent climate at each pixel, lapse-corrected to the fine relief."""
+    if parent.temperature_c is None or parent.precipitation_mm is None:
+        return None
+    shape = elevation.shape
+    z = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0).ravel()
+    # Volcanoes and wonders form after the climate is simulated: lapse-correct
+    # them whole.
+    surface = parent.surface_m - parent.young_m()
+    lift = (z - parent.sample(points, surface)) / 1000
+    lapse = parent.settings.climate.lapse_c_per_km
+    temperature = parent.sample(points, parent.temperature_c) - lapse * lift
+    warm_source = parent.warm_season_c if parent.warm_season_c is not None else parent.temperature_c
+    warm = parent.sample(points, warm_source) - lapse * lift
+    precipitation = np.maximum(parent.sample(points, parent.precipitation_mm), 0.0)
+    coast = (
+        np.zeros(len(points))
+        if parent.coast_m is None
+        else np.maximum(parent.sample(points, np.maximum(parent.coast_m, 0.0)), 0.0)
+    )
+    latitude = np.arcsin(np.clip(points[:, 2], -1, 1))
+    pet = potential_evapotranspiration(latitude, temperature, coast)
+    growing = (
+        None
+        if parent.precip_warm_mm is None
+        else np.maximum(parent.sample(points, parent.precip_warm_mm), 0.0).reshape(shape)
+    )
+    return PixelClimate(
+        temperature.reshape(shape),
+        warm.reshape(shape),
+        precipitation.reshape(shape),
+        pet.reshape(shape),
+        growing,
+    )
+
+
+@cache
+def _detail_means(seed: int, frequency: float) -> tuple[float, float]:
+    """Mean display detail over the whole sphere, without and with ridging."""
+    points = fibonacci_nodes(DETAIL_MEAN_SAMPLES, seed=0, jitter=0.0)
+    plain = eroded_fbm(points, np.zeros(len(points)), seed, 5, frequency, 0.5, 0.1)
+    ridged = eroded_fbm(points, np.ones(len(points)), seed, 5, frequency, 0.5, 0.1)
+    return float(plain.mean()), float(ridged.mean())
+
+
+def detail_offset(seed: int, frequency: float, ridged: F64) -> F64:
+    """The world-wide mean of display detail, so it is zero-mean everywhere."""
+    plain, full = _detail_means(seed, frequency)
+    return plain + (full - plain) * ridged
+
+
+def display_relief(window: RegionWindow) -> F64:
+    """Elevation plus sub-tile ridges and valleys for shading only (never exported).
+
+    The 5 km tile mesh cannot resolve hillslopes, so mountains would shade as
+    smooth domes. Ridged, slope-damped noise scaled with height adds roughness,
+    and a few stream-power steps routed over that rough surface carve it into a
+    connected, branching valley network. Carving depth is capped at the local
+    detail amplitude, so the tile relief keeps its shape.
+    """
+    z = np.nan_to_num(window.elevation_m, nan=-200.0)
+    land = window.land
+    if not land.any():
+        return z
+    base = np.where(land, z, 0.0)
+    inside = np.isfinite(window.elevation_m)
+    tile_slope = gaussian_filter(
+        np.hypot(*np.gradient(np.where(inside, z, 0.0), window.pixel_m)), 3.0
+    )
+    # Flat plains and plateau tops stay smooth; slopes get ridges and gullies.
+    # Ridged noise creases into sharp lines, so it too needs relief, not height.
+    ruggedness = 0.15 + 0.85 * np.clip((tile_slope - 0.002) / 0.018, 0, 1)
+    ridged = (np.clip((base - 300) / 1500, 0, 1) * ruggedness).ravel()
+    # Detail stands in for the relief the level's mesh cannot resolve: its
+    # wavelength follows the mesh spacing and its height shrinks with it. It is
+    # anchored to the world (planet seed, world positions, a fixed zero), so
+    # overlapping windows draw the same hills.
+    level = window.detail_spacing_m / REGION_DETAIL_SPACING_M
+    wavelength = REGION_DETAIL_WAVELENGTH_M * level
+    seed = window.seed + REGION_DETAIL_SEED
+    detail = eroded_fbm(
+        window.points, ridged, seed, 5, window.planet_m / wavelength, 0.5, 0.1
+    ).reshape(z.shape)
+    detail -= detail_offset(seed, window.planet_m / wavelength, ridged).reshape(z.shape)
+    amplitude = (
+        (REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base)
+        * ruggedness
+        * level**REGION_DETAIL_EXPONENT
+    )
+    rough = np.where(land, z + amplitude * detail, z)
+    # Outside the window circle, hold each cell at the nearest inside height so
+    # the rim is not a base level that every border valley would cut down to.
+    nearest = cast(
+        NDArray[np.intp],
+        distance_transform_edt(~inside, return_distances=False, return_indices=True),
+    )
+    rough = rough[nearest[0], nearest[1]]
+    carved = carve_valleys(
+        rough,
+        ~land,
+        window.pixel_m,
+        np.full(z.shape[0], window.pixel_m),
+        REGION_CARVE_ERODIBILITY,
+        0.5,
+        REGION_CARVE_STEPS,
+    )
+    # Flats and plateaus carve into straight grid-aligned grooves, and real ones
+    # stay smooth at this scale, so incision follows the tile relief's slope.
+    steep = np.clip((tile_slope - 0.006) / 0.024, 0, 1)
+    # Blurring the incision widens one-pixel D8 channels into valleys.
+    depth = gaussian_filter(np.clip(rough - carved, 0, amplitude) * steep, 1.3)
+    relief = gaussian_filter(rough - depth, 0.5)
+    # Linear (seif) dunes run along the resultant wind in sand seas, ~2 km apart
+    # and tens of metres high; they break up and wander along their length.
+    climate = window.climate
+    if climate is not None and window.wind is not None:
+        erg = np.where(
+            land,
+            erg_cover(
+                window.points, window.planet_m, climate, tile_slope,
+                window_position(relief, window.pixel_m), REGION_SLOPE_SCALE,
+            ),
+            0.0,
+        )
+        if erg.max() > 0.05:
+            wind = gaussian_filter(window.wind, (6, 6, 0))
+            speed = np.maximum(np.hypot(wind[..., 0], wind[..., 1]), 1e-6)
+            rows, columns = np.mgrid[0 : z.shape[0], 0 : z.shape[1]] * window.pixel_m
+            # Distance across the wind: east is +column, north is -row.
+            across = (columns * -wind[..., 1] + (-rows) * wind[..., 0]) / speed
+            # Spacing and phase wander, so ridges merge in Y-junctions and fan out.
+            warp = 0.6 * DUNE_SPACING_M * eroded_fbm(
+                window.points, np.zeros(len(window.points)), 71, 4,
+                window.planet_m / 25e3, 0.55, 0.0,
+            ).reshape(z.shape)
+            spacing = DUNE_SPACING_M * (1 + 0.3 * eroded_fbm(
+                window.points, np.zeros(len(window.points)), 72, 3,
+                window.planet_m / 60e3, 0.5, 0.0,
+            ).reshape(z.shape))
+            crest = (0.5 + 0.5 * np.cos(2 * np.pi * (across + warp) / spacing)) ** 1.5
+            breakup = _smooth_step(
+                eroded_fbm(
+                    window.points, np.zeros(len(window.points)), 73, 3,
+                    window.planet_m / 12e3, 0.5, 0.0,
+                ).reshape(z.shape),
+                -0.3, 0.2,
+            )
+            relief = relief + DUNE_HEIGHT_M * erg * breakup * crest
+    # Flood basalts weather into stepped escarpments: each resistant lava flow
+    # holds a bench (the "trap" stairs of the Deccan and Columbia River plateaus).
+    if window.basalt.any():
+        level = np.floor(relief / TRAP_STEP_M) * TRAP_STEP_M
+        riser = np.clip((relief - level) / TRAP_STEP_M, 0, 1)
+        benches = level + TRAP_STEP_M * np.clip((riser - 0.7) / 0.3, 0, 1) ** 2
+        relief = relief + (benches - relief) * 0.8 * window.basalt
+    if window.ice_surface_m is not None:
+        # Ice fills the relief up to its surface; nunataks rise through it.
+        relief = np.fmax(relief, window.ice_surface_m)
+    return np.where(land, np.maximum(relief, 1.0), z)
+
+
+def window_ice_cover(window: RegionWindow, relief: F64) -> F64:
+    """Anti-aliased ice cover (0..1) of a window's display relief."""
+    if window.ice_surface_m is None:
+        return np.zeros(relief.shape)
+    covered = window.land & (relief <= np.nan_to_num(window.ice_surface_m, nan=-1e9) + 0.01)
+    return gaussian_filter(covered.astype(np.float64), 0.6)
+
+
+def _smooth_step(x: F64, a: float, b: float) -> F64:
+    t = np.clip((x - a) / (b - a), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+def window_position(z: F64, pixel_m: float) -> F64:
+    """Valley (-1) to ridge (+1) position from height above the local mean at 3-15 km."""
+    total = np.zeros_like(z)
+    for radius_m, weight, scale_m in ((3e3, 0.5, 80.0), (15e3, 0.5, 300.0)):
+        total += weight * np.tanh((z - gaussian_filter(z, radius_m / pixel_m)) / scale_m)
+    return total
+
+
+def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
+    """Natural-colour (atlas) or shaded hypsometric view of a regional window."""
+    z = display_relief(window)
+    gy = np.gradient(z, axis=0) / window.pixel_m
+    gx = np.gradient(z, axis=1) / window.pixel_m
+    slope, light = shading(gx, gy, REGION_EXAGGERATION)
+    land = window.land
+    climate = window.climate
+    if atlas and climate is not None:
+        lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
+        shown = PixelClimate(
+            climate.temperature_c - lapse,
+            climate.warm_season_c - lapse,
+            climate.precipitation_mm,
+            climate.pet_mm,
+            climate.growing_mm,
+        )
+        wet = 0.6 * gaussian_filter(window.rivers, 2.0)
+        land_rgb = land_colour(
+            window.points, window.planet_m, shown, z, slope, light, wet,
+            window_position(z, window.pixel_m), REGION_MOSAIC_WAVELENGTH_M,
+            window.volcanic,
+            REGION_SLOPE_SCALE,
+            window.basalt,
+            window.cover,
+            (
+                None
+                if window.ice_balance_m is None
+                else IcePixels(window_ice_cover(window, z), window.ice_balance_m)
+            ),
+        )
+    else:
+        land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
+    rgb = np.where(land[..., None], land_rgb, sea_depth_colour(-z, light))
+    if window.lakes.any():
+        pan = window.salt
+        if climate is not None:
+            # Closed lakes in hot, arid basins dry to salt pans; others stay saline lakes.
+            arid = climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < 0.35
+            pan = pan & arid & (climate.temperature_c > 12.0)
+        else:
+            pan = np.zeros_like(pan)
+        rgb[window.lakes & ~pan] = LAKE
+        rgb[pan] = SALT_FLAT
+    rgb[window.playa] = SALT_FLAT
+    alpha = (0.9 * window.rivers)[..., None]
+    rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
+    rgb = paint_falls(rgb, window.rivers * land, slope, REGION_FALLS_SLOPE)
+    rgb[~np.isfinite(window.elevation_m)] = (36, 54, 82)
+    return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
+
+
+def window_topographic(window: RegionWindow) -> Image.Image:
+    """Topographic view of a regional window: tints, contours, hillshade and water."""
+    z = display_relief(window)
+    gy = np.gradient(z, axis=0) / window.pixel_m
+    gx = np.gradient(z, axis=1) / window.pixel_m
+    _, light = shading(gx, gy, REGION_EXAGGERATION)
+    shown = np.where(np.isfinite(window.elevation_m), z, np.nan)
+    return topographic_image(
+        shown, window.land, window.lakes, window.rivers, light, window.pixel_m, window.pixel_m,
+        window_ice_cover(window, z) > 0.5, local=True, playa=window.playa,
+    )
+
+
+def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
+    """A regional window as a hand-drawn map (needs climate for vegetation)."""
+    climate = window.climate
+    if climate is None:
+        return None
+    z = display_relief(window)
+    gy = np.gradient(z, axis=0) / window.pixel_m
+    gx = np.gradient(z, axis=1) / window.pixel_m
+    slope, light = shading(gx, gy, REGION_EXAGGERATION)
+    lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
+    shown = PixelClimate(
+        climate.temperature_c - lapse, climate.warm_season_c - lapse,
+        climate.precipitation_mm, climate.pet_mm, climate.growing_mm,
+    )
+    wet = 0.6 * gaussian_filter(window.rivers, 2.0)
+    cover = vegetation(
+        window.points, window.planet_m, shown, slope, window_position(z, window.pixel_m), wet,
+        REGION_MOSAIC_WAVELENGTH_M, REGION_SLOPE_SCALE,
+    )
+    inputs = parchment_inputs(
+        shown, cover, np.where(np.isfinite(window.elevation_m), z, np.nan), window.land,
+        window.lakes | window.playa, window.rivers, light, window_ice_cover(window, z) > 0.5,
+    )
+    return parchment_image(inputs, seed, float(np.clip(window.pixels / 45, 12, 30)))
+
+
+def aeqd_crs_wkt(lon0: float, lat0: float, radius_m: float) -> str:
+    return CRS.from_proj4(
+        f"+proj=aeqd +lat_0={lat0!r} +lon_0={lon0!r} +R={radius_m!r} +units=m +no_defs"
+    ).to_wkt()
+
+
+def write_region(
+    window: RegionWindow,
+    parent_sha256: str,
+    settings: RegionalSettings,
+    store_key: str,
+    destination: Path,
+    planet_m: float,
+    level: int = 1,
+) -> Path:
+    target = destination.absolute()
+    if target.exists() or target.is_symlink():
+        raise FileExistsError(f"Region destination already exists: {target}")
+    target.mkdir(parents=True)
+    names = []
+    lon0, lat0 = window.centre
+    transform = Affine(window.pixel_m, 0, -window.radius_m, 0, -window.pixel_m, window.radius_m)
+    with (target / "elevation.tif").open("xb"):
+        pass
+    with (
+        rasterio.Env(GDAL_PAM_ENABLED=False, GDAL_NUM_THREADS="1"),
+        rasterio.open(
+            target / "elevation.tif",
+            "w",
+            driver="GTiff",
+            width=window.pixels,
+            height=window.pixels,
+            count=1,
+            dtype="float32",
+            crs=cast(Any, CRS.from_wkt(aeqd_crs_wkt(lon0, lat0, planet_m))),
+            transform=transform,
+            nodata=float("nan"),
+            compress="deflate",
+            predictor=3,
+        ) as dataset,
+    ):
+        dataset.write(window.elevation_m.astype(np.float32), 1)
+        dataset.set_band_unit(1, "m")
+    names.append("elevation.tif")
+    window_image(window, atlas=False).save(target / "relief.png")
+    names.append("relief.png")
+    if window.climate is not None:
+        window_image(window, atlas=True).save(target / "atlas.png")
+        names.append("atlas.png")
+    window_topographic(window).save(target / "topographic.png")
+    names.append("topographic.png")
+    parchment = window_parchment(window)
+    if parchment is not None:
+        parchment.save(target / "parchment.png")
+        names.append("parchment.png")
+    manifest: dict[str, object] = {
+        "schema": REGION_SCHEMA,
+        "version": REGION_VERSION,
+        "status": "experimental",
+        "algorithm": REGIONAL_ALGORITHM,
+        "parent_build_sha256": parent_sha256,
+        "centre_lonlat_deg": [lon0, lat0],
+        "radius_km": window.radius_m / 1000,
+        "level": level,
+        "pixels": window.pixels,
+        "settings": asdict(settings),
+        "tile_store": store_key,
+        "tiles": list(window.tiles),
+        "crs_wkt": aeqd_crs_wkt(lon0, lat0, planet_m),
+        "outputs": {
+            name: {"sha256": file_sha256(target / name), "bytes": (target / name).stat().st_size}
+            for name in names
+        },
+    }
+    manifest["region_sha256"] = sha256(canonical_json(manifest)).hexdigest()
+    pending = target / "manifest.pending"
+    pending.write_bytes(canonical_json(manifest))
+    pending.replace(target / "manifest.json")
+    return target / "manifest.json"
+
+
+__all__ = ["RegionWindow", "TileStore", "compose_window", "json", "window_image", "write_region"]

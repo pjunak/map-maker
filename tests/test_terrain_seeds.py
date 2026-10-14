@@ -10,11 +10,11 @@ import pytest
 from numpy.typing import NDArray
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import TerrainSettings
-from dmtools.terrain.domain.seeds import RELIEF_STAGE_ID, stage_seed
-from dmtools.terrain.pipeline import generate as generation
-from dmtools.terrain.pipeline.generate import generate_terrain
-from dmtools.terrain.ui import _CONTROLS, TerrainApp
+from map_maker.terrain.domain import TerrainSettings
+from map_maker.terrain.domain.seeds import RELIEF_STAGE_ID, stage_seed
+from map_maker.terrain.pipeline import generate as generation
+from map_maker.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.ui import _CONTROLS, TerrainApp
 
 
 # Independently calculated using .NET SHA256, ASCII and big-endian UInt32.

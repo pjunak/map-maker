@@ -1,6 +1,6 @@
 # Planet cratons, young depressions and climate-balanced lakes — 2026-10-06
 
-Status: **experimental** (`dmtools world planet`, ADR-0085). Run on the 200k-node
+Status: **experimental** (`map-maker world planet`, ADR-0085). Run on the 200k-node
 fractal world with sample geology and one climate pass.
 
 ## Stable continents: from domes to basins

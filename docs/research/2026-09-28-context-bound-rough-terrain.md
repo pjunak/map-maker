@@ -114,7 +114,7 @@ the intended numerical connection, not terrain quality or river acceptance.
 | Bound context | `835f44110fd59cacf9eaa87e128464c7ca258f147ee8dc96ded73588f1853e84` |
 | Installed source | `e0b4296b42a082ccb8761a0b7a4b1b84b3e125e0ea23f63ee5234399501b7ceb` |
 
-The measured runtime was dmtools 0.1.0 on CPython 3.14.7 / Windows 11 AMD64,
+The measured runtime was map-maker 0.1.0 on CPython 3.14.7 / Windows 11 AMD64,
 NumPy 2.5.2, SciPy 1.18.1, Pillow 12.3.0, Shapely 2.1.2, svgelements 1.9.6,
 Rasterio 1.5.1, affine 3.0.1, GEOS 3.13.1, GDAL 3.12.4 and PROJ 9.8.1.
 No dependency was added.

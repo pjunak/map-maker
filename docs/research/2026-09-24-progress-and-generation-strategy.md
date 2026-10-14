@@ -7,7 +7,7 @@ in the [strategy](../strategy/README.md); candidates remain in [TODO](../../TODO
 
 ## Assessment
 
-DM Tools is a functioning **research workbench and deterministic terrain
+Map Maker is a functioning **research workbench and deterministic terrain
 prototype**, still before a consistently convincing map generator. The editor,
 reproducible builds, numeric exports, cancellation, regional requests and memory
 ownership are substantial completed work. Drainage plausibility, coherent

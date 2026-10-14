@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:dmtools:schema:terrain-build:20",
-  "title": "DM Tools terrain build version 20",
+  "$id": "urn:map-maker:schema:terrain-build:20",
+  "title": "Map Maker terrain build version 20",
   "description": "Completed local terrain, water and optional bound-world-context evidence with a typed, portable effective-input snapshot.",
   "type": "object",
   "additionalProperties": false,
@@ -23,7 +23,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "dmtools.terrain-build"
+      "const": "map-maker.terrain-build"
     },
     "schema_version": {
       "const": 20
@@ -59,20 +59,20 @@
       }
     },
     "settings": {
-      "$ref": "urn:dmtools:schema:terrain-project:9#/$defs/generatorSettings"
+      "$ref": "urn:map-maker:schema:terrain-project:9#/$defs/generatorSettings"
     },
     "world_context": {
       "description": "How the optional frozen geographic context was retained and consumed by this terrain build.",
       "anyOf": [
         { "type": "null" },
-        { "$ref": "urn:dmtools:schema:terrain-context:1#/$defs/report" }
+        { "$ref": "urn:map-maker:schema:terrain-context:1#/$defs/report" }
       ]
     },
     "runtime": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "dmtools_version",
+        "map_maker_version",
         "package_source_sha256",
         "python",
         "implementation",
@@ -85,7 +85,7 @@
         "proj"
       ],
       "properties": {
-        "dmtools_version": {
+        "map_maker_version": {
           "type": "string"
         },
         "package_source_sha256": {
@@ -405,7 +405,7 @@
           "const": "local-metric-geotiff@1"
         },
         "crs_wkt": {
-          "const": "LOCAL_CS[\"DM Tools source-local metric plane\",UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]"
+          "const": "LOCAL_CS[\"Map Maker source-local metric plane\",UNIT[\"metre\",1],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]"
         },
         "affine_m": {
           "type": "array",

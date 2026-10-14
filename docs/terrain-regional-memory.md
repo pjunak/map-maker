@@ -12,15 +12,15 @@ All default `ParentRegionSession` instances in one process share a **1024 MiB**
 budget. The two saved-parent CLI commands accept a positive integer override:
 
 ```powershell
-dmtools terrain sample-parent artifacts/parent --output artifacts/region --bounds-km 1100 1100 1700 1700 --refine 8 --memory-mib 1024
+map-maker terrain sample-parent artifacts/parent --output artifacts/region --bounds-km 1100 1100 1700 1700 --refine 8 --memory-mib 1024
 ```
 
 Applications can share an explicit budget across related sessions:
 
 ```python
 from pathlib import Path
-from dmtools.terrain.application.parent_region import ParentRegionSession
-from dmtools.terrain.application.region_memory import RegionalMemoryBudget
+from map_maker.terrain.application.parent_region import ParentRegionSession
+from map_maker.terrain.application.region_memory import RegionalMemoryBudget
 
 budget = RegionalMemoryBudget(1024 * 1024 * 1024)
 with ParentRegionSession(Path("artifacts/parent"), memory_budget=budget) as session:

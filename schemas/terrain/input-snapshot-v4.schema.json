@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:dmtools:schema:terrain-input-snapshot:4",
+  "$id": "urn:map-maker:schema:terrain-input-snapshot:4",
   "title": "Portable terrain input snapshot version 4",
   "type": "object",
   "additionalProperties": false,
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "dmtools.terrain-input-snapshot"
+      "const": "map-maker.terrain-input-snapshot"
     },
     "schema_version": {
       "const": 4
@@ -104,18 +104,18 @@
       }
     },
     "settings": {
-      "$ref": "urn:dmtools:schema:terrain-project:9#/$defs/generatorSettings"
+      "$ref": "urn:map-maker:schema:terrain-project:9#/$defs/generatorSettings"
     },
     "constraints": {
-      "$ref": "urn:dmtools:schema:terrain-project:9#/properties/constraints"
+      "$ref": "urn:map-maker:schema:terrain-project:9#/properties/constraints"
     },
     "authoring": {
-      "$ref": "urn:dmtools:schema:terrain-project:9#/$defs/authoringState"
+      "$ref": "urn:map-maker:schema:terrain-project:9#/$defs/authoringState"
     },
     "world_context": {
       "anyOf": [
         { "type": "null" },
-        { "$ref": "urn:dmtools:schema:terrain-context:1#/$defs/binding" }
+        { "$ref": "urn:map-maker:schema:terrain-context:1#/$defs/binding" }
       ]
     }
   }

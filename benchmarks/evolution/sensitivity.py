@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from benchmarks.evolution.frozen import FrozenCase
 from benchmarks.evolution.metrics import terminal_labels
 from benchmarks.evolution.surface import validate_graph
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def compare_graphs(

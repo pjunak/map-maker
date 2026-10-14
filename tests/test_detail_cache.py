@@ -2,8 +2,8 @@
 
 import pytest
 
-from dmtools.terrain.domain.regional import DETAIL_CELL_LIMIT
-from dmtools.terrain.pipeline.detail_cache import CellDetailSupport, DetailSupportCache
+from map_maker.terrain.domain.regional import DETAIL_CELL_LIMIT
+from map_maker.terrain.pipeline.detail_cache import CellDetailSupport, DetailSupportCache
 
 
 def test_recently_used_cell_survives_eviction_and_replacement() -> None:

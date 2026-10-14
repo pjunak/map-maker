@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from dmtools.terrain.pipeline.hydrology import condition_channel_floors
+from map_maker.terrain.pipeline.hydrology import condition_channel_floors
 
 
 def test_downstream_limits_recover_cuts_across_the_complete_chain() -> None:

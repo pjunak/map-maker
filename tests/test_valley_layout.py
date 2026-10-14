@@ -15,7 +15,7 @@ from benchmarks.evolution.network_fixture import fixture
 from benchmarks.evolution.patch_comparison import inspect_surface
 from benchmarks.evolution.valley_layout import LayoutSettings, NoAdmissibleLayout, relocate_guides
 from benchmarks.evolution.valley_patches import prepare_patches
-from dmtools.terrain.adapters.build import file_sha256
+from map_maker.terrain.adapters.build import file_sha256
 
 
 def test_relocation_preserves_vertices_topology_and_each_original_reach() -> None:

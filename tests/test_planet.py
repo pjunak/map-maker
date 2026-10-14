@@ -15,25 +15,25 @@ from PIL import Image
 
 from benchmarks.planet.sample_geology import sample_recipe
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.adapters.planet_load import read_planet_parent
-from dmtools.terrain.adapters.world_geology import write_geology
-from dmtools.terrain.application.planet import build_planet, input_identity
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.planet import generate_planet
-from dmtools.terrain.pipeline.planet_climate import simulate_climate
-from dmtools.terrain.pipeline.planet_evolution import calibrated_relief, route
-from dmtools.terrain.pipeline.planet_forcing import (
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.adapters.planet_load import read_planet_parent
+from map_maker.terrain.adapters.world_geology import write_geology
+from map_maker.terrain.application.planet import build_planet, input_identity
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.domain.planet import PlanetClimateSettings, PlanetSettings
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.planet import generate_planet
+from map_maker.terrain.pipeline.planet_climate import simulate_climate
+from map_maker.terrain.pipeline.planet_evolution import calibrated_relief, route
+from map_maker.terrain.pipeline.planet_forcing import (
     coast_distance,
     geology_regions,
     land_on_mesh,
 )
-from dmtools.terrain.pipeline.planet_kernels import accumulate, laplacian, priority_flood
-from dmtools.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
-from dmtools.terrain.pipeline.planet_metrics import compass_share, non_descending_receivers
-from dmtools.terrain.pipeline.planet_wonders import Chasms
+from map_maker.terrain.pipeline.planet_kernels import accumulate, laplacian, priority_flood
+from map_maker.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
+from map_maker.terrain.pipeline.planet_metrics import compass_share, non_descending_receivers
+from map_maker.terrain.pipeline.planet_wonders import Chasms
 
 ROOT = Path(__file__).resolve().parents[1]
 RADIUS = 6.371e6
@@ -174,7 +174,7 @@ def test_settings_reject_unsupported_requests() -> None:
 
 
 def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
-    from dmtools.terrain.domain.wonders import WONDER_KINDS, wonder_kinds
+    from map_maker.terrain.domain.wonders import WONDER_KINDS, wonder_kinds
 
     assert wonder_kinds("all") == WONDER_KINDS
     assert wonder_kinds(" Chasm, crater ") == ("crater", "chasm")  # catalog order
@@ -195,7 +195,7 @@ def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
 def test_planet_build_publishes_verified_world_aligned_products(
     world_path: Path, tmp_path: Path
 ) -> None:
-    geology = tmp_path / "w.dmgeology.json"
+    geology = tmp_path / "w.geology.json"
     write_geology(sample_recipe(world_path), geology, None)
     manifest_path = build_planet(world_path, tmp_path / "planet", geology, FAST, width=256)
     target = manifest_path.parent
@@ -207,7 +207,7 @@ def test_planet_build_publishes_verified_world_aligned_products(
     Draft202012Validator(schema).validate(manifest)
     for name, record in manifest["outputs"].items():
         assert file_sha256(target / name) == record["sha256"]
-    assert {"atlas.png", "precipitation.png", "temperature.png", "geology.dmgeology.json"} <= set(
+    assert {"atlas.png", "precipitation.png", "temperature.png", "input.geology.json"} <= set(
         manifest["outputs"]
     )
     recipe = sample_recipe(world_path)
@@ -240,8 +240,8 @@ def test_planet_build_publishes_verified_world_aligned_products(
     with pytest.raises(FileExistsError):
         build_planet(world_path, target, geology, FAST, width=256)
     # Saved themes can be shown in other projections; changed files are refused.
-    from dmtools.terrain.adapters.map_projection import MapProjection
-    from dmtools.terrain.application.planet_views import export_view
+    from map_maker.terrain.adapters.map_projection import MapProjection
+    from map_maker.terrain.application.planet_views import export_view
 
     view = export_view(
         target, tmp_path / "globe.png", "relief", MapProjection("globe", 10.0, 20.0), 128,
@@ -259,13 +259,13 @@ def test_planet_build_publishes_verified_world_aligned_products(
 
 
 def test_thematic_maps_cover_plates_basins_geology_and_sea_floor(world_path: Path) -> None:
-    from dmtools.terrain.adapters.map_thematic import (
+    from map_maker.terrain.adapters.map_thematic import (
         PROVINCES,
         drainage_roots,
         geology_provinces,
     )
-    from dmtools.terrain.adapters.map_views import THEME_BY_ID
-    from dmtools.terrain.adapters.planet_natural import render_previews
+    from map_maker.terrain.adapters.map_views import THEME_BY_ID
+    from map_maker.terrain.adapters.planet_natural import render_previews
 
     # Drainage roots follow receivers to the sea or to a closed-basin sink.
     receiver = np.array([-1, 0, 1, 3, 3, 2])
@@ -299,7 +299,7 @@ def test_cancelled_planet_build_never_looks_complete(world_path: Path, tmp_path:
 def test_large_meshes_calibrate_on_a_coarse_mesh_then_run_once(
     world_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import dmtools.terrain.pipeline.planet as planet
+    import map_maker.terrain.pipeline.planet as planet
 
     monkeypatch.setattr(planet, "CALIBRATION_NODES", 6000)
     # Production meshes resolve the process area (2,500 km2 is ~4 cells at 800k
@@ -322,7 +322,7 @@ def test_large_meshes_calibrate_on_a_coarse_mesh_then_run_once(
 
 
 def test_lakes_overflow_when_humid_and_close_when_arid() -> None:
-    from dmtools.terrain.pipeline.planet_lakes import balance_lakes
+    from map_maker.terrain.pipeline.planet_lakes import balance_lakes
 
     mesh = build_mesh(30_000, RADIUS, 5)
     lat, lon = np.rad2deg(mesh.lat), np.rad2deg(mesh.lon)
@@ -353,7 +353,7 @@ def test_lakes_overflow_when_humid_and_close_when_arid() -> None:
 
 
 def test_ice_sheets_hold_no_young_lakes() -> None:
-    from dmtools.terrain.pipeline.planet_lakes import young_depressions
+    from map_maker.terrain.pipeline.planet_lakes import young_depressions
 
     mesh = build_mesh(8_000, RADIUS, 2)
     land = np.ones(mesh.size, dtype=bool)
@@ -372,7 +372,7 @@ def test_ice_sheets_hold_no_young_lakes() -> None:
 def test_fine_meshes_couple_climate_on_coarser_meshes(
     world_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import dmtools.terrain.pipeline.planet as planet
+    import map_maker.terrain.pipeline.planet as planet
 
     # Scaled-down stand-ins for the 200k climate and 800k coupling meshes.
     monkeypatch.setattr(planet, "CLIMATE_NODES", 3_000)
@@ -413,9 +413,9 @@ def test_scale_metrics_measure_rivers_and_mountain_belts(world_path: Path) -> No
 
 
 def test_flexural_basins_fill_to_well_drained_plains() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import fill_basins
-    from dmtools.terrain.pipeline.planet_kernels import steepest_receivers
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_forcing import fill_basins
+    from map_maker.terrain.pipeline.planet_kernels import steepest_receivers
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
     mesh = build_mesh(6_000, RADIUS, 4)
     water = mesh.xyz[:, 2] < -0.4
@@ -436,14 +436,14 @@ def test_flexural_basins_fill_to_well_drained_plains() -> None:
 
 
 def test_sea_floor_ages_away_from_spreading_ridges() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import (
+    from map_maker.terrain.pipeline.planet_forcing import (
         coast_distance,
         ocean_floor,
         plate_sea_floor_age_myr,
         sea_floor_age_myr,
     )
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_tectonics import plate_tectonics
 
     mesh = build_mesh(20_000, RADIUS, 6)
     # Two large polar caps of land with an ocean between them.
@@ -469,9 +469,9 @@ def test_sea_floor_ages_away_from_spreading_ridges() -> None:
 
 
 def test_plates_classify_boundaries_and_leading_edges_deterministically() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_tectonics import PLATE_COUNT, plate_tectonics
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_tectonics import PLATE_COUNT, plate_tectonics
 
     mesh = build_mesh(20_000, RADIUS, 7)
     land = mesh.xyz[:, 0] > 0.3
@@ -492,8 +492,8 @@ def test_plates_classify_boundaries_and_leading_edges_deterministically() -> Non
 
 
 def test_big_river_mouths_build_wider_shelves() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import delta_shelf_width
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_forcing import delta_shelf_width
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
     mesh = build_mesh(20_000, RADIUS, 8)
     mouths = np.array([0, 5_000], dtype=np.int64)
@@ -505,7 +505,7 @@ def test_big_river_mouths_build_wider_shelves() -> None:
 
 
 def test_pit_catchments_are_found_from_receivers() -> None:
-    from dmtools.terrain.pipeline.planet_kernels import draining_to
+    from map_maker.terrain.pipeline.planet_kernels import draining_to
 
     # 0 <- 1 <- 2 (pit chain), 3 -> 4 -> sea (5)
     receiver = np.array([-1, 0, 1, 4, 5, -1], dtype=np.int64)
@@ -515,10 +515,10 @@ def test_pit_catchments_are_found_from_receivers() -> None:
 
 
 def test_volcanoes_follow_tectonic_settings_and_stay_below_sea_level_offshore() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
-    from dmtools.terrain.pipeline.planet_volcanism import (
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_tectonics import plate_tectonics
+    from map_maker.terrain.pipeline.planet_volcanism import (
         ARC,
         CALDERA,
         GUYOT_DEPTH_M,
@@ -555,14 +555,14 @@ def test_volcanoes_follow_tectonic_settings_and_stay_below_sea_level_offshore() 
 
 
 def test_flood_basalts_cover_land_at_the_old_end_of_a_hotspot_track() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import TRAP_RADIUS_M, flood_basalts
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
+    from map_maker.terrain.pipeline.planet_forcing import TRAP_RADIUS_M, flood_basalts
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_tectonics import plate_tectonics
 
     mesh = build_mesh(20_000, RADIUS, 10)
     land = np.ones(mesh.size, dtype=bool)
     land[np.argmin(mesh.xyz[:, 2])] = False  # one ocean node so coasts exist
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
 
     coast = coast_distance(mesh, land)
     plates = plate_tectonics(mesh, land, coast, 3)
@@ -573,12 +573,12 @@ def test_flood_basalts_cover_land_at_the_old_end_of_a_hotspot_track() -> None:
 
 
 def test_mountain_belts_vary_along_strike() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import (
+    from map_maker.terrain.pipeline.planet_forcing import (
         MASSIF_FLOOR,
         orogen_profile,
         strike_variation,
     )
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
     mesh = build_mesh(40_000, RADIUS, 12)
     p = mesh.xyz
@@ -599,7 +599,7 @@ def test_mountain_belts_vary_along_strike() -> None:
 
 
 def test_koppen_classes_follow_the_standard_rules() -> None:
-    from dmtools.terrain.pipeline.planet_koppen import KOPPEN, classify_koppen
+    from map_maker.terrain.pipeline.planet_koppen import KOPPEN, classify_koppen
 
     def one(mean: float, warm: float, cold: float, p_warm: float, p_cold: float) -> str:
         def a(v: float) -> np.ndarray:
@@ -619,10 +619,10 @@ def test_koppen_classes_follow_the_standard_rules() -> None:
 
 
 def test_air_is_more_continental_downwind_of_land() -> None:
-    from dmtools.terrain.domain.planet import PlanetClimateSettings
-    from dmtools.terrain.pipeline.planet_climate import simulate_climate
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.domain.planet import PlanetClimateSettings
+    from map_maker.terrain.pipeline.planet_climate import simulate_climate
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
     mesh = build_mesh(20_000, RADIUS, 11)
     lon = np.degrees(np.arctan2(mesh.xyz[:, 1], mesh.xyz[:, 0]))
@@ -642,9 +642,9 @@ def test_air_is_more_continental_downwind_of_land() -> None:
 
 
 def test_summer_rain_belts_reach_further_over_heated_subtropical_land() -> None:
-    from dmtools.terrain.domain.planet import PlanetClimateSettings
-    from dmtools.terrain.pipeline.planet_climate import monsoon_shift
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.domain.planet import PlanetClimateSettings
+    from map_maker.terrain.pipeline.planet_climate import monsoon_shift
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
     mesh = build_mesh(20_000, RADIUS, 12)
     lon = np.degrees(np.arctan2(mesh.xyz[:, 1], mesh.xyz[:, 0]))
@@ -658,9 +658,9 @@ def test_summer_rain_belts_reach_further_over_heated_subtropical_land() -> None:
 
 
 def test_snowline_rises_with_dryness_and_massifs_warm_in_summer() -> None:
-    from dmtools.terrain.pipeline.planet_climate import mass_elevation_warming
-    from dmtools.terrain.pipeline.planet_ice import equilibrium_line_c
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_climate import mass_elevation_warming
+    from map_maker.terrain.pipeline.planet_ice import equilibrium_line_c
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
     ela = equilibrium_line_c(np.array([100.0, 1000.0, 2000.0]))
     assert ela[0] < ela[1] < ela[2]
@@ -673,8 +673,8 @@ def test_snowline_rises_with_dryness_and_massifs_warm_in_summer() -> None:
 
 
 def test_planned_islands_emerge_while_other_seamounts_stay_drowned() -> None:
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_volcanism import (
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_volcanism import (
         GUYOT_DEPTH_M,
         HOTSPOT,
         INTRAPLATE,
@@ -704,10 +704,10 @@ def test_planned_islands_emerge_while_other_seamounts_stay_drowned() -> None:
 
 
 def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_tectonics import plate_tectonics
-    from dmtools.terrain.pipeline.planet_volcanism import (
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_tectonics import plate_tectonics
+    from map_maker.terrain.pipeline.planet_volcanism import (
         MAX_SUMMIT_M,
         TITAN,
         TITAN_MIN_COAST_M,
@@ -748,9 +748,9 @@ def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
 
 
 def test_craters_have_level_troughs_central_plateaus_and_raised_rims() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_wonders import (
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_wonders import (
         crater_relief,
         level_crater_floors,
         place_craters,
@@ -789,10 +789,10 @@ def test_craters_have_level_troughs_central_plateaus_and_raised_rims() -> None:
 
 
 def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_scarps import place_cliff, tepui_group
-    from dmtools.terrain.pipeline.planet_wonders import place_chasm, place_craters
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_scarps import place_cliff, tepui_group
+    from map_maker.terrain.pipeline.planet_wonders import place_chasm, place_craters
 
     centres, axes, scarps, mesas = [], [], [], []
     for nodes in (30_000, 120_000):
@@ -813,8 +813,8 @@ def test_wonders_land_in_the_same_place_at_any_mesh_resolution() -> None:
 
 
 def straight_chasm(depth: float) -> tuple[np.ndarray, Chasms]:
-    from dmtools.terrain.pipeline.planet_wonders import Chasms
-    from dmtools.terrain.pipeline.wonder_geometry import destination, rift_axis
+    from map_maker.terrain.pipeline.planet_wonders import Chasms
+    from map_maker.terrain.pipeline.wonder_geometry import destination, rift_axis
 
     start = np.array([1.0, 0.0, 0.0])
     end = destination(start, np.pi / 2, 1500e3 / RADIUS)
@@ -823,7 +823,7 @@ def straight_chasm(depth: float) -> tuple[np.ndarray, Chasms]:
 
 
 def test_chasms_have_floors_ragged_walls_shoulders_and_headwalls() -> None:
-    from dmtools.terrain.pipeline.planet_wonders import chasm_relief
+    from map_maker.terrain.pipeline.planet_wonders import chasm_relief
 
     axis, chasms = straight_chasm(2000.0)
     assert len(axis) > 100
@@ -858,8 +858,8 @@ def test_chasms_have_floors_ragged_walls_shoulders_and_headwalls() -> None:
 
 
 def test_cliffs_raise_a_tilted_block_behind_a_steep_face() -> None:
-    from dmtools.terrain.pipeline.planet_scarps import CLIFF_BACK, Cliffs, cliff_relief
-    from dmtools.terrain.pipeline.wonder_geometry import destination, rift_axis
+    from map_maker.terrain.pipeline.planet_scarps import CLIFF_BACK, Cliffs, cliff_relief
+    from map_maker.terrain.pipeline.wonder_geometry import destination, rift_axis
 
     start = np.array([1.0, 0.0, 0.0])
     end = destination(start, np.pi / 2, 600e3 / RADIUS)
@@ -896,7 +896,7 @@ def test_cliffs_raise_a_tilted_block_behind_a_steep_face() -> None:
 
 
 def test_tepuis_stand_flat_topped_behind_sheer_walls() -> None:
-    from dmtools.terrain.pipeline.planet_scarps import Tepuis, tepui_relief
+    from map_maker.terrain.pipeline.planet_scarps import Tepuis, tepui_relief
 
     centre = np.array([1.0, 0.0, 0.0])
     tepuis = Tepuis(centre[None], np.array([30e3]), np.array([1800.0]), np.ones(1), np.zeros(1))
@@ -916,16 +916,16 @@ def test_tepuis_stand_flat_topped_behind_sheer_walls() -> None:
 def test_random_cliffs_and_tepuis_stand_inland() -> None:
     from scipy.spatial import KDTree
 
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_scarps import (
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_scarps import (
         CLIFF_BACK,
         CLIFF_COAST_M,
         TEPUI_COAST_M,
         place_cliff,
         tepui_group,
     )
-    from dmtools.terrain.pipeline.wonder_geometry import path_normals
+    from map_maker.terrain.pipeline.wonder_geometry import path_normals
 
     mesh = build_mesh(60_000, RADIUS, 14)
     land = mesh.xyz[:, 2] > -0.3
@@ -957,16 +957,16 @@ def test_random_cliffs_and_tepuis_stand_inland() -> None:
 def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
     from scipy.spatial import KDTree
 
-    from dmtools.terrain.pipeline.planet_forcing import coast_distance
-    from dmtools.terrain.pipeline.planet_mesh import build_mesh
-    from dmtools.terrain.pipeline.planet_wonders import (
+    from map_maker.terrain.pipeline.planet_forcing import coast_distance
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_wonders import (
         CHASM_DEPTH_M,
         CHASM_LENGTH_M,
         CHASM_MIN_DEPTH_M,
         CHASM_WIDTH_M,
         place_chasm,
     )
-    from dmtools.terrain.pipeline.wonder_geometry import FLOOR_M, footprint
+    from map_maker.terrain.pipeline.wonder_geometry import FLOOR_M, footprint
 
     mesh = build_mesh(60_000, RADIUS, 14)
     land = mesh.xyz[:, 2] > -0.3
@@ -994,12 +994,12 @@ def test_a_random_chasm_lies_inland_with_shallower_side_canyons() -> None:
 
 
 def test_a_shattered_volcano_opens_towards_its_breach_over_a_debris_field() -> None:
-    from dmtools.terrain.pipeline.planet_volcanism import (
+    from map_maker.terrain.pipeline.planet_volcanism import (
         breach_azimuth,
         edifice_height,
         shattered_volcano,
     )
-    from dmtools.terrain.pipeline.wonder_geometry import destination
+    from map_maker.terrain.pipeline.wonder_geometry import destination
 
     site = np.array([1.0, 0.0, 0.0])
     volcano = shattered_volcano(site, 35e3, np.random.default_rng(4))
@@ -1017,9 +1017,9 @@ def test_a_shattered_volcano_opens_towards_its_breach_over_a_debris_field() -> N
 
 
 def test_the_giant_active_volcano_erupts_lava_ash_and_a_glowing_vent() -> None:
-    from dmtools.terrain.pipeline.planet_eruptions import erupt, eruption_cover
-    from dmtools.terrain.pipeline.planet_volcanism import fire_mountain
-    from dmtools.terrain.pipeline.wonder_geometry import destination
+    from map_maker.terrain.pipeline.planet_eruptions import erupt, eruption_cover
+    from map_maker.terrain.pipeline.planet_volcanism import fire_mountain
+    from map_maker.terrain.pipeline.wonder_geometry import destination
 
     site = np.array([1.0, 0.0, 0.0])
     volcano = fire_mountain(site, None, np.random.default_rng(4))
@@ -1041,8 +1041,8 @@ def test_the_giant_active_volcano_erupts_lava_ash_and_a_glowing_vent() -> None:
 
 
 def test_wonder_overlays_paint_lava_black_and_vents_glowing() -> None:
-    from dmtools.terrain.adapters.planet_natural import PixelClimate, land_colour
-    from dmtools.terrain.pipeline.planet_wonders import WonderCover
+    from map_maker.terrain.adapters.planet_natural import PixelClimate, land_colour
+    from map_maker.terrain.pipeline.planet_wonders import WonderCover
 
     shape = (1, 3)
     points = np.tile([1.0, 0.0, 0.0], (3, 1))
@@ -1063,8 +1063,8 @@ def test_wonder_overlays_paint_lava_black_and_vents_glowing() -> None:
 
 
 def test_an_oasis_greens_the_desert_around_a_spring_pond() -> None:
-    from dmtools.terrain.pipeline.planet_waters import Oases, oasis_cover, oasis_relief
-    from dmtools.terrain.pipeline.wonder_geometry import destination
+    from map_maker.terrain.pipeline.planet_waters import Oases, oasis_cover, oasis_relief
+    from map_maker.terrain.pipeline.wonder_geometry import destination
 
     centre = np.array([1.0, 0.0, 0.0])
     oases = Oases(centre[None], np.array([10e3]))
@@ -1079,7 +1079,7 @@ def test_an_oasis_greens_the_desert_around_a_spring_pond() -> None:
 def test_a_river_splits_across_a_low_divide_and_reaches_the_sea_twice(
     world_path: Path,
 ) -> None:
-    from dmtools.terrain.pipeline.planet_waters import (
+    from map_maker.terrain.pipeline.planet_waters import (
         FORK_INLAND_M,
         FORK_MOUTHS_APART_M,
         find_fork,
@@ -1118,14 +1118,14 @@ def test_a_river_splits_across_a_low_divide_and_reaches_the_sea_twice(
 
 
 def test_aging_rounds_a_crater_fills_its_floor_and_cuts_gullies() -> None:
-    from dmtools.terrain.pipeline.planet_aging import Aging, age_wonder
-    from dmtools.terrain.pipeline.planet_wonders import (
+    from map_maker.terrain.pipeline.planet_aging import Aging, age_wonder
+    from map_maker.terrain.pipeline.planet_wonders import (
         Craters,
         Wonders,
         crater_relief,
         wonder_relief,
     )
-    from dmtools.terrain.pipeline.wonder_geometry import destination
+    from map_maker.terrain.pipeline.wonder_geometry import destination
 
     centre = np.array([1.0, 0.0, 0.0])
     craters = Craters(centre[None], np.array([60e3]), np.array([900.0]))
@@ -1156,8 +1156,8 @@ def test_aging_rounds_a_crater_fills_its_floor_and_cuts_gullies() -> None:
 
 
 def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Path) -> None:
-    from dmtools.terrain.adapters.planet_load import read_planet_parent
-    from dmtools.terrain.application.planet import export_planet, generate_planet_run
+    from map_maker.terrain.adapters.planet_load import read_planet_parent
+    from map_maker.terrain.application.planet import export_planet, generate_planet_run
 
     settings = replace(FAST, climate_passes=0, wonders=("crater",), wonder_age_myr=15.0)
     run = generate_planet_run(open_world(world_path).project, None, settings, preview_width=0)
@@ -1173,8 +1173,8 @@ def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Pat
 
 
 def test_crater_rims_are_scalloped_rather_than_circular() -> None:
-    from dmtools.terrain.pipeline.planet_wonders import Craters, crater_relief
-    from dmtools.terrain.pipeline.wonder_geometry import destination
+    from map_maker.terrain.pipeline.planet_wonders import Craters, crater_relief
+    from map_maker.terrain.pipeline.wonder_geometry import destination
 
     centre = np.array([1.0, 0.0, 0.0])
     craters = Craters(centre[None], np.array([100e3]), np.array([1000.0]))
@@ -1189,7 +1189,7 @@ def test_crater_rims_are_scalloped_rather_than_circular() -> None:
 
 
 def test_waterfalls_mark_rivers_only_where_they_drop_over_steep_ground() -> None:
-    from dmtools.terrain.adapters.planet_natural import paint_falls
+    from map_maker.terrain.adapters.planet_natural import paint_falls
 
     rivers = np.zeros((20, 20))
     rivers[10, :] = 1.0
@@ -1203,9 +1203,9 @@ def test_waterfalls_mark_rivers_only_where_they_drop_over_steep_ground() -> None
 
 
 def test_the_map_hover_names_wonders() -> None:
-    from dmtools.terrain.pipeline.planet_waters import Oases
-    from dmtools.terrain.pipeline.planet_wonders import Craters, Wonders, wonder_at
-    from dmtools.terrain.pipeline.wonder_geometry import destination
+    from map_maker.terrain.pipeline.planet_waters import Oases
+    from map_maker.terrain.pipeline.planet_wonders import Craters, Wonders, wonder_at
+    from map_maker.terrain.pipeline.wonder_geometry import destination
 
     centre = np.array([1.0, 0.0, 0.0])
     wonders = replace(
@@ -1221,8 +1221,8 @@ def test_the_map_hover_names_wonders() -> None:
 def test_hand_placed_landmarks_replace_random_wonders(world_path: Path) -> None:
     from dataclasses import replace as replace_recipe
 
-    from dmtools.terrain.domain.world_geology import GeologyLandmark
-    from dmtools.terrain.pipeline.planet_volcanism import SHATTERED, STRATO, TITAN, WONDER
+    from map_maker.terrain.domain.world_geology import GeologyLandmark
+    from map_maker.terrain.pipeline.planet_volcanism import SHATTERED, STRATO, TITAN, WONDER
 
     world = open_world(world_path)
     recipe = sample_recipe(world_path)

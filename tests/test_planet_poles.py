@@ -11,10 +11,10 @@ from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
-from dmtools.terrain.pipeline.planet_poles import POLE_CAP_DEG, planet_world
-from dmtools.terrain.pipeline.world import WorldMap, component_area_km2, prepare_world_map
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
+from map_maker.terrain.pipeline.planet_poles import POLE_CAP_DEG, planet_world
+from map_maker.terrain.pipeline.world import WorldMap, component_area_km2, prepare_world_map
 
 SEED = 20261006
 RADIUS_KM = 1000.0

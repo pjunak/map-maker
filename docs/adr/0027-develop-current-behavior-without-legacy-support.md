@@ -6,7 +6,7 @@
 
 ## Decision
 
-DM Tools is in early development. Implement and improve the current product;
+Map Maker is in early development. Implement and improve the current product;
 remove obsolete behavior instead of maintaining legacy features, old saves,
 compatibility switches, migration tools or deprecation periods. Keep authored
 source safety and current correctness checks. Old code remains in Git history.

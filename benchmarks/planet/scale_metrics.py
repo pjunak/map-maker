@@ -24,8 +24,8 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import KDTree
 
-from dmtools.terrain.pipeline.planet_kernels import flow_length, multi_source_distance
-from dmtools.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles
+from map_maker.terrain.pipeline.planet_kernels import flow_length, multi_source_distance
+from map_maker.terrain.pipeline.planet_mesh import SphereMesh, mesh_from_triangles
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]

@@ -9,18 +9,18 @@ import pytest
 from jsonschema import Draft202012Validator
 from shapely.geometry import Point, Polygon
 
-from dmtools.cli import main
-from dmtools.terrain.adapters.world_project import read_world_project, world_project_document
-from dmtools.terrain.adapters.world_render import OCEAN, render_world_source
-from dmtools.terrain.adapters.world_svg import parse_world_svg
-from dmtools.terrain.application.world import open_world, propose_group_assignments, save_world
-from dmtools.terrain.domain.models import LandComponent
-from dmtools.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
-from dmtools.terrain.pipeline.world import component_area_km2, prepare_world_map
-from dmtools.terrain.viewport import MapViewport
+from map_maker.cli import main
+from map_maker.terrain.adapters.world_project import read_world_project, world_project_document
+from map_maker.terrain.adapters.world_render import OCEAN, render_world_source
+from map_maker.terrain.adapters.world_svg import parse_world_svg
+from map_maker.terrain.application.world import open_world, propose_group_assignments, save_world
+from map_maker.terrain.domain.models import LandComponent
+from map_maker.terrain.domain.world import WorldAssignment, WorldContinent, WorldFrame, WorldProject
+from map_maker.terrain.pipeline.world import component_area_km2, prepare_world_map
+from map_maker.terrain.viewport import MapViewport
 
 ROOT = Path(__file__).parents[1]
-EXAMPLE = ROOT / "examples/world/four-shores.dmworld.json"
+EXAMPLE = ROOT / "examples/world/four-shores.world.json"
 
 
 def source(body: str, *, width: int = 360) -> str:
@@ -217,7 +217,7 @@ def test_group_suggestions_are_explicit_and_do_not_change_source() -> None:
 
 def test_portable_roundtrip_needs_no_original_svg(tmp_path: Path) -> None:
     project = read_world_project(EXAMPLE)
-    output = tmp_path / "portable.dmworld.json"
+    output = tmp_path / "portable.world.json"
     save_world(project, output)
     loaded = open_world(output)
     assert loaded.project.source == project.source
@@ -230,13 +230,13 @@ def test_portable_roundtrip_needs_no_original_svg(tmp_path: Path) -> None:
 
 
 def test_drawn_coast_detail_is_optional_and_roundtrips(tmp_path: Path) -> None:
-    from dmtools.terrain.adapters.world_svg import drawn_coast_detail_km
+    from map_maker.terrain.adapters.world_svg import drawn_coast_detail_km
 
     project = read_world_project(EXAMPLE)
     plain = world_project_document(project)
     assert "coast_detail_km" not in plain  # projects without it keep their bytes
     refined = replace(project, coast_detail_km=10.0)
-    output = tmp_path / "refined.dmworld.json"
+    output = tmp_path / "refined.world.json"
     save_world(refined, output)
     document = json.loads(output.read_text(encoding="utf-8"))
     assert document["coast_detail_km"] == 10.0
@@ -248,7 +248,7 @@ def test_drawn_coast_detail_is_optional_and_roundtrips(tmp_path: Path) -> None:
             replace(project, coast_detail_km=bad)
     # A refined-coast export declares its detail on the SVG root.
     marked = source("<path d='M10 10 H50 V50 Z'/>").replace(
-        "<svg ", '<svg data-dmtools-coast-detail-km="10" ', 1
+        "<svg ", '<svg data-map-maker-coast-detail-km="10" ', 1
     )
     assert drawn_coast_detail_km(marked) == 10.0
     assert drawn_coast_detail_km(source("<path d='M10 10 H50 V50 Z'/>")) is None
@@ -272,14 +272,14 @@ def test_bad_world_files_fail_without_fallback(tmp_path: Path, change: str) -> N
         raw = raw[:-1] + ', "unknown": 1}'
     else:
         raw = raw[:-1] + ', "name": "duplicate"}'
-    path = tmp_path / "bad.dmworld.json"
+    path = tmp_path / "bad.world.json"
     path.write_text(raw, encoding="utf-8")
     with pytest.raises(ValueError):
         open_world(path)
 
 
 def test_invalid_world_save_leaves_existing_file_untouched(tmp_path: Path) -> None:
-    path = tmp_path / "world.dmworld.json"
+    path = tmp_path / "input.world.json"
     project = read_world_project(EXAMPLE)
     save_world(project, path)
     original = path.read_bytes()
@@ -359,10 +359,10 @@ def test_world_source_name_matches_public_contract(name: str) -> None:
 def test_failed_atomic_world_replace_preserves_original(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from dmtools.terrain.adapters import world_project
+    from map_maker.terrain.adapters import world_project
 
     project = read_world_project(EXAMPLE)
-    path = tmp_path / "world.dmworld.json"
+    path = tmp_path / "input.world.json"
     save_world(project, path)
     original = path.read_bytes()
 
@@ -399,7 +399,7 @@ def test_export_doctype_is_accepted_and_retained(declaration: str, tmp_path: Pat
     project = WorldProject(
         "Map", parsed, WorldFrame((0, 0, 360, 180), 1000), continents, assignments
     )
-    target = tmp_path / "doctype.dmworld.json"
+    target = tmp_path / "doctype.world.json"
     save_world(project, target)
     assert open_world(target).project.source == parsed
 
@@ -522,7 +522,7 @@ def test_retraced_bridge_to_inner_coastline_retains_hole(fill_rule: str) -> None
 
 @pytest.mark.parametrize("outside", [False, True])
 def test_geometry_errors_identify_exact_source_shapes(outside: bool) -> None:
-    from dmtools.terrain.domain.world import WorldGeometryError
+    from map_maker.terrain.domain.world import WorldGeometryError
 
     project = world(
         '<g id="North"><path id="coast" d="M10 10 H30 V30 H10 Z"/>'

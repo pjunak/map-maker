@@ -15,8 +15,8 @@ from numpy.typing import NDArray
 
 from benchmarks.evolution.evidence import numeric_hash
 from benchmarks.evolution.surface import validate_graph
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 GRAPH_ROLE = "saved final Float64-snapshot receivers; not Float32-rerouted delivery receivers"
 CHANNEL_AREA_M2 = 25_000_000.0

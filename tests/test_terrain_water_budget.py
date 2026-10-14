@@ -10,15 +10,15 @@ from numpy.typing import NDArray
 from shapely.geometry import box
 
 from benchmarks.terrain import fixture
-from dmtools.cli import main
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.adapters.project import load_terrain_project, save_terrain_project
-from dmtools.terrain.application import water_budget as application
-from dmtools.terrain.domain import TerrainBasin
-from dmtools.terrain.pipeline import generate
-from dmtools.terrain.pipeline.water import MetricBasin
-from dmtools.terrain.pipeline.water_budget import WaterSamplingBudget, plan_water_sampling_budget
-from dmtools.terrain.pipeline.water_sampling import SamplingDensity, SamplingGuide
+from map_maker.cli import main
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.adapters.project import load_terrain_project, save_terrain_project
+from map_maker.terrain.application import water_budget as application
+from map_maker.terrain.domain import TerrainBasin
+from map_maker.terrain.pipeline import generate
+from map_maker.terrain.pipeline.water import MetricBasin
+from map_maker.terrain.pipeline.water_budget import WaterSamplingBudget, plan_water_sampling_budget
+from map_maker.terrain.pipeline.water_sampling import SamplingDensity, SamplingGuide
 
 EXAMPLES = Path(__file__).parents[1] / "examples" / "terrain"
 
@@ -88,7 +88,7 @@ def test_forecast_uses_only_canonical_finished_ground_and_is_resolution_independ
     monkeypatch.setattr(generate.PreparedTerrainField, "evaluate", observed)
     for name in ("resolve_basin_outflow", "review_drainage_routing", "water_products"):
         monkeypatch.setattr(generate, name, unexpected)
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.profile_positions", unexpected)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.profile_positions", unexpected)
     actual = generate.forecast_water_sampling(
         coast, replace(settings, resolution_px=4096), constraints=tuple(reversed(constraints)))
     assert actual == expected
@@ -107,18 +107,18 @@ def test_budget_failure_counts_without_allocating_any_profile_stations(
     before = ground.copy()
     features: tuple[SamplingGuide, ...] = ()
     if failure == "profile":
-        monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 4)
+        monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 4)
     else:
         limit = 1 if failure == "network" else 200
-        monkeypatch.setattr("dmtools.terrain.pipeline.wet_links.MAX_WET_LINK_SAMPLES", limit)
-        monkeypatch.setattr("dmtools.terrain.pipeline.dry_links.MAX_DRY_LINK_SAMPLES", limit)
+        monkeypatch.setattr("map_maker.terrain.pipeline.wet_links.MAX_WET_LINK_SAMPLES", limit)
+        monkeypatch.setattr("map_maker.terrain.pipeline.dry_links.MAX_DRY_LINK_SAMPLES", limit)
         if failure == "detail":
             features = (SamplingDensity(.001),)
     def unexpected(*args: object, **kwargs: object) -> None:
         pytest.fail("Planning must not allocate sample positions or evaluate ground profiles.")
-    monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.profile_positions", unexpected)
+    monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.profile_positions", unexpected)
     monkeypatch.setattr(
-        "dmtools.terrain.pipeline.water_sampling.sample_ground_positions", unexpected)
+        "map_maker.terrain.pipeline.water_sampling.sample_ground_positions", unexpected)
     result = plan_water_sampling_budget((basin,), ground, axis, axis, features).basins[0]
     for demand in (result.wet_links, result.dry_links):
         assert demand is not None and not demand.count_is_exact
@@ -150,9 +150,9 @@ def test_empty_closed_dry_and_subgrid_footprints_have_explicit_scope() -> None:
 
 @pytest.fixture
 def saved_project(tmp_path: Path) -> Path:
-    for name in ("coastline.svg", "flat-outlet.dmterrain.json"):
+    for name in ("coastline.svg", "flat-outlet.terrain.json"):
         shutil.copyfile(EXAMPLES / name, tmp_path / name)
-    return tmp_path / "flat-outlet.dmterrain.json"
+    return tmp_path / "flat-outlet.terrain.json"
 
 
 def test_cli_forecast_reports_excess_without_writing_inputs_or_builds(

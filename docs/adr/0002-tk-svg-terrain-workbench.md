@@ -19,7 +19,7 @@ application or a proprietary document parser.
 ## Decision
 
 - Use Python's bundled Tk/ttk for the first desktop interface.
-- Launch it through `dmtools terrain gui`; keep UI state and widgets outside the
+- Launch it through `map-maker terrain gui`; keep UI state and widgets outside the
   terrain domain and pipeline.
 - Accept SVG files containing exactly one valid closed drawable object.
 - Define object scale as the longest SVG bounding-box dimension in kilometres.

@@ -8,7 +8,7 @@ separate maintainable modules, and consultation before longer tests.
 
 World now offers **Terrain…**: choose a continent, create a new project folder,
 then author and generate using the existing Terrain workspace. The matching CLI
-is `dmtools world terrain WORLD --continent NAME_OR_ID --output NEW_FOLDER`.
+is `map-maker world terrain WORLD --continent NAME_OR_ID --output NEW_FOLDER`.
 It validates the current world, includes the continent's islands and physically
 connected neighbouring land, dissolves internal ownership boundaries, and projects
 coastlines into metres on the declared custom sphere. The ordinary terrain

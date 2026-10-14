@@ -8,14 +8,14 @@ from typing import Any, cast
 import pytest
 from jsonschema import Draft202012Validator, validate
 
-from dmtools.terrain.adapters import (
+from map_maker.terrain.adapters import (
     CoastlineSource,
     TerrainProjectInputError,
     load_svg_coastline_source,
     load_terrain_project,
     save_terrain_project,
 )
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     BrushToolSettings,
     ElevationPoint,
     FeatureToolSettings,
@@ -73,7 +73,7 @@ def test_project_round_trip_preserves_authored_state_and_relative_svg_path(
 ) -> None:
     source = _source_in(tmp_path)
     project = _project_for(source)
-    destination = tmp_path / "projects" / "continent.dmterrain.json"
+    destination = tmp_path / "projects" / "continent.terrain.json"
 
     save_terrain_project(project, source, destination)
 
@@ -84,7 +84,7 @@ def test_project_round_trip_preserves_authored_state_and_relative_svg_path(
     constraints = cast("list[dict[str, object]]", serialized["constraints"])
     authoring = cast("dict[str, object]", serialized["authoring"])
     tools = cast("dict[str, dict[str, object]]", authoring["tools"])
-    assert serialized["schema"] == "dmtools.terrain-project"
+    assert serialized["schema"] == "map-maker.terrain-project"
     assert serialized["schema_version"] == 9
     schema_path = EXAMPLES.parents[1] / "schemas" / "terrain" / "project-v9.schema.json"
     schema: dict[str, Any] = json.loads(schema_path.read_text(encoding="utf-8"))
@@ -102,7 +102,7 @@ def test_project_round_trip_preserves_authored_state_and_relative_svg_path(
 
 
 def test_committed_example_project_loads() -> None:
-    loaded = load_terrain_project(EXAMPLES / "example.dmterrain.json")
+    loaded = load_terrain_project(EXAMPLES / "example.terrain.json")
 
     assert loaded.project.settings == TerrainSettings()
     assert loaded.project.authoring == TerrainAuthoringState()
@@ -145,7 +145,7 @@ def test_committed_projects_load_after_git_checkout(tmp_path: Path, autocrlf: st
     git("checkout-index", "--all", f"--prefix={checkout.as_posix()}/")
 
     # Exercise Git's checkout conversion, which does not run on a simple file copy.
-    projects = sorted((checkout / "examples" / "terrain").glob("*.dmterrain.json"))
+    projects = sorted((checkout / "examples" / "terrain").glob("*.terrain.json"))
     assert projects
     for project in projects:
         assert load_terrain_project(project).path == project.resolve()
@@ -153,7 +153,7 @@ def test_committed_projects_load_after_git_checkout(tmp_path: Path, autocrlf: st
 
 def test_project_load_rejects_modified_coastline(tmp_path: Path) -> None:
     source = _source_in(tmp_path)
-    destination = tmp_path / "continent.dmterrain.json"
+    destination = tmp_path / "continent.terrain.json"
     save_terrain_project(_project_for(source), source, destination)
     source.path.write_text(
         source.path.read_text(encoding="utf-8") + "\n<!-- changed -->\n",
@@ -172,7 +172,7 @@ def test_project_save_rejects_coastline_changed_after_import(tmp_path: Path) -> 
     )
 
     with pytest.raises(TerrainProjectInputError, match="changed after it was imported"):
-        save_terrain_project(_project_for(source), source, tmp_path / "project.dmterrain.json")
+        save_terrain_project(_project_for(source), source, tmp_path / "project.terrain.json")
 
 
 @pytest.mark.parametrize(
@@ -192,7 +192,7 @@ def test_project_load_rejects_incompatible_contract(
     message: str,
 ) -> None:
     source = _source_in(tmp_path)
-    destination = tmp_path / "continent.dmterrain.json"
+    destination = tmp_path / "continent.terrain.json"
     save_terrain_project(_project_for(source), source, destination)
     document = cast(
         "dict[str, object]", json.loads(destination.read_text(encoding="utf-8"))
@@ -206,7 +206,7 @@ def test_project_load_rejects_incompatible_contract(
 
 def test_project_rejects_removed_seed_policy_setting(tmp_path: Path) -> None:
     source = _source_in(tmp_path)
-    path = tmp_path / "project.dmterrain.json"
+    path = tmp_path / "project.terrain.json"
     save_terrain_project(_project_for(source), source, path)
     document: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     document["settings"]["seed_policy"] = "named-stage-sha256@1"

@@ -8,15 +8,15 @@ from typing import Literal
 import numpy as np
 from numpy.typing import NDArray
 
-from dmtools.terrain.adapters.build import canonical_json
-from dmtools.terrain.domain.evolution import (
+from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.domain.evolution import (
     EVOLUTION_INITIAL_STAGE_ID,
     EvolutionEpoch,
     EvolutionGrid,
     EvolutionHistory,
 )
-from dmtools.terrain.domain.seeds import stage_seed, validate_master_seed
-from dmtools.terrain.pipeline.noise import fractal_value_noise
+from map_maker.terrain.domain.seeds import stage_seed, validate_master_seed
+from map_maker.terrain.pipeline.noise import fractal_value_noise
 
 FloatArray = NDArray[np.float64]
 HistoryCase = Literal[

@@ -32,7 +32,7 @@ The step is optional: without a recipe, mountain ranges are placed automatically
    Use **Source** or an available geographic context layer as the background.
    **Look** selects the direction for exposure/support backgrounds. The
    Geographic context page owns their numeric scales and geographic limitations.
-6. **Save** a separate **`.dmgeology.json`** recipe. **Open…** restores one against
+6. **Save** a separate **`.geology.json`** recipe. **Open…** restores one against
    the currently open world.
 7. **Next** goes to the Generate step, which uses the recipe as it stands in this
    step, saved or not. An edit that is not applied yet stops generation with a
@@ -51,16 +51,16 @@ on disk still names the world it was saved with. A recipe drawn on another sourc
 map is closed when that map is imported.
 
 To use the synthetic example, open
-[`four-shores.dmworld.json`](../examples/world/four-shores.dmworld.json), choose
+[`four-shores.world.json`](../examples/world/four-shores.world.json), choose
 **Geology → Open a recipe…**, and open
-[`four-shores.dmgeology.json`](../examples/world/four-shores.dmgeology.json).
+[`four-shores.geology.json`](../examples/world/four-shores.geology.json).
 Use Save As for experiments. It has an active belt crossing two continent labels
 and a rift crossing the longitude seam; its old-crust/young-rejuvenation values
 are invented examples, not defaults for another world.
 
 ```powershell
-dmtools terrain gui --world examples/world/four-shores.dmworld.json
-dmtools world inspect-geology examples/world/four-shores.dmgeology.json
+map-maker terrain gui --world examples/world/four-shores.world.json
+map-maker world inspect-geology examples/world/four-shores.geology.json
 ```
 
 Use the tree or click resolved land to select a region. **Redraw outline** replaces
@@ -72,15 +72,15 @@ the view, not the authored geometry. There is no output sculpting.
 
 ## Try a complete landform example
 
-Open [landform-world.dmworld.json](../examples/world/landform-world.dmworld.json),
-then load [landform-world.dmgeology.json](../examples/world/landform-world.dmgeology.json)
+Open [landform-world.world.json](../examples/world/landform-world.world.json),
+then load [landform-world.geology.json](../examples/world/landform-world.geology.json)
 in the **Geology** step. It contains two contiguous continent labels, plain defaults,
 a western mountain belt, an eastern plateau and a higher-priority lowland inside
 the plateau. The geometry is deliberately simple so its guidance can be inspected.
 
 ```powershell
-dmtools world terrain examples/world/landform-world.dmworld.json --continent Westreach --geology examples/world/landform-world.dmgeology.json --output artifacts/landform-demo
-dmtools terrain gui --project artifacts/landform-demo/terrain.dmterrain.json
+map-maker world terrain examples/world/landform-world.world.json --continent Westreach --geology examples/world/landform-world.geology.json --output artifacts/landform-demo
+map-maker terrain gui --project artifacts/landform-demo/terrain.terrain.json
 ```
 
 The command creates a project; **Generate terrain** produces its preview. Choose

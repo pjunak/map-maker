@@ -7,15 +7,15 @@ import pytest
 from PIL import Image
 
 from benchmarks.regional_memory import sample_bounds
-from dmtools.terrain.adapters.regional_review import (
+from map_maker.terrain.adapters.regional_review import (
     COMPARISON_PANEL_LIMIT,
     comparison_layout,
     render_parent_comparison,
 )
-from dmtools.terrain.application.region_memory import ParentMemoryEstimate, estimate_regional_job
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.application.region_memory import ParentMemoryEstimate, estimate_regional_job
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 
 
 @pytest.mark.parametrize("size", [(17, 13), (4097, 3), (3, 4097), (1500, 1400)])
@@ -33,9 +33,9 @@ def test_panels_fit_without_upscaling_or_modifying_native_images(size: tuple[int
         assert review.width <= 3 * COMPARISON_PANEL_LIMIT
         assert review.height <= COMPARISON_PANEL_LIMIT + 56
         assert all(a <= b for a, b in zip(layout.panel_size, size, strict=True))
-        assert review.info["dmtools.native_size"] == f"{width}x{height}"
-        assert review.info["dmtools.preview_reduced"] == str(max(size) > 1024).lower()
-        assert float(review.info["dmtools.maximum_added_height_m"]) == 9.
+        assert review.info["map-maker.native_size"] == f"{width}x{height}"
+        assert review.info["map-maker.preview_reduced"] == str(max(size) > 1024).lower()
+        assert float(review.info["map-maker.maximum_added_height_m"]) == 9.
         assert reference.getpixel((0, 0)) == (20, 50, 90, 255)
         assert detailed.getpixel((0, 0)) == (30, 70, 100, 255)
     assert delta.tobytes() == before
@@ -53,7 +53,7 @@ def test_difference_colours_use_full_native_extrema_and_zero_remains_neutral() -
     delta[:] = 0.
     with (Image.new("RGBA", (8, 8)) as reference,
           render_parent_comparison(reference, reference, delta) as review):
-        assert review.info["dmtools.maximum_added_height_m"] == "0.0"
+        assert review.info["map-maker.maximum_added_height_m"] == "0.0"
         assert review.getpixel((x + 1, 31)) == (230, 230, 230)
 
 

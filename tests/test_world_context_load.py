@@ -12,15 +12,15 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from dmtools.cli import main
-from dmtools.terrain.adapters import world_context_load as loader
-from dmtools.terrain.adapters.build import canonical_json, file_sha256
-from dmtools.terrain.application import world_context as application
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.domain.world_context import WorldContextSettings
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.cli import main
+from map_maker.terrain.adapters import world_context_load as loader
+from map_maker.terrain.adapters.build import canonical_json, file_sha256
+from map_maker.terrain.application import world_context as application
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.domain.world_context import WorldContextSettings
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
 
-EXAMPLE = Path(__file__).parents[1] / "examples/world/four-shores.dmworld.json"
+EXAMPLE = Path(__file__).parents[1] / "examples/world/four-shores.world.json"
 
 
 @pytest.fixture
@@ -315,7 +315,7 @@ def test_graph_size_admission_precedes_numeric_allocation(
     value: object,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from dmtools.terrain.adapters import world_connectivity as graph_loader
+    from map_maker.terrain.adapters import world_connectivity as graph_loader
 
     edit_manifest(bundle, lambda doc: doc["connectivity"].update({field: value}))
 
@@ -353,7 +353,7 @@ def test_graph_header_size_is_checked_before_numpy_decoding(
         pytest.fail("Malformed graph headers must be rejected before np.load.")
 
     # Geography is decoded earlier, so guard only the graph's bounded reader.
-    from dmtools.terrain.adapters import world_connectivity as graph_loader
+    from map_maker.terrain.adapters import world_connectivity as graph_loader
 
     reader = graph_loader.read_numeric_archive
 

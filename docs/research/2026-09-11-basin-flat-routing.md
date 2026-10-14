@@ -40,7 +40,7 @@ flat routing does not infer runoff volumes, storage or a controlling sill.
 
 ## Validation and measurements
 
-The public [flat-outlet example](../../examples/terrain/flat-outlet.dmterrain.json)
+The public [flat-outlet example](../../examples/terrain/flat-outlet.terrain.json)
 has a canonical 257 by 152 grid. It uses a zero-relief plateau and narrower
 height influences to produce exact Float32 flats alongside retained pockets.
 

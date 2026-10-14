@@ -12,8 +12,8 @@ from numpy.typing import NDArray
 
 from benchmarks.evolution.metrics import sample_grid, terminal_labels
 from benchmarks.evolution.scenarios import FloatArray, frozen
-from dmtools.terrain.domain.evolution import EvolutionGrid
-from dmtools.terrain.pipeline.channel_reconstruction import channel_diagonals
+from map_maker.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.pipeline.channel_reconstruction import channel_diagonals
 
 FLOW_SURFACE_ID = "required-d8-triangle-surface@1"
 

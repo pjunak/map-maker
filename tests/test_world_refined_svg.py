@@ -6,16 +6,16 @@ import numpy as np
 import pytest
 from shapely.geometry import Polygon
 
-from dmtools.terrain.adapters.world_project import read_world_project
-from dmtools.terrain.adapters.world_svg import drawn_coast_detail_km, load_world_svg
-from dmtools.terrain.application.world import (
+from map_maker.terrain.adapters.world_project import read_world_project
+from map_maker.terrain.adapters.world_svg import drawn_coast_detail_km, load_world_svg
+from map_maker.terrain.application.world import (
     export_refined_coast,
     propose_group_assignments,
     save_world,
 )
-from dmtools.terrain.domain.world import WorldFrame, WorldProject
-from dmtools.terrain.pipeline.planet_coast import coastline
-from dmtools.terrain.pipeline.world import prepare_world_map
+from map_maker.terrain.domain.world import WorldFrame, WorldProject
+from map_maker.terrain.pipeline.planet_coast import coastline
+from map_maker.terrain.pipeline.world import prepare_world_map
 
 SEED = 20261006
 # Two continents sharing a land border, an island, and a lake in the west.
@@ -38,7 +38,7 @@ def project(tmp_path_factory: pytest.TempPathFactory) -> Path:
     svg.write_text(SVG, encoding="utf-8")
     source = load_world_svg(svg)
     continents, assignments = propose_group_assignments(source)
-    path = folder / "drawn.dmworld.json"
+    path = folder / "drawn.world.json"
     save_world(
         WorldProject("Drawn", source, WorldFrame((0, 0, 360, 180), 1000), continents, assignments),
         path,
@@ -89,7 +89,7 @@ def test_refined_coast_imports_with_its_continents_roles_and_detail(
 def test_refined_coast_refuses_more_points_than_the_importer_reads(
     project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import dmtools.terrain.adapters.world_refined_svg as refined
+    import map_maker.terrain.adapters.world_refined_svg as refined
 
     monkeypatch.setattr(refined, "MAX_WORLD_POINTS", 50)
     with pytest.raises(ValueError, match="coarser coast detail"):

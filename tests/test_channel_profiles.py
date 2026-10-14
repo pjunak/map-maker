@@ -8,14 +8,14 @@ import pytest
 from numpy.typing import NDArray
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.pipeline import generate as generation
-from dmtools.terrain.pipeline.channel_floor import ChannelFloorReconstruction
-from dmtools.terrain.pipeline.channel_profiles import (
+from map_maker.terrain.pipeline import generate as generation
+from map_maker.terrain.pipeline.channel_floor import ChannelFloorReconstruction
+from map_maker.terrain.pipeline.channel_profiles import (
     ChannelProfiles,
     attainable_targets,
     prepare_channel_profiles,
 )
-from dmtools.terrain.pipeline.reconstruction import BoundedBicubicGrid
+from map_maker.terrain.pipeline.reconstruction import BoundedBicubicGrid
 
 type FloatArray = NDArray[np.float64]
 

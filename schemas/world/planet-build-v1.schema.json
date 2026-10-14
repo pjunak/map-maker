@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dmtools.local/schemas/world/planet-build-v1.schema.json",
-  "title": "DM Tools experimental whole-planet relief build v1",
+  "$id": "https://map-maker.local/schemas/world/planet-build-v1.schema.json",
+  "title": "Map Maker experimental whole-planet relief build v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -28,7 +28,7 @@
     "build_sha256"
   ],
   "properties": {
-    "schema": { "const": "dmtools.planet-build" },
+    "schema": { "const": "map-maker.planet-build" },
     "version": { "type": "integer", "const": 1 },
     "status": { "const": "experimental" },
     "algorithms": {
@@ -190,7 +190,7 @@
     "outputs": {
       "type": "object",
       "required": [
-        "world.dmworld.json", "planet.npz", "elevation.tif", "relief.png",
+        "input.world.json", "planet.npz", "elevation.tif", "relief.png",
         "rivers.geojson", "lakes.geojson", "volcanoes.geojson"
       ],
       "additionalProperties": {

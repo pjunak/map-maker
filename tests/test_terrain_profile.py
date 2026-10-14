@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from dmtools.terrain.pipeline.profile import shape_preserving_profile
+from map_maker.terrain.pipeline.profile import shape_preserving_profile
 
 
 def test_shape_preserving_profile_interpolates_without_interval_overshoot() -> None:

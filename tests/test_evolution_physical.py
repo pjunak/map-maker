@@ -15,7 +15,7 @@ from benchmarks.evolution.physical import (
     prepare,
 )
 from benchmarks.evolution.surface import FlowAlignedSurface
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def zigzag() -> FlowAlignedSurface:

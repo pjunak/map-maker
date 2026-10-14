@@ -13,8 +13,8 @@ from benchmarks.evolution.evidence import numeric_hash
 from benchmarks.evolution.network import RiverNetwork
 from benchmarks.evolution.paths import FloatArray
 from benchmarks.evolution.valley_patches import ValleyPatches
-from dmtools.terrain.adapters.build import canonical_json
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import canonical_json
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 FEATURE_MODEL_ID = "prepared-valley-surface@1"
 MAX_QUERY_POINTS = 262_144

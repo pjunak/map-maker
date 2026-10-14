@@ -14,7 +14,7 @@ The imposed 750 m lake level, terrain, MFD capture and incision limits do not
 change between those reviews. The authored point itself changes terrain relative
 to the scene without it; the review does not.
 
-The [fixture](../../examples/terrain/dry-collection-barrier.dmterrain.json) adds
+The [fixture](../../examples/terrain/dry-collection-barrier.terrain.json) adds
 an unattached relative +150 m point with 100 m influence radius at normalized
 (0.33058203125, 0.47927814569536425). The rejected link uses 32 samples, including
 25 feature-guided extras and a 25 m local spacing limit. Its sampled low is at

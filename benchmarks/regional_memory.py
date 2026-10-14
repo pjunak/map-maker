@@ -15,11 +15,11 @@ from numpy.typing import NDArray
 
 from benchmarks.parent_session import artifact_identity, workload
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.application.parent_region import ParentRegionSession
-from dmtools.terrain.application.region_memory import MIB, RegionalMemoryBudget
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.application.parent_region import ParentRegionSession
+from map_maker.terrain.application.region_memory import MIB, RegionalMemoryBudget
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.domain.regional import RegionalDetailSettings, RegionalSamplingRequest
 
 
 def numeric_storage(*roots: object) -> int:

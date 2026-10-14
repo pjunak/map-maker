@@ -24,7 +24,7 @@ Routing, derived incision and delivered ground can change. No dependency is adde
 ## Dense finite macro reference
 
 An ignored observer probe imports the baseline `routing_edges.py` from a
-`git archive b0898d6 src/dmtools` snapshot. Both observers receive identical
+`git archive b0898d6 src/map_maker` snapshot. Both observers receive identical
 canonical nodes, regions and the current full authored-macro callback. For each
 of five public regional seeds, inspect all 33,635 undirected land-land edges
 whose endpoints contact a mountain polygon buffered by the longest grid edge.

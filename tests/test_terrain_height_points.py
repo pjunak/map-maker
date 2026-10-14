@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import (
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     TerrainBrushStroke,
@@ -14,7 +14,7 @@ from dmtools.terrain.domain import (
     TerrainSettings,
     TerrainStructure,
 )
-from dmtools.terrain.pipeline.generate import (
+from map_maker.terrain.pipeline.generate import (
     PreparedTerrainField,
     generate_terrain,
     prepare_terrain_field,
@@ -114,7 +114,7 @@ def test_coincident_conflicting_absolute_heights_fail_before_routing(
     def no_routing(*_args: object, **_kwargs: object) -> None:
         pytest.fail("Conflicting exact points must be rejected before global routing")
     monkeypatch.setattr(
-        "dmtools.terrain.pipeline.generate._prepare_automatic_valley_field", no_routing)
+        "map_maker.terrain.pipeline.generate._prepare_automatic_valley_field", no_routing)
     points = (ElevationPoint((.5, .5), 500., 20.), ElevationPoint((.5, .5), 501., 90.))
     with pytest.raises(ValueError, match="Conflicting height points"):
         prepare_terrain_field(_coast(), _settings(), points, None)

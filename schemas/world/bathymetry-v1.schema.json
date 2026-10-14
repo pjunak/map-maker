@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://dmtools.local/schemas/world/bathymetry-v1.schema.json",
-  "title": "DM Tools generated world bathymetry v1",
+  "$id": "https://map-maker.local/schemas/world/bathymetry-v1.schema.json",
+  "title": "Map Maker generated world bathymetry v1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -26,7 +26,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "dmtools.world-bathymetry"
+      "const": "map-maker.world-bathymetry"
     },
     "version": {
       "type": "integer",
@@ -39,7 +39,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "dmtools_version",
+        "map_maker_version",
         "package_source_sha256",
         "python",
         "implementation",
@@ -52,7 +52,7 @@
         "dependencies"
       ],
       "properties": {
-        "dmtools_version": {
+        "map_maker_version": {
           "type": "string",
           "minLength": 1
         },
@@ -200,7 +200,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "inputs.dmbathy.json",
+        "input.bathy.json",
         "bathymetry.npz",
         "geography/context.json",
         "bed.png",
@@ -208,7 +208,7 @@
         "support.png"
       ],
       "properties": {
-        "inputs.dmbathy.json": {
+        "input.bathy.json": {
           "type": "object",
           "additionalProperties": false,
           "required": [

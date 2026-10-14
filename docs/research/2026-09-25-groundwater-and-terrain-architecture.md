@@ -24,7 +24,7 @@ cave collapse are separate capabilities, conditional on suitable geology.
 
 These are project design inferences from the sources below and the failed local
 experiments, not a demonstrated quality gain. Neither the groundwater nor canyon
-proposal has passed a numerical or visual comparison in DM Tools.
+proposal has passed a numerical or visual comparison in Map Maker.
 
 ## What the research supports
 
@@ -188,8 +188,8 @@ hard targets. The change is to exercise it in the next comparison, rather than
 continuing to fit every automatic path into an immutable procedural surface.
 
 The native automatic-incision cap is also not a geological cumulative-erosion law.
-[Regional incision](../../src/dmtools/terrain/pipeline/landforms.py) limits a cut to
-a fraction of recipe relief; the [hydrology budget](../../src/dmtools/terrain/pipeline/hydrology.py)
+[Regional incision](../../src/map_maker/terrain/pipeline/landforms.py) limits a cut to
+a fraction of recipe relief; the [hydrology budget](../../src/map_maker/terrain/pipeline/hydrology.py)
 derives a background ceiling from elevation and variability.
 Keep those exact limits on the existing fixed-state comparison. A **separate fresh
 construction/history case** needs a prospectively declared elevation, displacement,

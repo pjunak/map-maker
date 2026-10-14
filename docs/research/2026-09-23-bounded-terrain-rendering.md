@@ -35,7 +35,7 @@ The source identity before the change was
 the updated identity is
 `70f46a39fe16b6a8530614a89471bc1ca9087d2bc80cf4551a740fa09572a916`.
 
-Use the public `example.dmterrain.json` with seed 42, two detail bands and
+Use the public `example.terrain.json` with seed 42, two detail bands and
 65 longest-side nodes (65 by 39). Save and build a fresh parent for each source
 revision; saved parents require the exact current runtime. The benchmark uses
 a 40 m experimental residual and a 64 MiB numeric result cache. No private map

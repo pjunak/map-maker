@@ -12,7 +12,7 @@ bundle is geographic input, not a generated terrain parent.
 
 ## In the editor
 
-1. Open a current `.dmworld.json`, or import and assign a world using the
+1. Open a current `.world.json`, or import and assign a world using the
    [world-source guide](terrain-worlds.md). Confirm its established frame and radius.
 2. Open **Geographic context** under **More tools**. Choose the grid: **Coarse**,
    **Standard** or **Fine** have 90, 180 or 360 latitude rows. Longitude uses twice
@@ -38,7 +38,7 @@ bundle is geographic input, not a generated terrain parent.
 6. **Open context…** selects a completed `context.json`, checks its manifest,
    source, output hashes and numeric contract, then restores the inputs and
    layers. The source snapshot inside that bundle is never the editor's Save
-   target: Save prompts for a separate `.dmworld.json` when starting from context.
+   target: Save prompts for a separate `.world.json` when starting from context.
 
 Changing the source, assignments, frame or context resolution invalidates the
 in-memory result. An obsolete worker result cannot become current. Saving the
@@ -53,7 +53,7 @@ an unchanged source project dirty.
 From the installed repository environment:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe world context examples/world/four-shores.dmworld.json --output artifacts/four-shores-context --latitude-cells 180
+.\.venv\Scripts\map-maker.exe world context examples/world/four-shores.world.json --output artifacts/four-shores-context --latitude-cells 180
 ```
 
 The CLI accepts 4–360 latitude rows for bounded controls and generation. The UI
@@ -68,7 +68,7 @@ current matching context is passed automatically. The CLI accepts a completed
 manifest or its directory:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe world terrain examples/world/four-shores.dmworld.json --continent Southmere --context artifacts/four-shores-context --output artifacts/southmere-terrain
+.\.venv\Scripts\map-maker.exe world terrain examples/world/four-shores.world.json --continent Southmere --context artifacts/four-shores-context --output artifacts/southmere-terrain
 ```
 
 Preparation requires the exact retained world, projection and optional geology
@@ -97,7 +97,7 @@ runoff, aging, bathymetry coupling and water transport are explicitly unsupporte
 Verify an existing result from a manifest or directory:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe world inspect-context artifacts/four-shores-context
+.\.venv\Scripts\map-maker.exe world inspect-context artifacts/four-shores-context
 ```
 
 Viewing retains the recorded producer runtime and accepts a supported current
@@ -267,7 +267,7 @@ that field; `input_sha256` identifies the complete source/settings/algorithm.
 
 | Product | Contents |
 |---|---|
-| `world.dmworld.json` | Portable original SVG, assignments, frame and source identity. |
+| `input.world.json` | Portable original SVG, assignments, frame and source identity. |
 | `geography.npz` | Numeric arrays listed below; load with `allow_pickle=False`. |
 | `land.png`, `water.png`, `support.png`, `gateways.png` | Derived previews; gateways use three pixels per cell to show shared faces. |
 | `exposure.npz` | Float64 `shore_distance_km` [rows, columns]; Float32 `water_exposure` and `exposure_mixed_support` [8, rows, columns]. Bearings follow N, NE, E, SE, S, SW, W, NW. |

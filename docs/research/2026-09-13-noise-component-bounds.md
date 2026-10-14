@@ -26,7 +26,7 @@ The implementation uses two policies:
   runtime expressions. Octave accumulation still uses outward intervals.
 
 [Perlin's Improving Noise paper](https://mrl.cs.nyu.edu/~perlin/paper445.pdf)
-describes the quintic interpolation polynomial used by this project. DM Tools
+describes the quintic interpolation polynomial used by this project. Map Maker
 uses hashed **value noise**; it does not implement the paper's gradient-noise
 algorithm. The polynomial is a useful analytical building block, not evidence
 that generated landforms are physically realistic.

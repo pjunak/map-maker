@@ -14,8 +14,8 @@ from numpy.typing import NDArray
 
 from benchmarks import terrain as terrain_benchmark
 from benchmarks.terrain import CASES, fixture
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.pipeline import generate as generation
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.pipeline import generate as generation
 
 type FloatArray = NDArray[np.float64]
 type GroundSampler = Callable[[FloatArray, FloatArray], NDArray[np.float32]]
@@ -151,7 +151,7 @@ def main() -> None:
                 or fixture_hash != file_sha256(Path(terrain_benchmark.__file__))):
             raise RuntimeError("Source/runtime changed during channel-profile measurement")
         stream.write(canonical_json({
-            "schema": "dmtools.channel-profile-experiment", "schema_version": 2,
+            "schema": "map-maker.channel-profile-experiment", "schema_version": 2,
             "complete": True, "continuous_clearance_certified": False,
             "runtime": runtime, "benchmark_source_sha256": harness_hash,
             "fixture_source_sha256": fixture_hash, "cases": results,

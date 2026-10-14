@@ -1,0 +1,50 @@
+{
+  "schema": "map-maker.world-project",
+  "version": 1,
+  "importer": "retained-svg-v2",
+  "preparation": "bounded-world-v1",
+  "name": "Landform guidance demonstration",
+  "source": {
+    "name": "landform-world.svg",
+    "sha256": "463e0b3c0fe50f15765a754c40d66c13223750a12c57f7ac76b5ce9461a67c34",
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 360 180\">\n<g id=\"Westreach\"><path d=\"M140 65 L150 53 L166 55 L175 60 V106 L163 111 L157 105 L147 107 L149 92 L144 83 Z\"/>\n<g id=\"islands\"><path d=\"M138 94 L141 91 L142 96 L139 98 Z\"/></g></g>\n<g id=\"Eastreach\"><path d=\"M175 60 L189 55 L201 62 L203 78 L210 87 L204 103 L189 112 L175 106 Z\"/></g>\n</svg>"
+  },
+  "frame": {
+    "projection": "plate-carree",
+    "bounds": [
+      0.0,
+      0.0,
+      360.0,
+      180.0
+    ],
+    "radius_km": 2000.0,
+    "central_meridian_deg": 0.0
+  },
+  "continents": [
+    {
+      "id": "continent-5b504b7489544a65a3d5",
+      "name": "Eastreach"
+    },
+    {
+      "id": "continent-992d020104e84fe8a152",
+      "name": "Westreach"
+    }
+  ],
+  "assignments": [
+    {
+      "feature_id": "shape-007e897d13e1e846b244a40d",
+      "continent_id": "continent-5b504b7489544a65a3d5",
+      "role": "mainland"
+    },
+    {
+      "feature_id": "shape-319b2f642222f848f61a637a",
+      "continent_id": "continent-992d020104e84fe8a152",
+      "role": "mainland"
+    },
+    {
+      "feature_id": "shape-aac2a9daf344efe8e50fe13e",
+      "continent_id": "continent-992d020104e84fe8a152",
+      "role": "island"
+    }
+  ]
+}

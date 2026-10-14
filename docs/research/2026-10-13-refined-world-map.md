@@ -79,7 +79,7 @@ smoothing.
 
 ## Export command
 
-`dmtools world refine-coast` now makes such maps (ADR-0095). Unlike the first
+`map-maker world refine-coast` now makes such maps (ADR-0095). Unlike the first
 script, it names island groups so the importer keeps their role (the script's
 export came back with 160 of 180 shapes as mainland), and it cuts the traced land
 by the drawn shapes' territories, so Tharkeniss Kel and Oul, and Dra and Veld,

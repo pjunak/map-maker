@@ -4,7 +4,7 @@ Wonders are fantastical landmarks beyond Earth's extremes. They are opt-in: a
 planet has none unless you choose some.
 
 - **At random.** Tick the kinds under **Wonders** in the Generate step, or pass
-  `--wonders` to `dmtools world planet` with a comma-separated list of kinds or
+  `--wonders` to `map-maker world planet` with a comma-separated list of kinds or
   `all`. Random wonders land in the same places at every mesh resolution, so a
   quick preview shows where the final build puts them.
 - **By hand.** Place them under **Landmarks** in the Geology step

@@ -24,7 +24,7 @@ change land terrain, drainage, climate or erosion.
 5. Compare **Ocean floor**, **Distance error** and **Resolution support**. Hover
    reads sample values under the map. Wheel zoom, drag to pan and **Fit** aid
    inspection; zoom does not generate more samples.
-6. **Save inputs** writes a separate `.dmbathy.json` recipe. **Export result…**
+6. **Save inputs** writes a separate `.bathy.json` recipe. **Export result…**
    asks for a new directory and includes a complete geographic dependency.
    **Open result…** verifies the saved result and restores its input snapshot for
    review; Save asks for an authored destination, never automatically overwriting
@@ -41,8 +41,8 @@ background reads, generation and export. No post-generation painting is offered.
 From the repository root with the existing environment:
 
 ```powershell
-.\.venv\Scripts\dmtools.exe world bathymetry examples/world/four-shores.dmbathy.json --output artifacts/four-shores-ocean
-.\.venv\Scripts\dmtools.exe world inspect-bathymetry artifacts/four-shores-ocean
+.\.venv\Scripts\map-maker.exe world bathymetry examples/world/four-shores.bathy.json --output artifacts/four-shores-ocean
+.\.venv\Scripts\map-maker.exe world inspect-bathymetry artifacts/four-shores-ocean
 ```
 
 The output directory must not exist. The public example selects Water 1 and uses
@@ -107,7 +107,7 @@ are supported.
 
 | File | Meaning |
 |---|---|
-| `inputs.dmbathy.json` | Exact generation input snapshot; never the automatic Save target |
+| `input.bathy.json` | Exact generation input snapshot; never the automatic Save target |
 | `geography/` | Independently verifiable current context bundle and retained world |
 | `bathymetry.npz` | Little-endian Int32 `centre_water_body`; Float32 `bed_elevation_m` and `distance_depth_error_m` on the same grid |
 | `bed.png`, `distance-error.png`, `support.png` | Derived grid-resolution previews |

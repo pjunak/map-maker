@@ -32,7 +32,7 @@ connected paths in teal. The categorized TODO and execution strategy are updated
 
 ## Public example and an actual rejected route
 
-The [connected-outlet fixture](../../examples/terrain/connected-outlet.dmterrain.json)
+The [connected-outlet fixture](../../examples/terrain/connected-outlet.terrain.json)
 uses the public synthetic coastline, one lake, one dry basin and a deliberately
 straight authored valley. This is a connection test, not a natural river-shape
 showcase. The valley finishes at the actual vector coast. Ending it at normalized

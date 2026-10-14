@@ -44,7 +44,7 @@ from profile geometry and review decisions.
 
 ## Validation and measurements
 
-The public [shoreline-gap fixture](../../examples/terrain/shoreline-gap.dmterrain.json)
+The public [shoreline-gap fixture](../../examples/terrain/shoreline-gap.terrain.json)
 adds an absolute zero-height point with a 2 km influence radius at normalized
 position (0.425, 0.28), on the existing lake boundary. The coarse candidate route
 remains clear and the coarse uncontrolled-opening count remains zero. Finer

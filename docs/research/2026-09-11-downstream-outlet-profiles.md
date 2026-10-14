@@ -11,7 +11,7 @@ retains every canonical vertex and verifies its Float32 height. A route that
 climbs more than 0.01 m from an earlier sampled low stays blocked. This measures
 the complete climb, so many smaller steps cannot hide it.
 
-The new [downstream-barrier example](../../examples/terrain/downstream-barrier.dmterrain.json)
+The new [downstream-barrier example](../../examples/terrain/downstream-barrier.terrain.json)
 adds a relative +50 m point with a 100 m influence radius at local x = 604 km on
 the connected example's external valley. Its elevation mode differs from the
 absolute valley, so the point acts independently. All 71 canonical path nodes

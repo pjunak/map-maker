@@ -55,7 +55,7 @@ GeoTIFF are unchanged by the display detail.
   - **Convergence (no climate).** Mean land height is 567 m at 200k nodes and
     580 m at 800k.
 
-## Regional windows (`dmtools world region`, World-tab zoom)
+## Regional windows (`map-maker world region`, World-tab zoom)
 
 Regional windows now use the same colouring, with these additions.
 

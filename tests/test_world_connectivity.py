@@ -10,12 +10,12 @@ from shapely.geometry import Polygon, box
 from shapely.geometry.base import BaseGeometry
 from test_world_context import context, project
 
-from dmtools.terrain.domain.world import WorldFrame
-from dmtools.terrain.domain.world_context import SphericalContextGrid, WorldContextSettings
-from dmtools.terrain.pipeline import world_connectivity as connectivity
-from dmtools.terrain.pipeline.control import CancellationToken, GenerationCancelled
-from dmtools.terrain.pipeline.world import prepare_world_map
-from dmtools.terrain.pipeline.world_context import generate_world_context, water_topology
+from map_maker.terrain.domain.world import WorldFrame
+from map_maker.terrain.domain.world_context import SphericalContextGrid, WorldContextSettings
+from map_maker.terrain.pipeline import world_connectivity as connectivity
+from map_maker.terrain.pipeline.control import CancellationToken, GenerationCancelled
+from map_maker.terrain.pipeline.world import prepare_world_map
+from map_maker.terrain.pipeline.world_context import generate_world_context, water_topology
 
 
 def graph(land: BaseGeometry, rows: int = 12) -> connectivity.WaterConnectivity:

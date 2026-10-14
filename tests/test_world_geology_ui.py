@@ -9,17 +9,17 @@ from threading import Event
 
 import pytest
 
-from dmtools.terrain import ui, world_geology_ui
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.application.world import open_world
-from dmtools.terrain.application.world_context import generate_context
-from dmtools.terrain.application.world_geology import open_geology
-from dmtools.terrain.domain.world_context import WorldContextSettings
-from dmtools.terrain.domain.world_geology import WorldGeologyRecipe
-from dmtools.terrain.pipeline.control import CancellationToken
-from dmtools.terrain.pipeline.world import WorldMap
-from dmtools.terrain.pipeline.world_geology import GeologyCoverage
-from dmtools.terrain.world_geology_ui import GeologyEditor
+from map_maker.terrain import ui, world_geology_ui
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.application.world import open_world
+from map_maker.terrain.application.world_context import generate_context
+from map_maker.terrain.application.world_geology import open_geology
+from map_maker.terrain.domain.world_context import WorldContextSettings
+from map_maker.terrain.domain.world_geology import WorldGeologyRecipe
+from map_maker.terrain.pipeline.control import CancellationToken
+from map_maker.terrain.pipeline.world import WorldMap
+from map_maker.terrain.pipeline.world_geology import GeologyCoverage
+from map_maker.terrain.world_geology_ui import GeologyEditor
 
 EXAMPLES = Path(__file__).parents[1] / "examples/world"
 
@@ -49,7 +49,7 @@ def app() -> Iterator[ui.TerrainApp]:
     root.withdraw()
     application = ui.TerrainApp(root)
     application.world_workspace.accept_world(
-        open_world(EXAMPLES / "four-shores.dmworld.json"), EXAMPLES / "four-shores.dmworld.json"
+        open_world(EXAMPLES / "four-shores.world.json"), EXAMPLES / "four-shores.world.json"
     )
     yield application
     if not application._closed:
@@ -89,7 +89,7 @@ def test_defaults_province_edit_history_and_roundtrip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     editor = edit(app)
-    original_source = file_sha256(EXAMPLES / "four-shores.dmworld.json")
+    original_source = file_sha256(EXAMPLES / "four-shores.world.json")
     editor.values["crust"].set("1800")
     editor.apply()
     wait(editor)
@@ -110,7 +110,7 @@ def test_defaults_province_edit_history_and_roundtrip(
     editor.redo()
     assert not editor.recipe.provinces
     editor.undo()
-    path = tmp_path / "world.dmgeology.json"
+    path = tmp_path / "world.geology.json"
     monkeypatch.setattr(world_geology_ui.filedialog, "asksaveasfilename", reply(str(path)))
     editor.save()
     wait(editor)
@@ -122,7 +122,7 @@ def test_defaults_province_edit_history_and_roundtrip(
     reopened = edit(app, path)
     assert reopened.file is not None and reopened.file.path == path
     assert reopened.recipe.provinces == before_delete.provinces
-    assert file_sha256(EXAMPLES / "four-shores.dmworld.json") == original_source
+    assert file_sha256(EXAMPLES / "four-shores.world.json") == original_source
 
 
 def test_failed_overlap_and_redraw_retain_current_recipe(app: ui.TerrainApp) -> None:
@@ -222,20 +222,20 @@ def test_recipe_open_retains_source_and_context_and_rejects_foreign_identity(
     run = generate_context(view.validated.project, WorldContextSettings(8))
     view.context_run = run
     editor = edit(app)
-    editor.load(EXAMPLES / "four-shores.dmgeology.json")
+    editor.load(EXAMPLES / "four-shores.geology.json")
     wait(editor)
     assert len(editor.recipe.provinces) == 2 and not editor.dirty
     editor.layer.set("Shore distance")
     editor.canvas.draw_now()
     assert editor.canvas.photo is not None and view.context_run is run
     current = editor.recipe
-    path = tmp_path / "bad.dmgeology.json"
-    text = (EXAMPLES / "four-shores.dmgeology.json").read_text(encoding="utf-8")
+    path = tmp_path / "bad.geology.json"
+    text = (EXAMPLES / "four-shores.geology.json").read_text(encoding="utf-8")
     path.write_text(text.replace('"radius_km": 6500.0', '"radius_km": 6000.0'), encoding="utf-8")
     editor.load(path)
     wait(editor)
     assert editor.recipe == current and "fingerprint" in editor.status.get()
-    assert view.path == EXAMPLES / "four-shores.dmworld.json"
+    assert view.path == EXAMPLES / "four-shores.world.json"
 
 
 def test_external_file_change_blocks_save_including_save_as_same_path(
@@ -244,7 +244,7 @@ def test_external_file_change_blocks_save_including_save_as_same_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     editor = edit(app)
-    path = tmp_path / "world.dmgeology.json"
+    path = tmp_path / "world.geology.json"
     monkeypatch.setattr(world_geology_ui.filedialog, "asksaveasfilename", reply(str(path)))
     editor.save()
     wait(editor)
@@ -291,7 +291,7 @@ def test_save_on_parent_close_applies_form_then_saves_before_continuing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     editor = edit(app)
-    target = tmp_path / "closing.dmgeology.json"
+    target = tmp_path / "closing.geology.json"
     monkeypatch.setattr(world_geology_ui.filedialog, "asksaveasfilename", reply(str(target)))
     monkeypatch.setattr(world_geology_ui.messagebox, "askyesnocancel", reply(True))
     editor.values["rejuvenation"].set("0.125")
@@ -326,7 +326,7 @@ def test_explicit_landforms_are_guarded_saved_and_exposed_to_terrain(
     assert panel.read() is None
     editor.redo()
     assert panel.read() == accepted
-    path = tmp_path / "landforms.dmgeology.json"
+    path = tmp_path / "landforms.geology.json"
     monkeypatch.setattr(world_geology_ui.filedialog, "asksaveasfilename", reply(str(path)))
     editor.save()
     wait(editor)
@@ -418,13 +418,13 @@ def test_geology_follows_world_edits_and_feeds_the_planet(
 ) -> None:
     from hashlib import sha256
 
-    from dmtools.terrain import world_ui
-    from dmtools.terrain.adapters.build import canonical_json
-    from dmtools.terrain.adapters.world_geology import geology_document
-    from dmtools.terrain.domain.planet import PlanetSettings
+    from map_maker.terrain import world_ui
+    from map_maker.terrain.adapters.build import canonical_json
+    from map_maker.terrain.adapters.world_geology import geology_document
+    from map_maker.terrain.domain.planet import PlanetSettings
 
     view = app.world_workspace
-    editor = edit(app, EXAMPLES / "four-shores.dmgeology.json")
+    editor = edit(app, EXAMPLES / "four-shores.geology.json")
     provinces = editor.recipe.provinces
     assert len(provinces) == 2 and not editor.dirty
     # Renaming the world used to orphan its recipe; now the recipe follows it.
@@ -473,12 +473,12 @@ def test_geology_follows_world_edits_and_feeds_the_planet(
 
 
 def test_geology_closes_when_another_source_map_opens(app: ui.TerrainApp) -> None:
-    from dmtools.terrain.adapters.world_svg import parse_world_svg
+    from map_maker.terrain.adapters.world_svg import parse_world_svg
 
     view = app.world_workspace
     editor = edit(app)
-    view.accept_world(open_world(EXAMPLES / "four-shores.dmworld.json"),
-                      EXAMPLES / "four-shores.dmworld.json")
+    view.accept_world(open_world(EXAMPLES / "four-shores.world.json"),
+                      EXAMPLES / "four-shores.world.json")
     assert view.geology is editor  # the same drawing keeps its geology
     view.accept_source(parse_world_svg(
         '<svg viewBox="0 0 360 180"><g id="North"><path id="land" d="M10 10 H30 V30 H10 Z"/>'

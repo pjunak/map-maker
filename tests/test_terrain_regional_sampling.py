@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from shapely import contains_xy
 from shapely.geometry import Polygon, box
 
-from dmtools.terrain.pipeline.water_sampling import (
+from map_maker.terrain.pipeline.water_sampling import (
     SamplingFeature,
     plan_ground_profile,
     profile_positions,

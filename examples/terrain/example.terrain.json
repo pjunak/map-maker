@@ -1,0 +1,60 @@
+{
+  "authoring": {
+    "active_tool": "brush",
+    "tools": {
+      "brush": {
+        "elevation_m": 500.0,
+        "elevation_mode": "relative",
+        "intensity": 0.55,
+        "width_km": 280.0
+      },
+      "height": {
+        "elevation_m": 2500.0,
+        "elevation_mode": "absolute",
+        "radius_km": 120.0
+      },
+      "ridge": {
+        "elevation_m": 1200.0,
+        "elevation_mode": "relative",
+        "radius_km": 120.0
+      },
+      "valley": {
+        "elevation_m": 700.0,
+        "elevation_mode": "relative",
+        "radius_km": 90.0
+      },
+      "region": {
+        "character": "plain",
+        "elevation_m": 250.0,
+        "relief_m": 100.0,
+        "feature_size_km": 150.0,
+        "transition_km": 50.0,
+        "orientation_deg": 0.0
+      },
+      "lake": {
+        "water_level_m": 500.0,
+        "outlet_at_first_vertex": false
+      }
+    }
+  },
+  "coastline": {
+    "path": "coastline.svg",
+    "sha256": "6e180c9522b6c966cfc8f34fdf23de047dbcb32b0dbdf0818e8f0b13d2d8fafb"
+  },
+  "constraints": [],
+  "schema": "map-maker.terrain-project",
+  "schema_version": 9,
+  "world_context": null,
+  "settings": {
+    "coastal_rise_km": 180.0,
+    "detail_levels": 6,
+    "largest_feature_km": 450.0,
+    "maximum_elevation_m": 4500.0,
+    "object_scale_km": 4000.0,
+    "resolution_px": 768,
+    "roughness": 0.55,
+    "seed": 20260902,
+    "variability": 0.75,
+    "drainage_density": 1.0
+  }
+}

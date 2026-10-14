@@ -19,8 +19,8 @@ from benchmarks.evolution.patch_comparison import run as run_controls
 from benchmarks.evolution.valley_layout import LAYOUT_MODEL_ID, GuideLayout, relocate_guides
 from benchmarks.evolution.valley_patches import prepare_patches
 from benchmarks.terrain import peak_resident_bytes
-from dmtools.terrain.adapters.build import file_sha256
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.adapters.build import file_sha256
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 
 def run(output: Path, *, figures: bool = True) -> dict[str, Any]:

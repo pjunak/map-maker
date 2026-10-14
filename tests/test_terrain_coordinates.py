@@ -5,16 +5,16 @@ from typing import Any
 import numpy as np
 import pytest
 
-from dmtools.terrain.adapters.render import render_height_map
-from dmtools.terrain.domain import (
+from map_maker.terrain.adapters.render import render_height_map
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     EndpointGrid,
     LocalMetricFrame,
     TerrainSettings,
 )
-from dmtools.terrain.pipeline.generate import generate_terrain
-from dmtools.terrain.pipeline.grid import grid_coordinates
+from map_maker.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.grid import grid_coordinates
 
 
 def test_source_frame_uses_longest_dimension_and_retains_inverse_origin() -> None:

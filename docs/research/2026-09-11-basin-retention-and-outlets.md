@@ -56,7 +56,7 @@ After the review annotation change, all 51 focused routing/water/build tests
 passed. A hidden Tk smoke verified basin details and drainage preview for both
 closed and declared-outlet cases; the generated images were visually inspected.
 
-Public `basin-water.dmterrain.json`, seed 42:
+Public `basin-water.terrain.json`, seed 42:
 
 - Closed dry basin: 1,672 canonical nodes, zero planned exits, retained
   contributing area 1,165,028.31 km2.

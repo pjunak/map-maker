@@ -11,9 +11,9 @@ from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import Coastline, TerrainRegion, TerrainSettings, TerrainStructure
-from dmtools.terrain.pipeline import generate as generation
-from dmtools.terrain.pipeline.terrain_context import PreparedWorldContext
+from map_maker.terrain.domain import Coastline, TerrainRegion, TerrainSettings, TerrainStructure
+from map_maker.terrain.pipeline import generate as generation
+from map_maker.terrain.pipeline.terrain_context import PreparedWorldContext
 
 
 def _dense_samples(

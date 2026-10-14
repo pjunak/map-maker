@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from dmtools.terrain.pipeline.diagnostics import (
+from map_maker.terrain.pipeline.diagnostics import (
     CUT_LIMIT,
     DEPRESSION,
     FINAL_ADJUSTMENT,
@@ -14,7 +14,7 @@ from dmtools.terrain.pipeline.diagnostics import (
     UPHILL,
     review_drainage_routing,
 )
-from dmtools.terrain.pipeline.hydrology import DrainageIncision, drainage_incision
+from map_maker.terrain.pipeline.hydrology import DrainageIncision, drainage_incision
 
 
 def _edge(source: NDArray[np.float64], allowance: float = 100) -> DrainageIncision:

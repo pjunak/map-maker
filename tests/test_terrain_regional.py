@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 
 from benchmarks.terrain import fixture
-from dmtools.terrain.domain import EndpointGrid
-from dmtools.terrain.domain.regional import RegionalSamplingRequest
-from dmtools.terrain.pipeline import regional
-from dmtools.terrain.pipeline.generate import generate_terrain
-from dmtools.terrain.pipeline.grid import grid_coordinates
+from map_maker.terrain.domain import EndpointGrid
+from map_maker.terrain.domain.regional import RegionalSamplingRequest
+from map_maker.terrain.pipeline import regional
+from map_maker.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.pipeline.grid import grid_coordinates
 
 SOURCE = "a" * 64
 

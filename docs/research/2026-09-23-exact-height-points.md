@@ -14,7 +14,7 @@ weights, so its value was an average. Lake water did not cause this discrepancy:
 the basin layer protects ground from automatic incision and classifies water over
 it, while the error was already in absolute-point interpolation.
 
-[generate.py](../../src/dmtools/terrain/pipeline/generate.py) now uses target
+[generate.py](../../src/map_maker/terrain/pipeline/generate.py) now uses target
 shares proportional to `w/(1-w)`, with a stable common rescaling instead of an
 unbounded divide. A point dominates as its centre is approached. Canonical
 coordinate/height/radius ordering keeps floating-point accumulation independent

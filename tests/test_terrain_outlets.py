@@ -7,9 +7,9 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
-from dmtools.terrain.domain import TerrainBasin
-from dmtools.terrain.pipeline.outlets import review_outlet_routes
-from dmtools.terrain.pipeline.water import basin_intent_ids, prepare_basins
+from map_maker.terrain.domain import TerrainBasin
+from map_maker.terrain.pipeline.outlets import review_outlet_routes
+from map_maker.terrain.pipeline.water import basin_intent_ids, prepare_basins
 
 
 @pytest.mark.parametrize("case,expected", [
@@ -35,7 +35,7 @@ def test_outlet_route_evidence(
     case: str, expected: str | None, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     if case == "downstream_budget":
-        monkeypatch.setattr("dmtools.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 8)
+        monkeypatch.setattr("map_maker.terrain.pipeline.water_sampling.MAX_PROFILE_SAMPLES", 8)
     axis = np.arange(9, dtype=np.float64)
     x, y = np.meshgrid(axis, axis)
     land_geometry = Polygon(((1, 1), (7, 1), (7, 7), (1, 7)))

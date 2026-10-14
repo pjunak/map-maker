@@ -10,10 +10,10 @@ it does not replace the [current strategy](../strategy/README.md).
 ## Current evidence
 
 Inspected baseline `9487c58`, particularly the
-[generator](../../src/dmtools/terrain/pipeline/generate.py),
-[noise](../../src/dmtools/terrain/pipeline/noise.py),
-[hydrology](../../src/dmtools/terrain/pipeline/hydrology.py),
-[headless build](../../src/dmtools/terrain/application/build.py) and dependency
+[generator](../../src/map_maker/terrain/pipeline/generate.py),
+[noise](../../src/map_maker/terrain/pipeline/noise.py),
+[hydrology](../../src/map_maker/terrain/pipeline/hydrology.py),
+[headless build](../../src/map_maker/terrain/application/build.py) and dependency
 constraints. The application already separates domain, pipeline, adapters and
 interfaces; preserving and completing those boundaries is more useful than
 replacing them with a new framework.
@@ -66,10 +66,10 @@ from pathlib import Path
 from statistics import median
 from time import perf_counter
 
-from dmtools.terrain.adapters.project import load_terrain_project
-from dmtools.terrain.pipeline.generate import generate_terrain
+from map_maker.terrain.adapters.project import load_terrain_project
+from map_maker.terrain.pipeline.generate import generate_terrain
 
-project = load_terrain_project(Path("examples/terrain/example.dmterrain.json")).project
+project = load_terrain_project(Path("examples/terrain/example.terrain.json")).project
 generate_terrain(project.coastline, replace(project.settings, resolution_px=64),
                  constraints=project.constraints)
 for resolution in (768, 2048, 4096):

@@ -1,13 +1,13 @@
 # First authored world through the planet pipeline — 2026-10-06
 
 Status: **experimental run on the user's private campaign world** (not test data;
-no map content is committed). It checks that `dmtools world planet` and
-`dmtools world region` work on a real authored coastline rather than synthetic
+no map content is committed). It checks that `map-maker world planet` and
+`map-maker world region` work on a real authored coastline rather than synthetic
 fixtures.
 
 ## Input
 
-- **World file.** A saved `.dmworld.json` with 9 continents and 185 source shapes,
+- **World file.** A saved `.world.json` with 9 continents and 185 source shapes,
   most of them islands. Several continents share continuous land along their
   borders.
 - **Frame.** Full-sphere Plate Carrée, (17, 0)–(2897, 1440), 6,000 km radius;

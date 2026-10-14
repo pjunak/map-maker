@@ -7,7 +7,7 @@ import pytest
 
 from benchmarks.evolution.metrics import sample_grid, terminal_labels
 from benchmarks.evolution.scenarios import EvolutionFields, history, scenario
-from dmtools.terrain.domain.evolution import (
+from map_maker.terrain.domain.evolution import (
     EvolutionBudget,
     EvolutionEpoch,
     EvolutionGrid,

@@ -10,8 +10,8 @@ import numpy as np
 
 from benchmarks.evolution.reference import EvolutionResult, LandlabReference, Snapshot
 from benchmarks.evolution.scenarios import EvolutionFields, FloatArray
-from dmtools.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
-from dmtools.terrain.domain.evolution import EvolutionEpoch, EvolutionHistory
+from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
+from map_maker.terrain.domain.evolution import EvolutionEpoch, EvolutionHistory
 
 ROOT = Path(__file__).resolve().parents[2]
 

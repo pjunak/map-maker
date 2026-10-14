@@ -12,7 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from benchmarks.evolution.paths import FloatArray
-from dmtools.terrain.domain.evolution import EvolutionGrid
+from map_maker.terrain.domain.evolution import EvolutionGrid
 
 ENVELOPE_MODEL_ID = "curvature-bounded-bilinear-cap@1"
 CORNERS = (

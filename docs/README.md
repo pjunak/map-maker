@@ -12,7 +12,7 @@ A reading guide. The [file inventory](FILE_INDEX.md) lists every document.
 | Generate geographic context (coverage, water, shore distance, exposure) | [Context guide](world-context.md) |
 | Author geology provinces and landform intent | [Geology guide](world-geology.md) |
 | Generate ocean-depth hypotheses | [Bathymetry guide](world-bathymetry.md) |
-| Use the local terrain editor | [Terrain tool guide](../src/dmtools/terrain/README.md), [cancellation](terrain-generation-control.md) |
+| Use the local terrain editor | [Terrain tool guide](../src/map_maker/terrain/README.md), [cancellation](terrain-generation-control.md) |
 | Build local terrain headlessly | [Builds](terrain-builds.md), [GeoTIFF](terrain-geotiff.md), [coordinates](terrain-coordinates.md), [seeds](terrain-seeds.md) |
 | Author local water, drainage, regions and profiles | [Water](terrain-water.md), [water budget](terrain-water-budget.md), [drainage](terrain-drainage.md), [basins](terrain-basins.md), [regions](terrain-regions.md), [line profiles](terrain-structure-profiles.md) |
 | Sample or refine local builds | [Regional sampling](terrain-regional-sampling.md), [verified parents](terrain-parent-regions.md), [memory admission](terrain-regional-memory.md) |

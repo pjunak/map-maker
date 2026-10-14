@@ -8,8 +8,8 @@ import pytest
 from numpy.typing import NDArray
 from shapely.geometry import Polygon
 
-from dmtools.terrain.adapters import load_terrain_project, save_terrain_project
-from dmtools.terrain.domain import (
+from map_maker.terrain.adapters import load_terrain_project, save_terrain_project
+from map_maker.terrain.domain import (
     Coastline,
     ElevationPoint,
     LakeToolSettings,
@@ -18,16 +18,16 @@ from dmtools.terrain.domain import (
     TerrainConstraint,
     TerrainSettings,
 )
-from dmtools.terrain.pipeline import generate_terrain
-from dmtools.terrain.pipeline.hydrology import drainage_incision
-from dmtools.terrain.pipeline.water import (
+from map_maker.terrain.pipeline import generate_terrain
+from map_maker.terrain.pipeline.hydrology import drainage_incision
+from map_maker.terrain.pipeline.water import (
     WaterReview,
     basin_intent_ids,
     prepare_basins,
     review_water,
     water_products,
 )
-from dmtools.terrain.pipeline.water_sampling import review_shorelines
+from map_maker.terrain.pipeline.water_sampling import review_shorelines
 
 POINTS = ((.2, .2), (.8, .2), (.8, .8), (.2, .8), (.2, .2))
 LAND = Polygon(((0, 0), (6, 0), (6, 6), (0, 6)))
@@ -198,11 +198,11 @@ def test_retention_excludes_automatic_cut_preserves_anchors_and_nested_samples()
 
 
 def test_water_project_round_trip_preserves_intent_and_tool_controls(tmp_path: Path) -> None:
-    example = Path(__file__).parents[1] / "examples/terrain/example.dmterrain.json"
+    example = Path(__file__).parents[1] / "examples/terrain/example.terrain.json"
     loaded = load_terrain_project(example)
     project = replace(loaded.project,
         constraints=(TerrainBasin(POINTS, "lake", 700, POINTS[0]),),
         authoring=TerrainAuthoringState(active_tool="lake", lake=LakeToolSettings(700, True)))
-    path = tmp_path / "water.dmterrain.json"
+    path = tmp_path / "water.terrain.json"
     save_terrain_project(project, loaded.coastline_source, path)
     assert load_terrain_project(path).project == project
