@@ -28,10 +28,15 @@ not seed it. Both streams are recorded in builds, even when no regions are used.
 
 [Experimental local detail](terrain-parent-regions.md) uses `terrain.local-detail`.
 Its parent-region manifest records this resolved seed separately from the parent
-build. Cell coefficients hash ASCII `dmtools.local-detail-cell@1` plus a zero
-byte, the four-byte big-endian stage seed, and eight-byte big-endian unsigned
-column then row. The first three four-byte digest chunks, divided by
-4,294,967,295 and mapped through `(2*u-1)/3`, give the three mode coefficients.
+build. Coefficients belong to globally addressed parent-cell edges
+([ADR-0068](adr/0068-share-terrain-detail-across-edges.md)), so neighboring cells
+share them. Each edge hashes ASCII `dmtools.local-detail-edge@1` plus a zero
+byte, the four-byte big-endian stage seed, one axis byte, and eight-byte
+big-endian unsigned column then row. Cell `(column, row)` uses axis 0 keys
+`(column, row)` and `(column + 1, row)` for its left and right edges, and axis 1
+keys `(column, row)` and `(column, row + 1)` for its top and bottom edges. The
+first two four-byte big-endian digest chunks, divided by 4,294,967,295 and
+reduced by 0.5, give the odd-wave and even-wave coefficients in [-0.5, 0.5].
 The parent interval grid therefore belongs to this experimental detail identity.
 
 Future stochastic processes must use distinct stable names. Derivation takes
@@ -60,6 +65,10 @@ weighting: [ADR-0059](adr/0059-preserve-noise-band-amplitudes.md) changes the la
 without changing these seeds or lattice addresses.
 The result has 32 bits; collisions are possible, so this is deterministic
 stream separation rather than a guarantee that every name has a unique seed.
+
+The `dmtools.` prefix here and in the local-detail edge key is the project's
+former name, kept as literal hashed bytes; renaming it would change derived
+seeds and generated terrain.
 
 These reference values were independently calculated with .NET SHA256:
 
