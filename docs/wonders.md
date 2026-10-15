@@ -135,7 +135,7 @@ rim; at 60 million years it is a faint ring, as Earth's oldest craters are.
 
 Craters, chasms, great cliffs and tepuis age; volcanoes, oases and rivers stay
 young; tepuis and great cliffs wear slowly, as a hard caprock does. Each aged
-wonder is eroded on its own patch around it, about a minute each, and is drawn
+wonder is eroded on its own patch around it, a few seconds each, and is drawn
 from its eroded surface ([ADR-0091](adr/0091-age-wonders-on-their-own-patches.md)).
 
 The science behind each shape, and what was tried before, is in the

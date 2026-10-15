@@ -63,8 +63,8 @@ geology recipe. That coupled them to everything else:
 - A wonder edit costs the wonder pass and the map drawing instead of a build. On
   the four-shores example at Standard detail the pass took about 5 s against 49 s
   for the whole build, and drawing every map at 2,048 px about 13 s; at Fine
-  detail the saving is far larger. Aging still costs about a minute per aged
-  wonder.
+  detail the saving is far larger. Aging adds about 3 s per aged wonder
+  (ADR-0091).
 - Random and fresh wonders give bit-identical planets to the single-pass build on
   that example, with and without every random kind.
 - The app holds the base beside the finished planet. Most arrays are shared; the

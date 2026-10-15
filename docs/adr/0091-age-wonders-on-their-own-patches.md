@@ -52,13 +52,23 @@ place of the wonder's own fresh shape, fading to the fresh shape at the patch
 rim. Aged wonders are therefore smooth at the patch spacing, and the base
 terrain's detail textures them.
 
+## Revision (2026-10-15)
+
+Creep (point 3) is solved implicitly, in 25 backward-Euler steps. Explicit steps
+must stay below the stability limit of the stiffest node, and the patch's jitter
+places a few nodes metres apart, whose cotangent weights are a thousand times
+the usual ones. A 220 km crater aged 20 Myr took about 100,000 substeps and
+7 minutes of creep, against 3 s for the rest of the wonder pass. Implicit steps
+are stable at any size. With 25 of them the error is about 1 % of the creep at
+any age, under a metre on that crater, and creep takes about a second
+(`sphere-mesh-stream-power-v29`).
+
 ## Consequences
 
 - Aged wonders gain gully networks on their walls, rounded rims and partly
   filled floors; an ancient crater fades to a ghost ring, as Earth's oldest
   astroblemes have.
-- Aging costs about a minute per wonder and 100 steps; builds with fresh wonders
-  are unchanged.
+- Aging costs about 3 s per wonder; builds with fresh wonders are unchanged.
 - An aged wonder is resolved at the patch spacing (1–5 km); finer maps show it
   smoothly, textured by the base terrain's detail.
 - Erosion does not deposit downstream of the patch, and the patch boundary is

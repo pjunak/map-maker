@@ -1267,6 +1267,36 @@ def test_aging_rounds_a_crater_fills_its_floor_and_cuts_gullies() -> None:
     assert np.std(change(ring(80e3, 200))) > 2.0
 
 
+def test_creep_spreads_a_bump_as_diffusion_does_even_beside_coincident_nodes() -> None:
+    from scipy.spatial import Delaunay
+
+    from map_maker.terrain.pipeline.planet_aging import creep
+    from map_maker.terrain.pipeline.planet_mesh import mesh_from_triangles
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd, inverse_aeqd, regional_mesh
+
+    region = regional_mesh(0.0, 0.0, 40.0, 1.0, RADIUS, 5)
+    # Jitter can put two nodes a metre apart; their huge cotangent weight is
+    # what made explicit creep take a hundred thousand substeps.
+    plane = region.plane_m
+    plane = np.vstack([plane, plane[int(np.argmin(np.hypot(*plane.T)))] + [1.0, 0.0]])
+    crowded = mesh_from_triangles(
+        inverse_aeqd(plane[:, 0], plane[:, 1], 0.0, 0.0, RADIUS),
+        Delaunay(plane).simplices.astype(np.int64), RADIUS,
+    )
+    assert crowded.length_m.min() < 1.5
+    width2, diffusion = 5e3**2, 1e7  # a 5 km bump; 0.5 m²/yr for 20 Myr
+    meshes = ((region.mesh, region.boundary), (crowded, np.append(region.boundary, False)))
+    for mesh, fixed in meshes:
+        r2 = np.sum(forward_aeqd(mesh.xyz, 0.0, 0.0, RADIUS) ** 2, axis=1)
+        h = 1000.0 + 500.0 * np.exp(-r2 / width2)
+        out = creep(mesh, h, fixed, diffusion)
+        grown = width2 + 4 * diffusion  # a Gaussian stays Gaussian under diffusion
+        exact = 1000.0 + 500.0 * width2 / grown * np.exp(-r2 / grown)
+        assert np.abs(out - exact).max() < 8.0  # of a 300 m drop at the peak
+        assert np.all((out >= 1000.0 - 1e-6) & (out <= 1500.0))
+        assert np.array_equal(out[fixed], h[fixed])
+
+
 def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Path) -> None:
     from map_maker.terrain.adapters.planet_load import read_planet_parent
     from map_maker.terrain.application.planet import export_planet, generate_planet_run

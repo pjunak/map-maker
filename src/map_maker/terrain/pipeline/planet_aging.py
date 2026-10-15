@@ -20,6 +20,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.sparse import csr_array, diags_array
+from scipy.sparse.linalg import splu
 from scipy.spatial import KDTree
 
 from map_maker.terrain.pipeline.control import CancellationToken
@@ -39,6 +41,9 @@ AGING_STEPS = (10, 100)
 # kilometres in tens of millions of years (sqrt(0.5 m^2/yr x 30 Myr) ~ 4 km).
 # Soil creep alone is ~0.01 m^2/yr; landslides act faster on steep walls.
 AGING_DIFFUSIVITY_M2_YR = 0.5
+# Implicit creep steps. The error against the exact creep depends only on their
+# number, not on the age: within about 1 % of the creep, under a metre at 20 Myr.
+CREEP_STEPS = 25
 AGING_RATE = 0.25  # share of the planet's erodibility; it was tuned against uplift
 INFILL_MYR = 50.0  # hollows keep 1 - exp(-age / INFILL_MYR) of their fill
 MAX_AGE_MYR = 500.0
@@ -161,18 +166,27 @@ def age_wonder(
 
 
 def creep(mesh: SphereMesh, h: F64, fixed: B, diffusion_m2: float) -> F64:
-    """Linear hillslope diffusion of ``diffusion_m2`` (diffusivity x time); fixed nodes hold."""
-    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
-    total_weight = np.bincount(src, mesh.weight, mesh.size)
-    worst = float((total_weight / mesh.area_m2)[~fixed].max(initial=0.0))
-    if worst <= 0 or diffusion_m2 <= 0:
-        return h.copy()
-    steps = int(np.ceil(diffusion_m2 * worst / 0.45))  # stable explicit substeps
-    step = diffusion_m2 / steps
+    """Linear hillslope diffusion of ``diffusion_m2`` (diffusivity x time); fixed nodes hold.
+
+    Backward-Euler steps, stable at any step size. Explicit steps would not do:
+    the jittered patch mesh has a few nearly coincident nodes, whose large
+    cotangent weights demand some 100,000 stable explicit substeps.
+    """
     out = h.copy()
-    for _ in range(steps):
-        flux = mesh.weight * (out[mesh.nbr] - out[src])
-        out = np.where(fixed, out, out + step * np.bincount(src, flux, mesh.size) / mesh.area_m2)
+    free = np.flatnonzero(~fixed)
+    if diffusion_m2 <= 0 or not len(free):
+        return out
+    held = np.flatnonzero(fixed)
+    weights = csr_array((mesh.weight, mesh.nbr, mesh.ptr), shape=(mesh.size, mesh.size))
+    rows = weights[free]
+    step = diffusion_m2 / CREEP_STEPS
+    # Each step solves (A + step K) h' = A h on the free nodes, with A their areas
+    # and K the cotangent Laplacian; held neighbours move to the right-hand side.
+    system = diags_array(mesh.area_m2[free] + step * rows.sum(axis=1)) - step * rows[:, free]
+    solve = splu(system.tocsc()).solve
+    inflow = step * (rows[:, held] @ h[held])
+    for _ in range(CREEP_STEPS):
+        out[free] = solve(mesh.area_m2[free] * out[free] + inflow)
     return out
 
 
