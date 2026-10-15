@@ -1,6 +1,6 @@
 {
   "schema": "map-maker.world-wonders",
-  "version": 1,
+  "version": 2,
   "wonders": [
     {
       "age_myr": 20.0,
@@ -8,6 +8,7 @@
       "id": "wonder-eye",
       "kind": "crater",
       "name": "The Eye",
+      "options": {},
       "position": [
         213.95889687654196,
         90.17516091026422
@@ -24,6 +25,10 @@
       "id": "wonder-rift",
       "kind": "chasm",
       "name": "The Rift",
+      "options": {
+        "depth_m": 2500.0,
+        "side_canyons": 5.0
+      },
       "position": [
         145.6542231252707,
         86.44078414236473
@@ -37,6 +42,7 @@
       "id": "wonder-skyfather",
       "kind": "titan",
       "name": "Skyfather",
+      "options": {},
       "position": [
         131.82111260051323,
         84.11306986756253
@@ -50,6 +56,10 @@
       "id": "wonder-table",
       "kind": "tepui",
       "name": "High Table",
+      "options": {
+        "elongation": 1.6,
+        "orientation_deg": 40.0
+      },
       "position": [
         128.4871084003084,
         88.66064017950572

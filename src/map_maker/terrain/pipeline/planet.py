@@ -499,9 +499,10 @@ def _complete(
             site = unit(wonder.position)
             if not land[int(np.argmax(mesh.xyz @ site))]:
                 raise ValueError(f"{wonder.name} lies at sea; place it on land.")
-            parts.append(
-                placed_volcano(kind, site, wonder.effective_size_km * 500.0, wonder.seed)
-            )
+            parts.append(placed_volcano(
+                kind, site, wonder.effective_size_km * 500.0, wonder.seed,
+                wonder.option("height_m"),
+            ))
     volcanoes = join_volcanoes(parts)
     # Volcanoes are young: their edifices stand on the eroded relief. The mesh
     # carries cones widened to its resolution; images redraw them sharply.
@@ -514,7 +515,7 @@ def _complete(
         tuple(
             PlacedWonder(
                 w.kind, unit(w.position), None if w.end is None else unit(w.end),
-                w.effective_size_km * 1e3, w.name, w.seed, w.age_myr,
+                w.effective_size_km * 1e3, w.name, w.seed, w.age_myr, dict(w.options),
             )
             for w in items if w.kind not in VOLCANO_WONDERS
         ),
@@ -573,14 +574,14 @@ def _complete(
     )
     # A splitting river divides on a low divide once the rivers are known. A
     # hand-placed one searches near its place with its own random stream.
-    sites: list[tuple[str, F64 | None, np.random.Generator]] = [
-        (w.name, unit(w.position), np.random.default_rng([w.seed, 9595]))
+    sites: list[tuple[str, F64 | None, np.random.Generator, float | None]] = [
+        (w.name, unit(w.position), np.random.default_rng([w.seed, 9595]), w.option("share_pct"))
         for w in items if w.kind == "fork"
     ] or (
-        [("", None, np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9595]))]
+        [("", None, np.random.default_rng([seeds[PLANET_VOLCANISM_STAGE_ID], 9595]), None)]
         if "fork" in kinds else []
     )
-    for name, near, fork_rng in sites:
+    for name, near, fork_rng, share_pct in sites:
         found = find_fork(mesh, land, coast, evolved, lakes, fork_rng, near)
         if found is None:
             if near is not None:
@@ -589,7 +590,10 @@ def _complete(
                     "large river where another basin is close."
                 )
             break
-        lakes, fork = split_river(mesh, lakes, *found, float(fork_rng.uniform(*FORK_SHARE)))
+        share = float(fork_rng.uniform(*FORK_SHARE))
+        if share_pct is not None:
+            share = share_pct / 100
+        lakes, fork = split_river(mesh, lakes, *found, share)
         wonders = replace(wonders, forks=Forks(
             np.vstack([wonders.forks.split_xyz, fork.split_xyz]),
             np.vstack([wonders.forks.branch_xyz, fork.branch_xyz]),

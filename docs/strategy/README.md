@@ -57,8 +57,9 @@ backlog, and [status](../research/status.md) records what works now.
      are wonder settings, placed wonders have their own `.wonders.json` document,
      Wonders step and seed each, and applying or regenerating them never erodes
      again. Regional tiles come from the base, so wonder edits keep them.
-   - Next: place wonders on the generated relief with per-kind settings, then
-     suggest plausible sites to keep or reject, replacing random placement.
+   - Each kind's settings are declared once in the catalog (ADR-0098), and
+     wonders are placed on the planet's maps.
+   - Next: suggest plausible sites to keep or reject, replacing random placement.
 3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks

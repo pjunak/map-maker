@@ -4,7 +4,7 @@
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -31,7 +31,7 @@ def validator() -> Draft202012Validator:
         json.loads(path.read_text(encoding="utf-8"))
         for path in (
             ROOT / "schemas/world/project-v1.schema.json",
-            ROOT / "schemas/world/wonders-v1.schema.json",
+            ROOT / "schemas/world/wonders-v2.schema.json",
         )
     ]
     registry = Registry[Any]().with_resources(
@@ -60,6 +60,8 @@ def test_example_and_documents_round_trip(tmp_path: Path) -> None:
     example, _ = files.read_wonders(EXAMPLE)
     assert example.world == read_world_project(EXAMPLES / "four-shores.world.json")
     assert len(example.wonders) == 4
+    rift = next(w for w in example.wonders if w.name == "The Rift")
+    assert rift.options == (("depth_m", 2500.0), ("side_canyons", 5.0))
     document = placed()
     raw = files.wonders_document(document)
     validator().validate(raw)
@@ -124,6 +126,37 @@ def test_wonders_reject_what_they_cannot_be() -> None:
             WorldWonder("wonder-a", "A", "crater", centre, 1),
             WorldWonder("wonder-a", "B", "titan", centre, 2),
         ))
+
+
+def test_settings_follow_the_catalog() -> None:
+    from map_maker.terrain.domain.wonders import OPTION_KEYS, WONDERS, WonderKind
+
+    centre = placed().wonders[0].position
+    tepui = WorldWonder("wonder-t", "T", "tepui", centre, 1,
+                        options=(("elongation", 1.5), ("height_m", 2500.0)))
+    assert (tepui.option("height_m"), tepui.option("orientation_deg")) == (2500.0, None)
+    cases: tuple[tuple[WonderKind, tuple[tuple[str, float], ...], str], ...] = (
+        ("tepui", (("depth_m", 1.0),), "has no setting"),  # not a tepui's
+        ("tepui", (("height_m", 9e3),), "height must be a number from 500 to 4,000 m"),
+        ("chasm", (("side_canyons", 2.5),), "must be a whole number"),
+        ("tepui", (("height_m", 2e3), ("elongation", 1.5)), "sorted"),
+        ("tepui", (("height_m", 2e3), ("height_m", 2e3)), "distinct"),
+        ("oasis", (("height_m", 1e3),), "has no setting"),
+    )
+    for kind, options, message in cases:
+        end = (centre[0] + 5.0, centre[1]) if WONDERS[kind].line else None
+        with pytest.raises(ValueError, match=message):
+            WorldWonder("wonder-x", "X", kind, centre, 1, None, end, None, options)
+    # The schema names exactly the catalog's settings, and documents keep them.
+    schema = json.loads((ROOT / "schemas/world/wonders-v2.schema.json").read_text("utf-8"))
+    keys = schema["properties"]["wonders"]["items"]["properties"]["options"]["propertyNames"]
+    assert tuple(keys["enum"]) == OPTION_KEYS
+    document = WorldWonders(placed().world, (tepui,))
+    raw = files.wonders_document(document)
+    validator().validate(raw)
+    wonders = cast(list[dict[str, object]], raw["wonders"])
+    assert wonders[0]["options"] == {"elongation": 1.5, "height_m": 2500.0}
+    assert files.wonders_from_bytes(canonical_json(raw)) == document
 
 
 def test_wonders_follow_edits_of_their_own_world_only() -> None:

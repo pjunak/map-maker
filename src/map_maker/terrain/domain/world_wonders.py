@@ -28,7 +28,9 @@ class WorldWonder:
     ``size_km`` is what the kind's size measures (a diameter, a width or a
     height); None uses the usual size. Line wonders run from ``position`` to
     ``end``. Its shape is drawn from ``seed`` and its kind alone, so other
-    wonders and the planet seed do not change it.
+    wonders and the planet seed do not change it. ``options`` fixes some of the
+    kind's settings (``WonderSpec.options``) as (key, value) pairs sorted by key;
+    the others stay with the generator.
     """
 
     id: str
@@ -39,6 +41,7 @@ class WorldWonder:
     size_km: float | None = None
     end: Point2D | None = None
     age_myr: float | None = None  # None uses the wonder settings' age
+    options: tuple[tuple[str, float], ...] = ()
 
     def __post_init__(self) -> None:
         if not fullmatch(r"wonder-[A-Za-z0-9][A-Za-z0-9_-]*", self.id) or len(self.id) > 256:
@@ -75,6 +78,18 @@ class WorldWonder:
                 raise ValueError(f"A {label} does not age.")
             if not _finite_number(self.age_myr) or not 0 <= self.age_myr <= MAX_WONDER_AGE_MYR:
                 raise ValueError(f"A {label}'s age must be 0-{MAX_WONDER_AGE_MYR:g} Myr.")
+        keys = [key for key, _ in self.options]
+        if keys != sorted(set(keys)):
+            raise ValueError(f"{self.name}: settings must be distinct and sorted by name.")
+        for key, value in self.options:
+            option = spec.option(key)
+            if option is None:
+                raise ValueError(f"A {label} has no setting {key!r}.")
+            option.check(value, self.name)
+
+    def option(self, key: str) -> float | None:
+        """The value fixed for setting ``key``, or None to leave it to the generator."""
+        return next((value for name, value in self.options if name == key), None)
 
     @property
     def effective_size_km(self) -> float:

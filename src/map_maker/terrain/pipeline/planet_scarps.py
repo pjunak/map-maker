@@ -282,10 +282,13 @@ def authored_tepuis(
     radii_m: F64,
     names: tuple[str, ...],
     rngs: tuple[np.random.Generator, ...],
+    fixed: tuple[tuple[float | None, float | None, float | None], ...] | None = None,
 ) -> Tepuis:
     """Hand-placed tepuis at unit vectors ``centres``; each must stand on land.
 
-    Each tepui's plan comes from its own random stream in ``rngs``.
+    Each tepui's plan comes from its own random stream in ``rngs``. ``fixed``
+    gives each one's height (m), elongation and long-axis direction (degrees from
+    north); None leaves a value to the size or the stream.
     """
     tree = KDTree(mesh.xyz)
     for xyz, name in zip(centres, names, strict=True):
@@ -293,11 +296,17 @@ def authored_tepuis(
             raise ValueError(f"{name} lies at sea; place a tepui on land.")
     unit = centres / np.linalg.norm(centres, axis=1)[:, None]
     radii = np.asarray(radii_m, dtype=np.float64)
-    plans = np.array([(rng.uniform(1.0, 2.2), rng.uniform(0, np.pi)) for rng in rngs])
-    return Tepuis(
-        unit, radii, np.array([tepui_height_m(float(r)) for r in radii]),
-        plans[:, 0] if len(plans) else np.zeros(0), plans[:, 1] if len(plans) else np.zeros(0),
-    )
+    heights: list[float] = []
+    aspects: list[float] = []
+    azimuths: list[float] = []
+    for radius, rng, (height, elongation, orientation) in zip(
+        radii, rngs, fixed or ((None, None, None),) * len(radii), strict=True
+    ):
+        aspect, azimuth = rng.uniform(1.0, 2.2), rng.uniform(0, np.pi)
+        heights.append(tepui_height_m(float(radius)) if height is None else height)
+        aspects.append(aspect if elongation is None else elongation)
+        azimuths.append(azimuth if orientation is None else float(np.radians(orientation)))
+    return Tepuis(unit, radii, np.array(heights), np.array(aspects), np.array(azimuths))
 
 
 def tepui_relief(

@@ -28,10 +28,13 @@ titan volcano casts no rain shadow.
 ## Place wonders by hand
 
 1. Open the **Wonders** step and click **Place wonders** (or **Open wonders…**).
-   The step's map, your source drawing, replaces the world map while it is open.
+   The step's map replaces the world map while it is open. Once a planet exists it
+   shows the planet's relief, or any other of its maps chosen above it, and reads
+   out the ground under the cursor; before that it shows your source drawing.
 2. Choose a **Kind**; the text below describes it and its size range. Optionally
    give a **Name**, a **Size** in km (a diameter, a width or a height, depending on
-   the kind; blank uses the usual size) and an **Age** in million years.
+   the kind; blank uses the usual size), an **Age** in million years and the kind's
+   **Settings** (below). Blank settings are left to the generator.
 3. Click **Place on map**, then a point on land. Wonders placed by their two ends,
    such as a chasm, take a second click for the other end. Escape cancels.
 4. Select a wonder in the list to change it (**Update**), give it a **New shape** or
@@ -46,7 +49,31 @@ it; only its depth follows the ground it is cut into. **New shape** draws it fro
 new seed. The planet reports an error if a
 wonder, or either end of a two-ended one, lies at sea, and if a splitting river has
 no large river near it. The file follows edits of its world, as a geology recipe
-does ([schema](../schemas/world/wonders-v1.schema.json)).
+does ([schema](../schemas/world/wonders-v2.schema.json)).
+
+The map under the wonders shows the planet as it was last made: apply to see
+changed wonders in it.
+
+### Settings
+
+Each kind's settings come from the catalog ([ADR-0098](adr/0098-wonder-settings-from-the-catalog.md)).
+Fixing one leaves the others as the wonder's seed draws them.
+
+| Kind | Setting | Range | Blank |
+|---|---|---|---|
+| Titan volcano | Height | 6,000–14,000 m | About 10 km, more for a larger one. |
+| Shattered volcano | Height | 2,000–6,000 m | From its size, 2.5–6 km. |
+| Giant active volcano | Height | 3,000–9,000 m | From its size, 3–9 km. |
+| Impact crater | Depth, rim crest to trough floor | 100–6,000 m | About 0.9 % of its diameter. A depth the ground cannot hold above sea level is an error. |
+| Great chasm | Depth | 300–6,000 m | 3,000 m. Always a cap: shallower where the ground is lower. |
+| Great chasm | Side canyons | 0–10 | Three to six. |
+| Great chasm | Parallel troughs | 0–5 | One to three. |
+| Tepui | Height | 500–4,000 m | From its size, 1–2.8 km. |
+| Tepui | Elongation, long axis over short | 1–3 | 1–2.2. |
+| Tepui | Orientation of the long axis, from north towards east | 0–180° | Any. |
+| Splitting river | Water taken by the other basin | 10–50 % | 25–45 %. |
+
+Great cliffs and oases have no settings beyond their size.
 
 ## The catalog
 

@@ -15,8 +15,8 @@ small synthetic terrain before choosing one.
 See the [plan](docs/strategy/README.md) for states and evidence.
 
 - [ ] **Wonders** (ADR-0097 is the base for these):
-  - [ ] Place wonders on the generated relief, with per-kind settings generated
-    from the catalog (depth, side canyons, group size, breach direction).
+  - [ ] More settings where wanted, such as a shattered volcano's breach direction
+    (store it with the volcano) or a random tepui group's size.
   - [ ] Suggest plausible sites per kind (stable interiors for craters, rifts for
     chasms, hotspots for titans) to keep or reject, replacing random placement.
   - [ ] Cache aged wonders per wonder, so applying others does not age them again.

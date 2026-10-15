@@ -15,6 +15,40 @@ type WonderKind = Literal[
 ]
 
 
+def _finite_in(value: object, low: float, high: float) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and isfinite(value)
+        and low <= value <= high
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class WonderOption:
+    """A setting that a placed wonder of one kind may fix; blank leaves it to the generator.
+
+    The catalog is the one definition of these settings: validation, the wonder
+    document and the app's form all follow it.
+    """
+
+    key: str  # its name in the wonder document
+    label: str  # its name in the app
+    unit: str
+    low: float
+    high: float
+    help: str  # what it means and what blank does
+    whole: bool = False  # a count
+
+    def check(self, value: float, name: str) -> None:
+        if not _finite_in(value, self.low, self.high) or (self.whole and value != int(value)):
+            kind = "a whole number" if self.whole else "a number"
+            raise ValueError(
+                f"{name}: {self.label.lower()} must be {kind} from {self.low:,g} to "
+                f"{self.high:,g}{f' {self.unit}' if self.unit else ''}, or blank."
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class WonderSpec:
     label: str  # its name in the app
@@ -23,10 +57,14 @@ class WonderSpec:
     size_km: tuple[float, float, float] | None  # allowed range and the usual size
     length_km: tuple[float, float] | None = None  # set for wonders placed by two ends
     ages: bool = False  # the aging tool can erode it (ADR-0091)
+    options: tuple[WonderOption, ...] = ()  # settings a placed one may fix (ADR-0098)
 
     @property
     def line(self) -> bool:
         return self.length_km is not None
+
+    def option(self, key: str) -> WonderOption | None:
+        return next((o for o in self.options if o.key == key), None)
 
 
 WONDERS: dict[WonderKind, WonderSpec] = {
@@ -34,28 +72,54 @@ WONDERS: dict[WonderKind, WonderSpec] = {
         "Titan volcano",
         "An ice-capped shield volcano about 10 km high with a cliff around its base.",
         "diameter", (200.0, 1200.0, 560.0),
+        options=(
+            WonderOption("height_m", "Height", "m", 6000.0, 14000.0,
+                         "Summit above the plain. Blank: about 10 km, more for a larger one."),
+        ),
     ),
     "shattered": WonderSpec(
         "Shattered volcano",
         "A volcano that blew itself apart: a horseshoe amphitheatre open on one side, a "
         "summit caldera and a hummocky debris field beyond the breach.",
         "diameter", (20.0, 200.0, 70.0),
+        options=(
+            WonderOption("height_m", "Height", "m", 2000.0, 6000.0,
+                         "Height of the ruined cone. Blank: from its size, 2.5-6 km."),
+        ),
     ),
     "active": WonderSpec(
         "Giant active volcano",
         "An erupting stratovolcano up to 8.5 km high, with a glowing vent, lava flows "
         "and an ash blanket downwind.",
         "diameter", (30.0, 250.0, 130.0),
+        options=(
+            WonderOption("height_m", "Height", "m", 3000.0, 9000.0,
+                         "Summit above the plain. Blank: from its size, 3-9 km."),
+        ),
     ),
     "crater": WonderSpec(
         "Impact crater",
         "A fresh crater with a central plateau that may hold a ring lake.",
         "diameter", (20.0, 600.0, 240.0), ages=True,
+        options=(
+            WonderOption("depth_m", "Depth", "m", 100.0, 6000.0,
+                         "Rim crest to trough floor; the floor must stay above sea level. "
+                         "Blank: about 0.9 % of its diameter, less on low ground."),
+        ),
     ),
     "chasm": WonderSpec(
         "Great chasm",
         "A rift canyon system up to 3 km deep with parallel troughs and side canyons.",
         "width", (10.0, 200.0, 60.0), (100.0, 4000.0), ages=True,
+        options=(
+            WonderOption("depth_m", "Depth", "m", 300.0, 6000.0,
+                         "The deepest it is cut; shallower where the ground is lower, so "
+                         "its floor stays above sea level. Blank: 3,000 m."),
+            WonderOption("side_canyons", "Side canyons", "", 0.0, 10.0,
+                         "Canyons branching off it. Blank: three to six.", whole=True),
+            WonderOption("parallel_troughs", "Parallel troughs", "", 0.0, 5.0,
+                         "Troughs beside part of it. Blank: one to three.", whole=True),
+        ),
     ),
     "cliff": WonderSpec(
         "Great cliff",
@@ -67,6 +131,14 @@ WONDERS: dict[WonderKind, WonderSpec] = {
         "Tepui",
         "A table mountain walled by sheer cliffs on every side; random ones come in groups.",
         "diameter", (10.0, 300.0, 70.0), ages=True,
+        options=(
+            WonderOption("height_m", "Height", "m", 500.0, 4000.0,
+                         "Wall height above the plain. Blank: from its size, 1-2.8 km."),
+            WonderOption("elongation", "Elongation", "", 1.0, 3.0,
+                         "Long axis over short axis; 1 is round. Blank: 1-2.2."),
+            WonderOption("orientation_deg", "Orientation", "°", 0.0, 180.0,
+                         "Direction of its long axis, from north towards east. Blank: any."),
+        ),
     ),
     "oasis": WonderSpec(
         "Oasis",
@@ -79,9 +151,18 @@ WONDERS: dict[WonderKind, WonderSpec] = {
         "A large river that divides on a low divide and reaches the sea two ways. Place it "
         "near a large river; it splits where the divide is lowest.",
         None, None,
+        options=(
+            WonderOption("share_pct", "Water taken", "%", 10.0, 50.0,
+                         "Share of the river's water that leaves by the other basin. "
+                         "Blank: 25-45 %."),
+        ),
     ),
 }
 WONDER_KINDS: tuple[WonderKind, ...] = tuple(WONDERS)
+# Every setting name used by some kind, for the document schema.
+OPTION_KEYS: tuple[str, ...] = tuple(
+    sorted({option.key for spec in WONDERS.values() for option in spec.options})
+)
 
 
 MAX_WONDER_AGE_MYR = 500.0
@@ -91,15 +172,6 @@ AGE_PRESETS: dict[str, float] = {
     "Old · 30 Myr": 30.0,
     "Ancient · 80 Myr": 80.0,
 }
-
-
-def _finite_in(value: object, low: float, high: float) -> bool:
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, (int, float))
-        and isfinite(value)
-        and low <= value <= high
-    )
 
 
 @dataclass(frozen=True, slots=True)

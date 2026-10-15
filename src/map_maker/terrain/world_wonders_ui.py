@@ -2,10 +2,11 @@
 """The World workspace's Wonders step: wonders placed by hand, in their own document.
 
 Like the Geology step, the editor is a sidebar page (this frame) plus its own map
-(``self.map``), which the workspace shows while the step is open. Edits are checked
-at once; opening and saving run on the workspace's job runner. The planet adds the
-wonders after erosion and climate (ADR-0097); the workspace applies them to a
-generated planet.
+(``self.map``), which the workspace shows while the step is open. The map shows the
+source drawing or, once a planet exists, any of its maps under the wonders. Edits
+are checked at once; opening and saving run on the workspace's job runner. The
+planet adds the wonders after erosion and climate (ADR-0097); the workspace applies
+them to a generated planet. Each kind's settings come from the catalog (ADR-0098).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from uuid import uuid4
 
 from PIL import Image
 
+from map_maker.terrain.adapters.map_views import THEME_BY_LABEL, THEMES
 from map_maker.terrain.adapters.world_render import OCEAN, render_world_source
 from map_maker.terrain.adapters.world_wonders import WONDERS_EXTENSION, wonders_file_hash
 from map_maker.terrain.application.world_wonders import WonderFile, open_wonders, save_wonders
@@ -34,13 +36,15 @@ from map_maker.terrain.domain.world_wonders import (
     blank_wonders,
     follow_world,
 )
-from map_maker.terrain.map_canvas import FlatMapCanvas, Rect
+from map_maker.terrain.map_canvas import FlatMapCanvas, ImagePyramid, Rect
+from map_maker.terrain.map_probes import PlanetProbe
 from map_maker.terrain.pipeline.control import CancellationToken
 from map_maker.terrain.pipeline.world import WorldMap
 from map_maker.terrain.ui_components import (
     MapInfoStrip,
     WrappingLabel,
     button_row,
+    field,
     hint,
     section,
 )
@@ -50,6 +54,9 @@ from map_maker.terrain.viewport import MapViewport
 
 KIND_BY_LABEL: dict[str, WonderKind] = {WONDERS[kind].label: kind for kind in WONDER_KINDS}
 HINT = "Drag to pan · wheel to zoom · F fits · click a wonder's name in the list to select it"
+SOURCE_LAYER = "Source map"
+RELIEF_LAYER = "Planet relief"
+SOURCE_LEGEND = "Your source map. Wonders are drawn to scale; the selected one is bright."
 FILETYPES = [("Wonders", f"*{WONDERS_EXTENSION}")]
 
 
@@ -174,11 +181,17 @@ class WonderEditor(ttk.Frame):
             "size": tk.StringVar(self),
             "age": tk.StringVar(self),
         }
+        # The chosen kind's settings (``WonderSpec.options``); blank is automatic.
+        self.option_values: dict[str, tk.StringVar] = {}
+        self._option_inputs: list[ttk.Entry] = []
         self.help = tk.StringVar(self)
         self.file_label = tk.StringVar(self)
-        self.legend = tk.StringVar(
-            self, value="Your source map. Wonders are drawn to scale; the selected one is bright."
-        )
+        self.layer = tk.StringVar(self, value=SOURCE_LAYER)
+        self._layer_chosen = False
+        self._previews: dict[str, Image.Image] = {}
+        self._pyramids: dict[str, ImagePyramid] = {}
+        self.probe: PlanetProbe | None = None
+        self.legend = tk.StringVar(self, value=SOURCE_LEGEND)
         self.inspection = tk.StringVar(self, value=HINT)
         self._build()
         self.map = self._build_map(map_parent)
@@ -237,13 +250,14 @@ class WonderEditor(ttk.Frame):
             ("Save As…", lambda: self.save(save_as=True)),
         ):
             self._button(row, text, command, style="Small").pack(side="left", padx=(0, 4))
-        for text, command in (("Redo", self.redo), ("Undo", self.undo)):
-            self._button(row, text, command, style="Small").pack(side="right", padx=(4, 0))
         placed = section(self, "Placed wonders")
         self.tree = ttk.Treeview(placed, show="tree", selectmode="browse", height=7)
         self.tree.column("#0", width=260)
         self.tree.pack(fill="x", pady=(GAP // 2, 0))
         self.tree.bind("<<TreeviewSelect>>", self._selection)
+        history = button_row(placed, pady=(GAP // 2, 0))
+        for text, command in (("Undo", self.undo), ("Redo", self.redo)):
+            self._button(history, text, command, style="Small").pack(side="left", padx=(0, 4))
         self._build_form()
 
     def _build_form(self) -> None:
@@ -276,14 +290,20 @@ class WonderEditor(ttk.Frame):
             ((name, "normal"), (kind, "readonly"), (size, "normal"), (age, "normal"))
         )
         hint(box, textvariable=self.help)
+        self.settings_box = ttk.Frame(box, style="Panel.TFrame")
+        self.settings_box.pack(fill="x")
         buttons = button_row(box)
-        for text, action in (
+        buttons.columnconfigure((0, 1), weight=1, uniform="actions")
+        for index, (text, action) in enumerate((
             ("Place on map", self.place),
             ("Update", self.update_selected),
             ("New shape", self.new_shape),
             ("Delete", self.delete),
-        ):
-            self._button(buttons, text, action, style="Small").pack(side="left", padx=(0, 4))
+        )):
+            self._button(buttons, text, action).grid(
+                row=index // 2, column=index % 2, sticky="ew",
+                padx=(0, 3) if index % 2 == 0 else (3, 0), pady=(0, 4),
+            )
 
     def _build_map(self, parent: tk.Misc) -> ttk.Frame:
         frame_widget = ttk.Frame(parent, style="Panel.TFrame")
@@ -292,6 +312,11 @@ class WonderEditor(ttk.Frame):
         tools = ttk.Frame(frame_widget, style="Toolbar.TFrame", padding=GAP)
         tools.grid(row=0, column=0, sticky="ew")
         ttk.Label(tools, text="Wonders", style="Section.TLabel").pack(side="left")
+        self.layer_input = ttk.Combobox(
+            tools, textvariable=self.layer, values=(SOURCE_LAYER,), state="readonly", width=24
+        )
+        self.layer_input.pack(side="left", padx=GAP)
+        self.layer_input.bind("<<ComboboxSelected>>", lambda _e: self._layer_picked())
         ttk.Button(tools, text="Fit", style="Small.TButton", command=self.fit).pack(side="right")
         frame = self.world.project.frame
         self.canvas = FlatMapCanvas(
@@ -312,6 +337,7 @@ class WonderEditor(ttk.Frame):
         return KIND_BY_LABEL[self.values["kind"].get()]
 
     def _describe(self, *_args: str) -> None:
+        self._build_settings()
         spec = WONDERS[self._kind()]
         if spec.size_km is None:
             size = " It has no size."
@@ -325,6 +351,42 @@ class WonderEditor(ttk.Frame):
         )
         self.help.set(f"{spec.summary}{size}{clicks}{age} Placed wonders replace random "
                       "ones of their kind.")
+
+    def _build_settings(self) -> None:
+        """Fields for the chosen kind's settings, made from the catalog."""
+        for child in self.settings_box.winfo_children():
+            child.destroy()
+        self.option_values = {}
+        self._option_inputs = []
+        options = WONDERS[self._kind()].options
+        if not options:
+            return
+        ttk.Label(self.settings_box, text="Settings · blank is automatic",
+                  style="Body.TLabel").pack(anchor="w", pady=(GAP, 0))
+        for option in options:
+            variable = tk.StringVar(self)
+            entry = field(self.settings_box, option.label, variable, unit=option.unit,
+                          help=option.help, width=10)
+            self.option_values[option.key] = variable
+            self._option_inputs.append(entry)
+            if self.busy:
+                entry.configure(state="disabled")
+
+    def _fixed_settings(self) -> tuple[tuple[str, float], ...]:
+        """The settings the form fixes, sorted by name."""
+        fixed: list[tuple[str, float]] = []
+        spec = WONDERS[self._kind()]
+        for key, variable in sorted(self.option_values.items()):
+            text = variable.get().strip()
+            if not text:
+                continue
+            try:
+                fixed.append((key, float(text)))
+            except ValueError as error:
+                option = spec.option(key)
+                label = key if option is None else option.label
+                raise ValueError(f"{label} must be a number, or blank.") from error
+        return tuple(fixed)
 
     def _populate(self) -> None:
         self.tree.delete(*self.tree.get_children())
@@ -347,6 +409,9 @@ class WonderEditor(ttk.Frame):
         self.values["kind"].set(WONDERS[wonder.kind].label)
         self.values["size"].set("" if wonder.size_km is None else f"{wonder.size_km:g}")
         self.values["age"].set("" if wonder.age_myr is None else f"{wonder.age_myr:g}")
+        for key, variable in self.option_values.items():
+            value = wonder.option(key)
+            variable.set("" if value is None else f"{value:g}")
         self.canvas.redraw()
 
     def _age(self) -> float | None:
@@ -435,7 +500,7 @@ class WonderEditor(ttk.Frame):
             wonder = WorldWonder(
                 "wonder-" + uuid4().hex, self._wonder_name(kind), kind,
                 position if start is None else start, new_seed(), self._size(),
-                None if start is None else position, self._age(),
+                None if start is None else position, self._age(), self._fixed_settings(),
             )
         except ValueError as error:
             self.status.set(str(error))
@@ -453,8 +518,8 @@ class WonderEditor(ttk.Frame):
             kind = self._kind()
             updated = WorldWonder(
                 current.id, self._wonder_name(kind, current.id), kind, current.position,
-                current.seed,
-                self._size(), current.end if WONDERS[kind].line else None, self._age(),
+                current.seed, self._size(), current.end if WONDERS[kind].line else None,
+                self._age(), self._fixed_settings(),
             )
         except ValueError as error:
             self.status.set(str(error))
@@ -472,7 +537,7 @@ class WonderEditor(ttk.Frame):
             return
         changed = WorldWonder(
             current.id, current.name, current.kind, current.position, new_seed(),
-            current.size_km, current.end, current.age_myr,
+            current.size_km, current.end, current.age_myr, current.options,
         )
         self._commit(
             tuple(changed if w.id == current.id else w for w in self.wonders.wonders),
@@ -618,8 +683,36 @@ class WonderEditor(ttk.Frame):
             action()
 
     def set_busy(self, busy: bool) -> None:
-        for widget, normal in self._controls:
+        for widget, normal in (*self._controls, *((e, "normal") for e in self._option_inputs)):
             widget["state"] = "disabled" if busy else normal
+
+    # The map under the wonders
+
+    def set_planet(self, previews: dict[str, Image.Image], probe: PlanetProbe | None) -> None:
+        """Offer the generated planet's maps (theme label -> image) as backgrounds."""
+        self._previews, self.probe = previews, probe
+        self._pyramids = {}
+        layers = (SOURCE_LAYER, *(theme.label for theme in THEMES if theme.label in previews))
+        self.layer_input.configure(values=layers)
+        if self.layer.get() not in layers:
+            self.layer.set(SOURCE_LAYER)
+        if not self._layer_chosen and self.layer.get() == SOURCE_LAYER and RELIEF_LAYER in layers:
+            self.layer.set(RELIEF_LAYER)  # wonders are placed on the relief once there is one
+        self._layer_changed()
+
+    def _layer_picked(self) -> None:
+        self._layer_chosen = True
+        self._layer_changed()
+
+    def _layer_changed(self) -> None:
+        layer = self.layer.get()
+        theme = THEME_BY_LABEL.get(layer)
+        self.legend.set(
+            SOURCE_LEGEND if theme is None or layer not in self._previews
+            else f"{theme.legend} Wonder symbols are drawn to scale on the planet as it was "
+            "last made; apply to see changed wonders in it."
+        )
+        self.canvas.redraw()
 
     # Map
 
@@ -643,12 +736,23 @@ class WonderEditor(ttk.Frame):
         longitude, latitude = self.world.project.frame.source_to_lonlat(
             self._source_point(point)
         )
-        self.inspection.set(f"{latitude:.2f}°, {longitude:.2f}°")
+        text = f"{latitude:.2f}°, {longitude:.2f}°"
+        if self.probe is not None and self.layer.get() in self._previews:
+            text += " · " + self.probe.describe(longitude, latitude)
+        self.inspection.set(text)
 
     def _render(self, viewport: MapViewport, size: tuple[int, int]) -> Image.Image:
         project = self.world.project
+        frame = project.frame
+        layer = self.layer.get()
+        if layer in self._previews:
+            if layer not in self._pyramids:
+                self._pyramids[layer] = ImagePyramid(self._previews[layer])
+            return self._pyramids[layer].renderer((frame.width, frame.height), OCEAN)(
+                viewport, size
+            )
         return render_world_source(
-            project.source, project.frame.bounds, project.assignments, viewport, size,
+            project.source, frame.bounds, project.assignments, viewport, size,
             show_excluded=False,
         )
 

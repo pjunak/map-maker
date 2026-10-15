@@ -1,4 +1,4 @@
-"""Portable hand-placed wonder documents with retained world identity (ADR-0097)."""
+"""Portable hand-placed wonder documents with retained world identity (ADR-0097, 0098)."""
 
 import json
 from hashlib import sha256
@@ -17,10 +17,10 @@ from map_maker.terrain.domain.wonders import WONDER_KINDS
 from map_maker.terrain.domain.world_wonders import WorldWonder, WorldWonders
 
 WONDERS_SCHEMA = "map-maker.world-wonders"
-WONDERS_VERSION = 1
+WONDERS_VERSION = 2
 WONDERS_EXTENSION = ".wonders.json"
 MAX_WONDERS_BYTES = 40 * 1024 * 1024
-FIELDS = {"id", "name", "kind", "position", "seed", "size_km", "end", "age_myr"}
+FIELDS = {"id", "name", "kind", "position", "seed", "size_km", "end", "age_myr", "options"}
 
 
 def wonders_document(document: WorldWonders) -> dict[str, object]:
@@ -42,6 +42,7 @@ def wonders_document(document: WorldWonders) -> dict[str, object]:
                 "size_km": None if w.size_km is None else float(w.size_km),
                 "end": point(w.end),
                 "age_myr": None if w.age_myr is None else float(w.age_myr),
+                "options": {key: float(value) for key, value in w.options},
             }
             for w in sorted(document.wonders, key=lambda w: w.id)
         ],
@@ -87,6 +88,13 @@ def _unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
     return result
 
 
+def _options(value: object) -> tuple[tuple[str, float], ...]:
+    if not isinstance(value, dict):
+        raise ValueError("A wonder's settings must be an object of numbers.")
+    items = cast(dict[str, object], value).items()
+    return tuple(sorted((key, _number(number)) for key, number in items))
+
+
 def _wonder(value: object) -> WorldWonder:
     item = _record(value, FIELDS)
     kind = item["kind"]
@@ -104,6 +112,7 @@ def _wonder(value: object) -> WorldWonder:
         None if item["size_km"] is None else _number(item["size_km"]),
         None if item["end"] is None else _point(item["end"]),
         None if item["age_myr"] is None else _number(item["age_myr"]),
+        _options(item["options"]),
     )
 
 

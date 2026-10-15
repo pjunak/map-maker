@@ -240,37 +240,46 @@ def _titan(mesh: SphereMesh, land: B, coast_m: F64, rng: np.random.Generator) ->
     return titan_volcano(site, TITAN_RADIUS_M * rng.uniform(0.9, 1.1), rng)
 
 
-def placed_volcano(kind: str, site: F64, radius_m: float, seed: int) -> Volcanoes:
+def placed_volcano(
+    kind: str, site: F64, radius_m: float, seed: int, height_m: float | None = None
+) -> Volcanoes:
     """A hand-placed wonder volcano of ``kind`` at unit vector ``site``.
 
     Its shape is drawn from its own ``seed`` (ADR-0097), so other wonders do not
-    change it.
+    change it; ``height_m`` fixes its height instead of deriving it from its size.
     """
     code, build = {
         "titan": (7071, _titan_at),
         "shattered": (7172, shattered_volcano),
         "active": (7273, fire_mountain),
     }[kind]
-    return build(site, radius_m, np.random.default_rng([seed, code]))
+    return build(site, radius_m, np.random.default_rng([seed, code]), height_m)
 
 
-def _titan_at(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
-    return titan_volcano(site, TITAN_RADIUS_M if radius_m is None else radius_m, rng)
+def _titan_at(
+    site: F64, radius_m: float | None, rng: np.random.Generator, height_m: float | None = None
+) -> Volcanoes:
+    return titan_volcano(site, TITAN_RADIUS_M if radius_m is None else radius_m, rng, height_m)
 
 
-def shattered_volcano(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
-    """A blown-apart stratovolcano at ``site``; None draws its size."""
+def shattered_volcano(
+    site: F64, radius_m: float | None, rng: np.random.Generator, height_m: float | None = None
+) -> Volcanoes:
+    """A blown-apart stratovolcano at ``site``; None draws its size and height."""
     if radius_m is None:
         radius = float(rng.uniform(*SHATTERED_RADIUS_M))
         height = float(rng.uniform(*SHATTERED_HEIGHT_M))
     else:
         radius = radius_m
         height = float(np.clip(0.12 * radius, 2500.0, 6000.0)) * rng.uniform(0.9, 1.1)
+    height = height if height_m is None else height_m
     return _wonder_volcano(site, height, radius, SHATTERED, False, 0.25 * radius, 0.18 * height)
 
 
-def fire_mountain(site: F64, radius_m: float | None, rng: np.random.Generator) -> Volcanoes:
-    """A giant active stratovolcano at ``site``; None draws its size."""
+def fire_mountain(
+    site: F64, radius_m: float | None, rng: np.random.Generator, height_m: float | None = None
+) -> Volcanoes:
+    """A giant active stratovolcano at ``site``; None draws its size and height."""
     aspect = float(rng.uniform(*FIRE_ASPECT))
     if radius_m is None:
         height = float(rng.uniform(*FIRE_HEIGHT_M))
@@ -278,6 +287,7 @@ def fire_mountain(site: F64, radius_m: float | None, rng: np.random.Generator) -
     else:
         radius = radius_m
         height = float(np.clip(radius * aspect, 3000.0, 9000.0))
+    height = height if height_m is None else height_m
     return _wonder_volcano(site, height, radius, STRATO, True, 0.06 * radius, 400.0)
 
 
@@ -304,12 +314,15 @@ def breach_azimuth(xyz: F64) -> F64:
     return np.pi * (1 + value_noise3(1e3 * np.atleast_2d(xyz), 9601))
 
 
-def titan_volcano(site: F64, radius_m: float, rng: np.random.Generator) -> Volcanoes:
-    """A titan shield at ``site`` whose height and caldera scale with its radius."""
+def titan_volcano(
+    site: F64, radius_m: float, rng: np.random.Generator, height_m: float | None = None
+) -> Volcanoes:
+    """A titan shield at ``site`` whose caldera, and height unless given, scale with its radius."""
     scale = radius_m / TITAN_RADIUS_M
+    drawn = TITAN_HEIGHT_M * float(np.clip(scale, 0.6, 1.4)) * rng.uniform(0.9, 1.1)
     return Volcanoes(
         (site / np.linalg.norm(site))[None, :],
-        np.array([TITAN_HEIGHT_M * float(np.clip(scale, 0.6, 1.4)) * rng.uniform(0.9, 1.1)]),
+        np.array([drawn if height_m is None else height_m]),
         np.array([radius_m]),
         np.array([SHIELD]),
         np.array([TITAN]),

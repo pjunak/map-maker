@@ -13,7 +13,7 @@ planet seed; each hand-placed wonder draws from its own seed (ADR-0097).
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from typing import Any
 
@@ -166,18 +166,28 @@ def authored_craters(
     centres: F64,
     radii_m: F64,
     names: tuple[str, ...],
+    depths_m: tuple[float | None, ...] | None = None,
 ) -> Craters:
     """Hand-placed craters at unit vectors ``centres``; each must lie on land.
 
-    Depth follows the same rule as placed craters: a share of the diameter,
-    limited by the ground so the floor stays above sea level.
+    Depth follows the same rule as random craters, a share of the diameter
+    limited by the ground so the floor stays above sea level, unless
+    ``depths_m`` fixes it; a fixed depth the ground cannot hold is an error.
     """
     depths = []
-    for xyz, radius, name in zip(centres, radii_m, names, strict=True):
+    for xyz, radius, name, wanted in zip(
+        centres, radii_m, names, depths_m or (None,) * len(names), strict=True
+    ):
         site = int(np.argmax(mesh.xyz @ xyz))
         if not land[site]:
             raise ValueError(f"{name} lies at sea; place a crater on land.")
-        depths.append(min(CRATER_DEPTH_RATIO * 2 * radius, max(ground_m[site] - 50.0, 0.0) / 0.7))
+        room = max(ground_m[site] - 50.0, 0.0) / 0.7
+        if wanted is not None and wanted > room:
+            raise ValueError(
+                f"{name}: the ground there holds a crater at most {room:,.0f} m deep, so its "
+                "floor stays above sea level."
+            )
+        depths.append(min(CRATER_DEPTH_RATIO * 2 * radius, room) if wanted is None else wanted)
     unit = centres / np.linalg.norm(centres, axis=1)[:, None]
     return Craters(unit, np.asarray(radii_m, dtype=np.float64), np.array(depths))
 
@@ -268,6 +278,7 @@ class PlacedWonder:
     name: str
     seed: int  # its own random stream, so other wonders do not change its shape
     age_myr: float | None = None  # None uses the wonder settings' age
+    options: Mapping[str, float] = field(default_factory=dict[str, float])  # fixed settings
 
     def rng(self, code: int) -> np.random.Generator:
         """This wonder's random stream for its kind's ``code``."""
@@ -328,6 +339,7 @@ def place_wonders(
         craters = authored_craters(
             mesh, land, ground_m, np.array([p.xyz for p in items]),
             np.array([p.size_m / 2 for p in items]), tuple(p.name for p in items),
+            tuple(p.options.get("depth_m") for p in items),
         )
     elif "crater" in kinds:
         craters = place_craters(mesh, land, coast_m, ground_m, stream(9090), blocked)
@@ -348,7 +360,8 @@ def place_wonders(
             systems.append((
                 authored_chasms(
                     mesh, land, ground_m, ends((item,)), np.array([item.size_m]), (item.name,),
-                    item.rng(9191),
+                    item.rng(9191), item.options.get("depth_m", CHASM_DEPTH_M),
+                    item.options.get("side_canyons"), item.options.get("parallel_troughs"),
                 ),
                 item,
             ))
@@ -401,6 +414,11 @@ def place_wonders(
             mesh, land, np.array([p.xyz for p in items]),
             np.array([p.size_m / 2 for p in items]), tuple(p.name for p in items),
             tuple(p.rng(9393) for p in items),
+            tuple(
+                (p.options.get("height_m"), p.options.get("elongation"),
+                 p.options.get("orientation_deg"))
+                for p in items
+            ),
         )
     elif "tepui" in kinds:
         tepuis = tepui_group(mesh, land, coast_m, stream(9393), blocked)
@@ -540,8 +558,13 @@ def chasm_with_canyons(
     tree: KDTree,
     planet_radius_m: float,
     rng: np.random.Generator,
+    side_canyons: float | None = None,
+    parallel_troughs: float | None = None,
 ) -> Chasms:
     """A chasm system up to ``depth_m`` deep, from ``start`` to ``end``.
+
+    ``side_canyons`` and ``parallel_troughs`` fix how many of each it has; the
+    random stream still draws its counts, so fixing one leaves the rest as drawn.
 
     Around the main chasm (the first path):
     - side canyons hang above the floor they join and grow shallower towards
@@ -570,7 +593,8 @@ def chasm_with_canyons(
         depths.append(floor_depth(axis, ground_m, tree, cap) * np.linspace(1.0, 0.35, len(axis)))
         return axis
 
-    for _ in range(int(rng.integers(*CHASM_SIDE_CANYONS))):
+    drawn = int(rng.integers(*CHASM_SIDE_CANYONS))
+    for _ in range(drawn if side_canyons is None else int(side_canyons)):
         i = int(rng.integers(int(0.15 * len(axis)), int(0.85 * len(axis))))
         side_width = width_m * rng.uniform(0.3, 0.5)
         reach = rng.uniform(0.06, 0.18) * length
@@ -583,7 +607,8 @@ def chasm_with_canyons(
                 reach * rng.uniform(0.3, 0.6), rng.uniform(0.6, 0.85),
             )
     normals = path_normals(axis)
-    for _ in range(int(rng.integers(*CHASM_PARALLEL))):
+    drawn = int(rng.integers(*CHASM_PARALLEL))
+    for _ in range(drawn if parallel_troughs is None else int(parallel_troughs)):
         # Its own segments and bends: it may merge with the chasm into a basin
         # or stand apart behind a plateau ridge.
         span = rng.uniform(0.25, 0.6) * len(axis)
@@ -681,8 +706,14 @@ def authored_chasms(
     widths_m: F64,
     names: tuple[str, ...],
     rng: np.random.Generator,
+    depth_m: float = CHASM_DEPTH_M,
+    side_canyons: float | None = None,
+    parallel_troughs: float | None = None,
 ) -> Chasms:
-    """Hand-placed chasms between unit-vector ``ends``; both ends must lie on land."""
+    """Hand-placed chasms between unit-vector ``ends``; both ends must lie on land.
+
+    ``depth_m`` caps their depth; the counts fix their side canyons and troughs.
+    """
     paths: list[F64] = []
     widths: list[float] = []
     depths: list[F64] = []
@@ -692,7 +723,8 @@ def authored_chasms(
         if not (land[start_node] and land[end_node]):
             raise ValueError(f"{name} reaches the sea; place both ends of a chasm on land.")
         chasm = chasm_with_canyons(
-            start, end, float(width), CHASM_DEPTH_M, ground_m, tree, mesh.radius_m, rng
+            start, end, float(width), depth_m, ground_m, tree, mesh.radius_m, rng,
+            side_canyons, parallel_troughs,
         )
         paths.extend(chasm.paths)
         widths.extend(chasm.width_m.tolist())

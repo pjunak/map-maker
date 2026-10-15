@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://map-maker.local/schemas/world/wonders-v1.schema.json",
-  "title": "Map Maker hand-placed world wonders v1",
-  "description": "Wonders placed by hand on one world (ADR-0097). A planet adds them after erosion and climate; random wonders are planet build settings, not part of this document.",
+  "$id": "https://map-maker.local/schemas/world/wonders-v2.schema.json",
+  "title": "Map Maker hand-placed world wonders v2",
+  "description": "Wonders placed by hand on one world (ADR-0097), each with the settings it fixes (ADR-0098). A planet adds them after erosion and climate; random wonders are planet build settings, not part of this document.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -17,7 +17,7 @@
       "const": "map-maker.world-wonders"
     },
     "version": {
-      "const": 1,
+      "const": 2,
       "type": "integer"
     },
     "world_sha256": {
@@ -42,7 +42,8 @@
           "seed",
           "size_km",
           "end",
-          "age_myr"
+          "age_myr",
+          "options"
         ],
         "properties": {
           "id": {
@@ -112,6 +113,24 @@
             ],
             "minimum": 0,
             "maximum": 500
+          },
+          "options": {
+            "description": "Settings this wonder fixes; the others are left to the generator. Which a kind has, and their ranges, follow the catalog (domain.wonders): titan: height_m; shattered: height_m; active: height_m; crater: depth_m; chasm: depth_m, side_canyons, parallel_troughs; tepui: height_m, elongation, orientation_deg; fork: share_pct.",
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "depth_m",
+                "elongation",
+                "height_m",
+                "orientation_deg",
+                "parallel_troughs",
+                "share_pct",
+                "side_canyons"
+              ]
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
           }
         }
       }

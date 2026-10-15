@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**245 Markdown files + 1 legal notice = 246 documentation files.**
+**246 Markdown files + 1 legal notice = 247 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 97 |
+| Architecture decision records | 98 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **246** |
+| **Total** | **247** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (97)
+## Architecture decision records (98)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -201,6 +201,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0095-export-the-refined-coast-as-a-source-map.md](adr/0095-export-the-refined-coast-as-a-source-map.md) | `world refine-coast` traces the coast as zoomed maps draw it into a new SVG source map, with ownership by territory and a declared coast detail for the round trip. |
 | [docs/adr/0096-guided-world-steps.md](adr/0096-guided-world-steps.md) | The World workspace guides creation through five numbered steps with explained defaults; geology is a step in the main window, generation uses its recipe, and the recipe follows world edits. |
 | [docs/adr/0097-wonders-as-a-layer-on-a-base-planet.md](adr/0097-wonders-as-a-layer-on-a-base-planet.md) | Wonders are a pass on a base planet without them: their own settings and `.wonders.json` document, a seed per placed wonder, base and planet identities, and regional tiles cached under the base. |
+| [docs/adr/0098-wonder-settings-from-the-catalog.md](adr/0098-wonder-settings-from-the-catalog.md) | Each wonder kind's settings are declared once in the catalog, from which validation, the document and the form follow; blank is automatic, and wonders are placed on the planet's maps. |
 
 ## Dated research reports (99)
 
@@ -346,7 +347,7 @@ are included for a complete route from plans to the current usable formats.
 | [schemas/world/geology-v2.schema.json](../schemas/world/geology-v2.schema.json) | Authored continent profiles, explicit landform controls and priority polygons with retained world identity and a common present. |
 | [schemas/world/terrain-source-v2.schema.json](../schemas/world/terrain-source-v2.schema.json) | Canonical prepared SVG metadata with retained world, projection, optional geological recipe and exact metric polygons. |
 | [schemas/world/project-v1.schema.json](../schemas/world/project-v1.schema.json) | Portable retained world-source snapshot, explicit spherical frame/radius and semantic ownership. |
-| [schemas/world/wonders-v1.schema.json](../schemas/world/wonders-v1.schema.json) | Hand-placed wonders with retained world identity: kind, position, seed, size, ends and age. |
+| [schemas/world/wonders-v2.schema.json](../schemas/world/wonders-v2.schema.json) | Hand-placed wonders with retained world identity: kind, position, seed, size, ends, age and the settings each fixes. |
 | [benchmarks/evolution/requirements-windows-py314.txt](../benchmarks/evolution/requirements-windows-py314.txt) | Hashed isolated Windows/Python 3.14 scientific reference environment. |
 
 ## Maintaining this inventory

@@ -25,10 +25,11 @@ Only the current formats are supported:
   creation consumes those controls; categories/ages do not imply physical forcing.
   Wonders are not geology: a recipe holding the former `landmarks` is refused.
 
-- [World wonders v1](world/wonders-v1.schema.json): separate `.wonders.json`
+- [World wonders v2](world/wonders-v2.schema.json): separate `.wonders.json`
   document of wonders placed by hand, with retained world identity. Each has a kind,
   source position (and end for two-ended kinds), its own shape seed, an optional
-  size and age (ADR-0097).
+  size and age (ADR-0097), and the settings it fixes, named by the catalog
+  (ADR-0098).
 
 - [Bathymetry inputs v1](world/bathymetry-inputs-v1.schema.json): portable
   `.bathy.json` world snapshot, explicit water IDs and shelf/slope/basin assumptions.

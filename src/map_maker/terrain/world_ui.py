@@ -1074,6 +1074,7 @@ class WorldWorkspace(ttk.Frame):
             self.planet_run = None
             self.result_panel.clear("Inputs changed. Generate the planet again.")
             self.map_view.set_planet(None, None)
+            self._planet_under_wonders()
             if self.step == "explore":
                 self.show_step("generate")
 
@@ -1167,7 +1168,16 @@ class WorldWorkspace(ttk.Frame):
         self._planet_wonders = wonders
         self.result_panel.show(run)
         self.map_view.set_planet(run, probe)
+        self._planet_under_wonders()
         self._refresh_steps()
+
+    def _planet_under_wonders(self) -> None:
+        """Offer the current planet's maps as the Wonders step's backgrounds."""
+        if self.wonders is not None:
+            run = self.planet_run
+            self.wonders.set_planet(
+                {} if run is None else run.previews, None if run is None else self.map_view.probe
+            )
 
     def export_planet(self, destination: Path) -> None:
         run = self.planet_run
@@ -1345,6 +1355,7 @@ class WorldWorkspace(ttk.Frame):
             )
             editor.pack(fill="x")
             self.wonders = editor
+            self._planet_under_wonders()
             self.wonders_empty.pack_forget()
             self.wonders_remove.pack(anchor="w", pady=(2 * GAP, 0), after=self.wonders_holder)
             self.show_step("wonders")

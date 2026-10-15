@@ -34,6 +34,7 @@ from map_maker.terrain.pipeline.planet_forcing import (
 from map_maker.terrain.pipeline.planet_kernels import accumulate, laplacian, priority_flood
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, build_mesh
 from map_maker.terrain.pipeline.planet_metrics import compass_share, non_descending_receivers
+from map_maker.terrain.pipeline.planet_scarps import Tepuis
 from map_maker.terrain.pipeline.planet_wonders import Chasms
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -189,7 +190,7 @@ def test_wonder_kinds_are_chosen_by_name_or_all() -> None:
         wonder_kinds("crater,dragon")
     # The public schemas list exactly the catalog's kinds.
     root = Path(__file__).parents[1] / "schemas/world"
-    placed = json.loads((root / "wonders-v1.schema.json").read_text(encoding="utf-8"))
+    placed = json.loads((root / "wonders-v2.schema.json").read_text(encoding="utf-8"))
     build = json.loads((root / "planet-build-v2.schema.json").read_text(encoding="utf-8"))
     kind = placed["properties"]["wonders"]["items"]["properties"]["kind"]
     assert tuple(kind["enum"]) == WONDER_KINDS
@@ -711,6 +712,66 @@ def test_planned_islands_emerge_while_other_seamounts_stay_drowned() -> None:
     surface = sea_floor_with_volcanoes(np.stack((a, b)), RADIUS, risen, np.full(2, -4500.0))
     assert surface[0] == pytest.approx(3500.0, rel=0.02)
     assert surface[1] <= GUYOT_DEPTH_M
+
+
+def test_placed_wonder_settings_fix_what_they_name() -> None:
+    from scipy.spatial import KDTree
+
+    from map_maker.terrain.pipeline.planet_mesh import build_mesh
+    from map_maker.terrain.pipeline.planet_scarps import authored_tepuis, tepui_height_m
+    from map_maker.terrain.pipeline.planet_volcanism import placed_volcano
+    from map_maker.terrain.pipeline.planet_wonders import authored_craters, chasm_with_canyons
+    from map_maker.terrain.pipeline.wonder_geometry import destination
+
+    mesh = build_mesh(20_000, RADIUS, 13)
+    land = np.ones(mesh.size, dtype=bool)
+    ground = np.full(mesh.size, 2000.0)
+    site = np.array([1.0, 0.0, 0.0])
+    # A fixed height replaces the one from the size; the rest of the shape stays.
+    for kind, radius, height in (
+        ("titan", 280e3, 12000.0), ("shattered", 35e3, 3000.0), ("active", 60e3, 8000.0)
+    ):
+        free = placed_volcano(kind, site, radius, 7)
+        fixed = placed_volcano(kind, site, radius, 7, height)
+        assert fixed.height_m[0] == height != free.height_m[0]
+        assert fixed.radius_m[0] == free.radius_m[0]
+    # Tepuis: values left blank are drawn as they would be without the others.
+
+    def tepui(fixed: tuple[float | None, float | None, float | None] | None) -> Tepuis:
+        return authored_tepuis(
+            mesh, land, site[None], np.array([30e3]), ("T",), (np.random.default_rng(3),),
+            None if fixed is None else (fixed,),
+        )
+
+    free_tepui, fixed_tepui = tepui(None), tepui((2500.0, 1.5, 60.0))
+    assert free_tepui.height_m[0] == tepui_height_m(30e3)
+    assert (fixed_tepui.height_m[0], fixed_tepui.aspect[0]) == (2500.0, 1.5)
+    assert fixed_tepui.azimuth[0] == pytest.approx(np.radians(60.0))
+    assert tepui((None, 1.5, None)).azimuth[0] == free_tepui.azimuth[0]
+    # Craters: a fixed depth, or an error where the ground cannot hold it.
+    craters = authored_craters(
+        mesh, land, ground, site[None], np.array([100e3]), ("The Eye",), (1500.0,)
+    )
+    assert craters.depth_m[0] == 1500.0
+    with pytest.raises(ValueError, match="The Eye: the ground there holds a crater at most"):
+        authored_craters(mesh, land, ground, site[None], np.array([100e3]), ("The Eye",), (5e3,))
+    # Chasms: counts of side canyons and troughs, and a cap on the depth.
+    tree = KDTree(mesh.xyz)
+    end = destination(site, 0.5, 800e3 / RADIUS)
+
+    def chasm(depth: float = 3000.0, **counts: float) -> Chasms:
+        return chasm_with_canyons(
+            site, end, 40e3, depth, ground, tree, RADIUS, np.random.default_rng(5), **counts
+        )
+
+    bare, rich, free_chasm = chasm(side_canyons=0, parallel_troughs=0), chasm(
+        side_canyons=8, parallel_troughs=3
+    ), chasm()
+    assert len(bare) <= 1 + 4 < len(rich)  # only the splays at its two ends remain
+    assert np.array_equal(bare.paths[0], free_chasm.paths[0])
+    assert np.array_equal(rich.paths[0], free_chasm.paths[0])
+    shallow = chasm(800.0)
+    assert shallow.depth_m[0].max() <= 800.0 < free_chasm.depth_m[0].max()
 
 
 def test_titan_is_a_giant_inland_shield_with_a_basal_cliff() -> None:
@@ -1374,6 +1435,19 @@ def test_placed_wonders_replace_random_ones_and_keep_their_own_shapes(world_path
     dry = WorldWonders(world.project, (WorldWonder("wonder-dry", "Dry", "fork", source(sea), 1),))
     with pytest.raises(ValueError, match=r"Dry: no large river"):
         finish_planet(base, wonders=dry)
+    # Where one fits, it sends the share of water it is given down the other basin.
+    from map_maker.terrain.pipeline.planet_waters import find_fork
+
+    found = find_fork(
+        plain.mesh, plain.land, plain.coast_m, plain.elevation_m, plain.lakes,
+        np.random.default_rng(1),
+    )
+    assert found is not None
+    fork = WorldWonder("wonder-fork", "Two Ways", "fork", source(found[0]), 9,
+                       options=(("share_pct", 40.0),))
+    forks = finish_planet(base, wonders=WorldWonders(world.project, (fork,))).wonders.forks
+    split = int(np.argmax(plain.mesh.xyz @ forks.split_xyz[0]))
+    assert forks.discharge_m3_s[0] == pytest.approx(0.4 * plain.lakes.discharge_m3_s[split])
 
 
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:

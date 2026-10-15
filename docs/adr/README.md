@@ -126,3 +126,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0095: Export the refined coast as a source map](0095-export-the-refined-coast-as-a-source-map.md)
 - [ADR-0096: Guide world creation through numbered steps, with geology in the main window](0096-guided-world-steps.md)
 - [ADR-0097: Add wonders as a separate layer on a base planet](0097-wonders-as-a-layer-on-a-base-planet.md)
+- [ADR-0098: Describe each wonder kind's settings once, in the catalog](0098-wonder-settings-from-the-catalog.md)
