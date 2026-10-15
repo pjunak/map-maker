@@ -58,24 +58,6 @@ AGE_STOPS: tuple[tuple[float, tuple[int, int, int]], ...] = (
 )
 
 
-def thematic_images(
-    result: PlanetResult, rasters: PlanetRasters, light: F64, rivers: F64
-) -> dict[str, Image.Image]:
-    """Thematic maps keyed by theme label.
-
-    ``light`` is the atlas hillshade (1 = flat) and ``rivers`` the 0..1 river
-    coverage drawn on the atlas.
-    """
-    images: dict[str, Image.Image] = {}
-    plates = result.forcing.tectonics
-    if plates is not None:
-        images["Planet plates"] = plates_image(result, rasters, light, plates)
-        images["Planet sea-floor age"] = sea_floor_age_image(result, rasters, light, plates)
-    images["Planet drainage basins"] = basins_image(result, rasters, light, rivers)
-    images["Planet geology"] = geology_image(result, rasters, light)
-    return images
-
-
 def plates_image(
     result: PlanetResult, rasters: PlanetRasters, light: F64, plates: Tectonics
 ) -> Image.Image:

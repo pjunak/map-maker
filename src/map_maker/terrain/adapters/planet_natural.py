@@ -21,7 +21,7 @@ biome fills:
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, cast
 
 import numpy as np
@@ -31,16 +31,7 @@ from scipy.ndimage import gaussian_filter, gaussian_filter1d
 from scipy.spatial import KDTree
 
 from map_maker.terrain.adapters.map_parchment import ParchmentInputs, parchment_image
-from map_maker.terrain.adapters.map_thematic import thematic_images
-from map_maker.terrain.adapters.map_topographic import topographic_image
-from map_maker.terrain.adapters.planet_render import (
-    FrameRaster,
-    PlanetRasters,
-    climate_images,
-    ice_covered,
-    planet_rasters,
-    river_threshold_m3_s,
-)
+from map_maker.terrain.adapters.planet_render import FrameRaster, PlanetRasters, ice_covered
 from map_maker.terrain.pipeline.planet import PlanetResult
 from map_maker.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm
 from map_maker.terrain.pipeline.planet_ice import (
@@ -901,52 +892,6 @@ def paint_falls(rgb: F64, rivers: F64, slope: F64, steep: float) -> F64:
     return rgb * (1 - spray) + np.asarray(SPRAY, dtype=np.float64) * spray
 
 
-def preview_images(
-    result: PlanetResult, rasters: PlanetRasters, threshold_m3_s: float
-) -> dict[str, Image.Image]:
-    """Natural-colour atlas, shaded relief and climate previews (derived display)."""
-    land_px = rasters.land_px
-    base_land = np.where(land_px, rasters.elevation_m, 0.0)
-    base_sea = np.where(land_px, 0.0, rasters.elevation_m)
-    fields = display_fields(
-        result, rasters.raster, land_px, base_land, base_sea, rasters.islands_px
-    )
-    # No rivers or lakes show on ice sheets.
-    rivers = river_layer(result, rasters.raster, threshold_m3_s) * (1 - fields.ice.cover)
-    covered = fields.ice.covered
-    rasters = replace(rasters, lakes_px=np.where(covered, -1, rasters.lakes_px))
-    sea = sea_colour(fields)
-    images: dict[str, Image.Image] = {}
-    if result.climate is not None:
-        images["Planet atlas"] = compose(
-            natural_colour(result, rasters.raster, rivers, fields),
-            sea,
-            land_px,
-            rivers,
-            result,
-            rasters.lakes_px,
-            fields.slope,
-        )
-    images["Planet relief"] = compose(
-        relief_colour(fields), sea, land_px, rivers, result, rasters.lakes_px
-    )
-    if "Planet atlas" in images and len(result.volcanoes):
-        images["Planet volcanoes"] = volcano_markers(images["Planet atlas"], result, rasters.raster)
-    images |= climate_images(result, rasters)
-    rows, columns = land_px.shape
-    radius = result.mesh.radius_m
-    images["Planet topographic"] = topographic_image(
-        fields.elevation_m, land_px, rasters.lakes_px >= 0, rivers, fields.light,
-        np.pi * radius / rows,
-        2 * np.pi * radius / columns * np.maximum(np.cos(rasters.raster.latitude), 0.05),
-        covered,
-    )
-    images |= thematic_images(result, rasters, fields.light, rivers)
-    if result.climate is not None:
-        images["Planet parchment"] = planet_parchment(result, rasters, fields, rivers, covered)
-    return images
-
-
 def planet_parchment(
     result: PlanetResult, rasters: PlanetRasters, fields: DisplayFields, rivers: F64, ice: B
 ) -> Image.Image:
@@ -1000,8 +945,3 @@ def volcano_markers(atlas: Image.Image, result: PlanetResult, raster: FrameRaste
         )
     return marked
 
-
-def render_previews(result: PlanetResult, width: int, river_km2: float) -> dict[str, Image.Image]:
-    return preview_images(
-        result, planet_rasters(result, width), river_threshold_m3_s(result, river_km2)
-    )

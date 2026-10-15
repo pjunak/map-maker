@@ -60,9 +60,12 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
    with a summary of the planet.
 4. **Choose what the map shows** with the bar above it:
    - **Source · Context · Planet** picks the data.
-   - The list beside it picks the map: every theme the planet rendered, such as
+   - The list beside it picks the map: every theme the planet has, such as
      atlas, relief, climate zones, topographic, parchment, plates, sea-floor age,
-     drainage basins and geology.
+     drainage basins and geology. The map shown when the planet is ready (the
+     one you last looked at, else the first in the list) is drawn with it. Any
+     other is drawn in the background the first time you choose it, while the
+     map says **Drawing this map…**, and is then kept.
    - The projection list picks **Flat world**, **Globe**, **North polar** or
      **South polar**. **Grid** draws latitude and longitude every 30°.
 

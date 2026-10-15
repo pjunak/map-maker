@@ -304,7 +304,7 @@ class PlanetResultPanel(ttk.Frame):
                 worst = max(abs(r.measured_m - r.target_m) / r.target_m for r in final
                             if r.measured_m is not None and r.target_m is not None)
                 lines.append(f"Geology heights met within {worst:.0%}")
-        shown = sum(theme.label in run.previews for theme in THEMES)
+        shown = len(run.maps.labels)
         if shown < len(THEMES):
             lines.append(f"{shown} of {len(THEMES)} maps: the others need climate.")
         self.detail.set("\n".join(lines))

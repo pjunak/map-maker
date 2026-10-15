@@ -24,7 +24,7 @@ from uuid import uuid4
 
 from PIL import Image
 
-from map_maker.terrain.adapters.map_views import THEME_BY_LABEL, THEMES
+from map_maker.terrain.adapters.map_views import THEME_BY_LABEL
 from map_maker.terrain.adapters.world_render import OCEAN, render_world_source
 from map_maker.terrain.adapters.world_wonders import WONDERS_EXTENSION, wonders_file_hash
 from map_maker.terrain.application.wonder_suggestions import SuggestedWonder, keep
@@ -39,7 +39,7 @@ from map_maker.terrain.domain.world_wonders import (
     blank_wonders,
     follow_world,
 )
-from map_maker.terrain.map_canvas import FlatMapCanvas, ImagePyramid, Rect
+from map_maker.terrain.map_canvas import FlatMapCanvas, MapImages, MapSource, Rect
 from map_maker.terrain.map_probes import PlanetProbe
 from map_maker.terrain.pipeline.control import CancellationToken
 from map_maker.terrain.pipeline.world import WorldMap
@@ -51,7 +51,7 @@ from map_maker.terrain.ui_components import (
     hint,
     section,
 )
-from map_maker.terrain.ui_jobs import JobRunner, Report
+from map_maker.terrain.ui_jobs import JobRunner, LatestWorker, Report
 from map_maker.terrain.ui_style import GAP, MAP_FRAME, MAP_HIGHLIGHT, MAP_TEXT, MAP_TEXT_MUTED
 from map_maker.terrain.viewport import MapViewport
 
@@ -186,6 +186,7 @@ class WonderEditor(ttk.Frame):
         world: WorldMap,
         *,
         jobs: JobRunner,
+        drawing: LatestWorker,
         status: tk.StringVar,
         on_change: Callable[[], None] = lambda: None,
         request_suggestions: Callable[[], None] = lambda: None,
@@ -223,8 +224,8 @@ class WonderEditor(ttk.Frame):
         self.file_label = tk.StringVar(self)
         self.layer = tk.StringVar(self, value=SOURCE_LAYER)
         self._layer_chosen = False
-        self._previews: dict[str, Image.Image] = {}
-        self._pyramids: dict[str, ImagePyramid] = {}
+        # The planet's maps, drawn on ``drawing`` when first shown.
+        self.planet_maps = MapImages(drawing, self._map_drawn)
         self.probe: PlanetProbe | None = None
         self.legend = tk.StringVar(self, value=SOURCE_LEGEND)
         self.inspection = tk.StringVar(self, value=HINT)
@@ -749,7 +750,7 @@ class WonderEditor(ttk.Frame):
         for widget, normal in (*self._controls, *((e, "normal") for e in self._option_inputs)):
             widget["state"] = "disabled" if busy else normal
         self.suggest_button.configure(
-            state="normal" if self._previews and not busy else "disabled"
+            state="normal" if self.planet_maps.source is not None and not busy else "disabled"
         )
 
     # Suggested sites
@@ -813,27 +814,31 @@ class WonderEditor(ttk.Frame):
     # The map under the wonders
 
     def set_planet(
-        self, previews: dict[str, Image.Image], probe: PlanetProbe | None, base: str | None
+        self, maps: MapSource | None, probe: PlanetProbe | None, base: str | None
     ) -> None:
-        """Offer the generated planet's maps (theme label -> image) as backgrounds.
+        """Offer the generated planet's maps as backgrounds (None: no planet).
 
         ``base`` identifies the planet without wonders; suggestions found on another
         one no longer apply.
         """
-        self._previews, self.probe = previews, probe
+        self.planet_maps.show(maps)
+        self.probe = probe
         if base != self._suggestions_base:
             self.show_suggestions((), base or "")
         self.suggest_button.configure(
-            state="normal" if previews and not self.busy else "disabled"
+            state="normal" if maps is not None and not self.busy else "disabled"
         )
-        self._pyramids = {}
-        layers = (SOURCE_LAYER, *(theme.label for theme in THEMES if theme.label in previews))
+        layers = (SOURCE_LAYER, *self.planet_maps.labels)
         self.layer_input.configure(values=layers)
         if self.layer.get() not in layers:
             self.layer.set(SOURCE_LAYER)
         if not self._layer_chosen and self.layer.get() == SOURCE_LAYER and RELIEF_LAYER in layers:
             self.layer.set(RELIEF_LAYER)  # wonders are placed on the relief once there is one
         self._layer_changed()
+
+    def shown_planet_maps(self) -> tuple[str, ...]:
+        """Planet maps by preference: a new planet shows the first one it has."""
+        return (self.layer.get(),) if self._layer_chosen else (RELIEF_LAYER,)
 
     def _layer_picked(self) -> None:
         self._layer_chosen = True
@@ -842,12 +847,20 @@ class WonderEditor(ttk.Frame):
     def _layer_changed(self) -> None:
         layer = self.layer.get()
         theme = THEME_BY_LABEL.get(layer)
-        self.legend.set(
-            SOURCE_LEGEND if theme is None or layer not in self._previews
-            else f"{theme.legend} Wonder symbols are drawn to scale on the planet as it was "
-            "last made; apply to see changed wonders in it."
-        )
+        if theme is None or layer not in self.planet_maps.labels:
+            self.legend.set(SOURCE_LEGEND)
+        elif not self.planet_maps.ready(layer):
+            self.legend.set(f"Drawing {layer}; your drawing shows until it is ready.")
+        else:
+            self.legend.set(
+                f"{theme.legend} Wonder symbols are drawn to scale on the planet as it was "
+                "last made; apply to see changed wonders in it."
+            )
         self.canvas.redraw()
+
+    def _map_drawn(self, label: str) -> None:
+        if label == self.layer.get():
+            self._layer_changed()
 
     # Map
 
@@ -872,20 +885,16 @@ class WonderEditor(ttk.Frame):
             self._source_point(point)
         )
         text = f"{latitude:.2f}°, {longitude:.2f}°"
-        if self.probe is not None and self.layer.get() in self._previews:
+        if self.probe is not None and self.layer.get() in self.planet_maps.labels:
             text += " · " + self.probe.describe(longitude, latitude)
         self.inspection.set(text)
 
     def _render(self, viewport: MapViewport, size: tuple[int, int]) -> Image.Image:
         project = self.world.project
         frame = project.frame
-        layer = self.layer.get()
-        if layer in self._previews:
-            if layer not in self._pyramids:
-                self._pyramids[layer] = ImagePyramid(self._previews[layer])
-            return self._pyramids[layer].renderer((frame.width, frame.height), OCEAN)(
-                viewport, size
-            )
+        pyramid = self.planet_maps.pyramid(self.layer.get())
+        if pyramid is not None:
+            return pyramid.renderer((frame.width, frame.height), OCEAN)(viewport, size)
         return render_world_source(
             project.source, frame.bounds, project.assignments, viewport, size,
             show_excluded=False,

@@ -212,23 +212,6 @@ def island_pixels(result: PlanetResult, raster: FrameRaster, authored: B) -> tup
     return ~authored & (surface > 0), surface
 
 
-def climate_images(result: PlanetResult, rasters: PlanetRasters) -> dict[str, Image.Image]:
-    climate = result.climate
-    if climate is None:
-        return {}
-    raster, land_px, mesh = rasters.raster, rasters.land_px, result.mesh
-    return {
-        "Planet rainfall": scalar_image(
-            raster.interpolate(mesh, climate.precipitation_mm), land_px, 0.0, 2500.0, RAIN_COLOURS
-        ),
-        "Planet temperature": scalar_image(
-            raster.interpolate(mesh, climate.temperature_c), land_px, -25.0, 30.0,
-            TEMPERATURE_COLOURS,
-        ),
-        "Planet climate zones": koppen_image(climate.koppen, raster, land_px),
-    }
-
-
 def koppen_image(koppen: NDArray[np.int8], raster: FrameRaster, land_px: B) -> Image.Image:
     """Koppen-Geiger classes in their standard map colours (categorical: nearest node)."""
     palette = np.asarray(KOPPEN_COLOURS, dtype=np.uint8)

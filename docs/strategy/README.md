@@ -56,7 +56,8 @@ backlog, and [status](../research/status.md) records what works now.
    - Wonders are a pass on a base planet without them (ADR-0097): random kinds
      are wonder settings, placed wonders have their own `.wonders.json` document,
      Wonders step and seed each, and applying or regenerating them never erodes
-     again. Regional tiles come from the base, so wonder edits keep them.
+     again. Regional tiles come from the base, so wonder edits keep them. A run
+     draws only the map shown; the others are drawn when first chosen.
    - Each kind's settings are declared once in the catalog (ADR-0098), and
      wonders are placed on the planet's maps.
    - The Wonders step suggests plausible sites per kind, scored by stated

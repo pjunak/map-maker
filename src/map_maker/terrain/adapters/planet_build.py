@@ -26,13 +26,8 @@ from rasterio.crs import CRS
 
 from map_maker.terrain.adapters.build import canonical_json, file_sha256
 from map_maker.terrain.adapters.map_views import THEMES, theme_file
-from map_maker.terrain.adapters.planet_natural import preview_images
-from map_maker.terrain.adapters.planet_render import (
-    FrameRaster,
-    ice_covered,
-    planet_rasters,
-    river_threshold_m3_s,
-)
+from map_maker.terrain.adapters.planet_maps import PlanetMaps
+from map_maker.terrain.adapters.planet_render import FrameRaster, ice_covered, river_threshold_m3_s
 from map_maker.terrain.adapters.world_geology import geology_document
 from map_maker.terrain.adapters.world_project import world_project_document
 from map_maker.terrain.adapters.world_wonders import wonders_document
@@ -376,7 +371,8 @@ def write_planet_build(
         np.savez_compressed(stream, allow_pickle=False, **arrays)
     names.append("planet.npz")
     verify()
-    rasters = planet_rasters(result, width)
+    maps = PlanetMaps(result, width, river_km2)
+    rasters = maps.rasters
     raster, z, lakes_px = rasters.raster, rasters.elevation_m, rasters.lakes_px
     _write_geotiff(
         target / "elevation.tif", z.astype(np.float32), raster,
@@ -385,10 +381,10 @@ def write_planet_build(
     names.append("elevation.tif")
     verify()
     threshold = river_threshold_m3_s(result, river_km2)
-    for layer, image in preview_images(result, rasters, threshold).items():
+    for layer in maps.labels:
         verify()
         name = PREVIEW_FILES[layer]
-        image.save(target / name)
+        maps.draw(layer).save(target / name)
         names.append(name)
     verify()
     rivers = river_features(result, threshold)

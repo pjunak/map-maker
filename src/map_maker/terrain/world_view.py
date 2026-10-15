@@ -2,7 +2,8 @@
 """The World workspace's map: source, context and planet maps in one view.
 
 Planet maps come from the theme registry (``map_views.THEMES``) and show in any
-projection (``map_projection.PROJECTIONS``); neither list needs code here.
+projection (``map_projection.PROJECTIONS``); neither list needs code here. A planet
+map not drawn yet is drawn in the background when it is first shown.
 Regional detail opens in the same view as a deeper level, with a breadcrumb back
 to the world. The view only presents results; the workspace owns the data and
 the jobs that make it.
@@ -22,7 +23,13 @@ from uuid import uuid4
 from PIL import Image
 
 from map_maker.terrain.adapters.map_projection import PROJECTION_LABELS, PROJECTIONS
-from map_maker.terrain.adapters.map_views import THEME_BY_ID, THEME_BY_LABEL, THEMES, MapTheme
+from map_maker.terrain.adapters.map_views import (
+    PREVIEW_LAYERS,
+    THEME_BY_ID,
+    THEME_BY_LABEL,
+    THEMES,
+    MapTheme,
+)
 from map_maker.terrain.adapters.world_context_render import (
     CONTEXT_LAYERS,
     ContextLayer,
@@ -36,7 +43,13 @@ from map_maker.terrain.application.world_context import WorldContextRun
 from map_maker.terrain.domain.planet import REGION_LEVEL_MAX_RADIUS_KM, REGION_LEVEL_NAMES
 from map_maker.terrain.domain.world import WorldAssignment, WorldFrame, WorldSource
 from map_maker.terrain.domain.world_context import EXPOSURE_BEARINGS
-from map_maker.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, Rect
+from map_maker.terrain.map_canvas import (
+    FlatMapCanvas,
+    GlobeCanvas,
+    ImagePyramid,
+    MapImages,
+    Rect,
+)
 from map_maker.terrain.map_probes import (
     PlanetProbe,
     context_readout,
@@ -67,6 +80,12 @@ AUTO_RADIUS = "Auto"
 # Radius choices when zooming from each level: the world, then region and province.
 REGION_RADII_KM = ((150, 300, 600, 1200), (30, 75, 150, 300), (6, 15, 30, 60))
 SAVE_PIXELS = 2048
+START = (
+    "Start with your world",
+    "Import an SVG or open a saved world.\n"
+    "Continents, islands and the world frame stay connected.",
+)
+DRAWING = "Drawing this map…"
 
 SOURCE_LEGEND = (
     "Your drawn map. Each continent has its own colour; grey shapes are not assigned yet "
@@ -156,6 +175,7 @@ class WorldMapView(ttk.Frame):
         worker: LatestWorker,
         jobs: JobRunner,
         *,
+        drawing: LatestWorker,
         pick_shape: Callable[[tuple[float, float], bool], None],
         request_region: Callable[[float, float, float, int], None],
         export_region: Callable[[RegionRun, Path], None],
@@ -173,7 +193,8 @@ class WorldMapView(ttk.Frame):
         self.context_run: WorldContextRun | None = None
         self.planet_run: PlanetRun | None = None
         self.probe: PlanetProbe | None = None
-        self._pyramids: dict[str, ImagePyramid] = {}
+        # Planet maps, drawn on ``drawing`` so frames on ``worker`` never wait for them.
+        self.planet_maps = MapImages(drawing, self._map_drawn)
         self.levels: list[RegionLevel] = []
         self.level = 0  # 0 is the world; n shows levels[n - 1]
         self._world_viewport = MapViewport()
@@ -265,16 +286,13 @@ class WorldMapView(ttk.Frame):
             stage, background=OCEAN, on_click=self._click_flat, on_hover=self._hover_flat,
             on_view_changed=self._view_changed,
         )
-        self.flat.placeholder = (
-            "Start with your world",
-            "Import an SVG or open a saved world.\n"
-            "Continents, islands and the world frame stay connected.",
-        )
+        self.flat.placeholder = START
         self.flat.grid(row=0, column=0, sticky="nsew")
         self.globe = GlobeCanvas(
             stage, self._worker, on_click=self._click_globe,
             on_hover=self._hover_globe, on_view_changed=self._view_changed,
         )
+        self.globe.placeholder = DRAWING
         for canvas in (self.flat, self.globe):
             canvas.bind("<Escape>", lambda _e: self.escape())
 
@@ -297,7 +315,7 @@ class WorldMapView(ttk.Frame):
 
     def set_planet(self, run: PlanetRun | None, probe: PlanetProbe | None) -> None:
         self.planet_run, self.probe = run, probe
-        self._pyramids.clear()
+        self.planet_maps.show(None if run is None else run.maps)
         self._drop_levels()
         self.picking.set(False)
         if run is None:
@@ -305,8 +323,14 @@ class WorldMapView(ttk.Frame):
                 self.display_layer.set(SOURCE)
         else:
             labels = self.planet_layers()
-            self.display_layer.set(labels[0] if labels else SOURCE)
+            self.display_layer.set(
+                next((label for label in self.shown_planet_maps() if label in labels), SOURCE)
+            )
         self.set_layer()
+
+    def shown_planet_maps(self) -> tuple[str, ...]:
+        """Planet maps by preference: a new planet shows the first one it has."""
+        return (self._remembered[PLANET], *PREVIEW_LAYERS)
 
     def add_region(self, run: RegionRun, image: Image.Image, theme_id: str) -> None:
         """Show a new detail window at its level, below the maps it was picked from."""
@@ -331,8 +355,7 @@ class WorldMapView(ttk.Frame):
     # Layer choice
 
     def planet_layers(self) -> tuple[str, ...]:
-        run = self.planet_run
-        return () if run is None else tuple(t.label for t in THEMES if t.label in run.previews)
+        return self.planet_maps.labels
 
     def layers_for(self, group: str) -> tuple[str, ...]:
         if self.level:
@@ -511,7 +534,7 @@ class WorldMapView(ttk.Frame):
         if theme is not None:
             text = theme.legend
             if self.level == 0 and self.planet_run is not None:
-                missing = sum(t.label not in self.planet_run.previews for t in THEMES)
+                missing = len(THEMES) - len(self.planet_maps.labels)
                 if missing:
                     text += (f"\n{missing} more maps need climate (or volcanoes); turn on "
                              "Climate in the Planet stage and generate again.")
@@ -593,7 +616,7 @@ class WorldMapView(ttk.Frame):
             self.globe.graticule = self.graticule.get()
             self.globe.set_kind(self.projection.get())
             self.globe.show(
-                run.previews[self.display_layer.get()],
+                self.planet_maps.image(self.display_layer.get()),
                 run.result.world.project.frame.central_meridian_deg,
             )
         else:
@@ -601,6 +624,9 @@ class WorldMapView(ttk.Frame):
             self.globe.show(None, 0.0)
             self.flat.grid(row=0, column=0, sticky="nsew")
             renderer, size = self._flat_content()
+            self.flat.placeholder = START if self.scene is None else (
+                self.display_layer.get(), DRAWING
+            )
             self.flat.overlay = self._overlay
             self.flat.show(renderer, size)
         self.inspection.set(self._hint())
@@ -621,11 +647,9 @@ class WorldMapView(ttk.Frame):
         x0, y0, x1, y1 = scene.bounds
         size = (x1 - x0, y1 - y0)
         layer = self.display_layer.get()
-        run = self.planet_run
-        if self.group.get() == PLANET and run is not None and layer in run.previews:
-            if layer not in self._pyramids:
-                self._pyramids[layer] = ImagePyramid(run.previews[layer])
-            return self._pyramids[layer].renderer(size, OCEAN), size
+        if self.group.get() == PLANET and layer in self.planet_maps.labels:
+            pyramid = self.planet_maps.pyramid(layer)
+            return None if pyramid is None else pyramid.renderer(size, OCEAN), size
         context = self.context_run
         if self.group.get() == CONTEXT and context is not None:
             bearing = EXPOSURE_BEARINGS.index(self.exposure_bearing.get())
@@ -653,6 +677,10 @@ class WorldMapView(ttk.Frame):
                 return Image.new("RGB", size, OCEAN)
 
         return safe
+
+    def _map_drawn(self, label: str) -> None:
+        if self.level == 0 and self.display_layer.get() == label:
+            self.refresh()
 
     def _overlay(self, canvas: FlatMapCanvas, rect: Rect) -> None:
         left, top, right, bottom = rect
@@ -845,10 +873,11 @@ class WorldMapView(ttk.Frame):
             return image.copy
         if self._uses_globe():
             globe = self.globe
-            return lambda: globe.render(SAVE_PIXELS)
+            return None if globe.image is None else lambda: globe.render(SAVE_PIXELS)
         run, layer = self.planet_run, self.display_layer.get()
-        if self.group.get() == PLANET and run is not None and layer in run.previews:
-            return run.previews[layer].copy
+        if self.group.get() == PLANET and run is not None and layer in run.maps.labels:
+            maps = run.maps
+            return lambda: maps.draw(layer).copy()
         renderer, _ = self._flat_content()
         if renderer is None:
             return None
@@ -859,6 +888,7 @@ class WorldMapView(ttk.Frame):
     def choose_save_image(self) -> None:
         render = self.current_image()
         if render is None:
+            self._status("Nothing to save yet: wait until the map is drawn.")
             return
         selected = filedialog.asksaveasfilename(
             parent=self, title="Save this map as an image", defaultextension=".png",

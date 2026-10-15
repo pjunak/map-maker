@@ -196,6 +196,21 @@ def test_applying_wonders_reruns_only_the_wonder_pass(app: ui.TerrainApp) -> Non
     run = view.planet_run
     assert run is not None and run is not first
     assert run.base is first.base and run.base_sha256 == first.base_sha256
+    # Applying draws the map under the wonders with the planet; others wait until chosen.
+    assert editor.planet_maps.ready("Planet relief")
+    assert [label for label in run.maps.labels if run.maps.image(label)] == ["Planet relief"]
+    editor.layer.set("Planet topographic")
+    editor._layer_picked()
+    assert editor.legend.get().startswith("Drawing Planet topographic")
+    deadline = time.monotonic() + 60
+    while not editor.legend.get().startswith("Atlas-style") and time.monotonic() < deadline:
+        app.root.update()
+        time.sleep(0.01)
+    assert run.maps.image("Planet topographic") is not None
+    assert editor.legend.get().startswith("Atlas-style")
+    assert editor.shown_planet_maps() == ("Planet topographic",)
+    editor.layer.set("Planet relief")
+    editor._layer_picked()
     first_base = first.base
     assert run.result.placed is not None and len(run.result.wonders.craters) == 1
     assert run.inputs["wonders_sha256"] is not None
@@ -235,5 +250,5 @@ def test_applying_wonders_reruns_only_the_wonder_pass(app: ui.TerrainApp) -> Non
     assert editor.suggestions and view.planet_run is not None
     assert view.planet_run.base is first_base
     # Another planet without wonders makes them stale.
-    editor.set_planet({}, None, "another planet")
+    editor.set_planet(None, None, "another planet")
     assert editor.suggestions == () and str(editor.suggest_button["state"]) == "disabled"

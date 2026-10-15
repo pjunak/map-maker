@@ -34,9 +34,10 @@ scientific engines; core contracts must not depend on those concrete libraries.
       separate pass adds wonders and works out ice and lakes again (ADR-0097)
    -> PlanetResult (node elevation is authoritative, ADR-0085)
    -> adapters/planet_build.py: planet.npz, GeoTIFF, rivers, lakes, manifest
-   -> adapters/map_views.py: theme registry; map_*.py and planet_natural.py
-      render each theme on the world frame; map_projection.py shows any theme
-      as a flat world, globe or polar view (ADR-0087)
+   -> adapters/map_views.py: theme registry; planet_maps.py draws each theme on
+      the world frame with map_*.py and planet_natural.py, in the app only when
+      it is first shown; map_projection.py shows any theme as a flat world,
+      globe or polar view (ADR-0087)
    -> application/planet_region.py: fixed blended tiles enriched from the
       verified build without its wonders (pipeline/planet_regional.py,
       planet_tiles.py), composed into

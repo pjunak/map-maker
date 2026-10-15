@@ -153,6 +153,8 @@ class WorldWorkspace(ttk.Frame):
         self.pump = TkPump(self)
         self.jobs = JobRunner(self.pump, self._job_state, self._job_failed, self._job_cancelled)
         self.renders = LatestWorker(self.pump, self._render_failed)
+        # Each screen draws its missing planet maps on its own worker (``MapImages``).
+        self.map_drawing = LatestWorker(self.pump, self._render_failed)
         self.values = {
             key: tk.StringVar(self, value=value)
             for key, value in (
@@ -285,7 +287,8 @@ class WorldWorkspace(ttk.Frame):
         self.map_area.columnconfigure(0, weight=1)
         self.map_area.rowconfigure(0, weight=1)
         self.map_view = WorldMapView(
-            self.map_area, self.renders, self.jobs, pick_shape=self.pick_shape,
+            self.map_area, self.renders, self.jobs, drawing=self.map_drawing,
+            pick_shape=self.pick_shape,
             request_region=self.zoom_region, export_region=self.export_region,
             status=self.status.set, show_excluded=self.map_view_show_excluded,
         )
@@ -1101,11 +1104,12 @@ class WorldWorkspace(ttk.Frame):
         # The steps' recipe and wonders as used, to tell when later edits make the planet old.
         used = None if self.geology is None else self.geology.recipe
         used_wonders = self._placed_now()
+        shown = self.map_view.shown_planet_maps()  # a new planet opens Explore
 
         def work(report: Report, token: CancellationToken) -> tuple[PlanetRun, PlanetProbe]:
             run = generate_planet_run(
                 project, geology, settings, report, wonder_settings=wonder_settings,
-                wonders=wonders, cancellation=token,
+                wonders=wonders, shown=shown, cancellation=token,
             )
             report(None, "Preparing the map readout")
             return run, PlanetProbe(run.result)
@@ -1142,9 +1146,15 @@ class WorldWorkspace(ttk.Frame):
         """Rerun only the wonder pass on ``run``'s base planet (ADR-0097)."""
         signature = self._signature()
         used_wonders = self._placed_now()
+        # Applied from the Wonders step, the planet shows under the wonders; else in Explore.
+        editor = self.wonders
+        view = editor if editor is not None and self.step == "wonders" else self.map_view
+        shown = view.shown_planet_maps()
 
         def work(report: Report, token: CancellationToken) -> tuple[PlanetRun, PlanetProbe]:
-            changed = apply_wonders(run, wonder_settings, wonders, report, cancellation=token)
+            changed = apply_wonders(
+                run, wonder_settings, wonders, report, shown=shown, cancellation=token
+            )
             report(None, "Preparing the map readout")
             return changed, PlanetProbe(changed.result)
 
@@ -1177,7 +1187,7 @@ class WorldWorkspace(ttk.Frame):
         if self.wonders is not None:
             run = self.planet_run
             self.wonders.set_planet(
-                {} if run is None else run.previews,
+                None if run is None else run.maps,
                 None if run is None else self.map_view.probe,
                 None if run is None else run.base_sha256,
             )
@@ -1374,7 +1384,8 @@ class WorldWorkspace(ttk.Frame):
 
         def create(world: WorldMap) -> None:
             editor = WonderEditor(
-                self.wonders_holder, self.map_area, world, jobs=self.jobs, status=self.status,
+                self.wonders_holder, self.map_area, world, jobs=self.jobs,
+                drawing=LatestWorker(self.pump, self._render_failed), status=self.status,
                 on_change=self._refresh_steps, request_suggestions=self.suggest_wonders,
             )
             editor.pack(fill="x")

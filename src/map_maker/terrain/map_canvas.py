@@ -3,7 +3,8 @@
 
 Both are presentation only. They show images they are given (or ask a renderer
 for one) and report what is under the cursor in map coordinates; the screens
-that use them decide what the map means.
+that use them decide what the map means. ``MapImages`` gives a screen the maps
+of a source that draws them on demand, drawing missing ones in the background.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
+from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -90,6 +92,69 @@ class ImagePyramid:
                              size, background)
 
         return render
+
+
+class MapSource(Protocol):
+    """Maps by label, each drawn the first time it is asked for (``PlanetMaps``)."""
+
+    @property
+    def labels(self) -> tuple[str, ...]: ...
+
+    def image(self, label: str) -> Image.Image | None: ...
+
+    def draw(self, label: str) -> Image.Image: ...
+
+
+class MapImages:
+    """One screen's maps from a source: drawn maps at once, missing ones in the background.
+
+    A missing map is drawn on ``worker``, which the screen owns, so choosing another
+    map before it is ready replaces the queued request. ``on_drawn`` gets the label
+    on the Tk thread once the map is ready.
+    """
+
+    def __init__(self, worker: LatestWorker, on_drawn: Callable[[str], None]) -> None:
+        self._worker = worker
+        self._on_drawn = on_drawn
+        self.source: MapSource | None = None
+        self._pyramids: dict[str, ImagePyramid] = {}
+
+    @property
+    def labels(self) -> tuple[str, ...]:
+        return () if self.source is None else self.source.labels
+
+    def show(self, source: MapSource | None) -> None:
+        """Use another source; maps still requested from the previous one are dropped."""
+        self._worker.cancel()
+        self.source, self._pyramids = source, {}
+
+    def ready(self, label: str) -> bool:
+        return self.source is not None and self.source.image(label) is not None
+
+    def image(self, label: str) -> Image.Image | None:
+        """The map, or None while it is drawn in the background (requested now)."""
+        source = self.source
+        if source is None or label not in source.labels:
+            return None
+        image = source.image(label)
+        if image is None:
+            self._worker.submit(
+                lambda: source.draw(label), lambda _image: self._drawn(source, label)
+            )
+        return image
+
+    def pyramid(self, label: str) -> ImagePyramid | None:
+        """``image`` with cached half-size copies for zooming."""
+        if label not in self._pyramids:
+            image = self.image(label)
+            if image is None:
+                return None
+            self._pyramids[label] = ImagePyramid(image)
+        return self._pyramids[label]
+
+    def _drawn(self, source: MapSource, label: str) -> None:
+        if source is self.source:
+            self._on_drawn(label)
 
 
 class FlatMapCanvas(tk.Canvas):
@@ -306,6 +371,7 @@ class GlobeCanvas(tk.Canvas):
         self.graticule = True
         self.central_meridian_deg = 0.0
         self.image: Image.Image | None = None
+        self.placeholder = ""  # shown while there is no image
         self._drag_source: Image.Image | None = None
         self.frame: GlobeFrame | None = None
         self.photo: ImageTk.PhotoImage | None = None
@@ -351,6 +417,11 @@ class GlobeCanvas(tk.Canvas):
         if self.image is None:
             self.delete("all")
             self.photo, self.frame = None, None
+            if self.placeholder:
+                self.create_text(
+                    max(1, self.winfo_width()) / 2, max(1, self.winfo_height()) / 2,
+                    text=self.placeholder, fill=MAP_TEXT_MUTED, font=FONT_MAP_LABEL[:2],
+                )
             return
         if quick:
             self._submit(quick=True)

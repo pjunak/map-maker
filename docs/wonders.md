@@ -54,7 +54,9 @@ no large river near it. The file follows edits of its world, as a geology recipe
 does ([schema](../schemas/world/wonders-v2.schema.json)).
 
 The map under the wonders shows the planet as it was last made: apply to see
-changed wonders in it.
+changed wonders in it. Applying draws only that map with the planet, so the step
+is ready again as soon as it is; another map is drawn in the background the first
+time you choose it, with your drawing shown meanwhile.
 
 ### Settings
 

@@ -16,7 +16,8 @@ Planet and map adapters:
 - `planet_build.py` and `planet_load.py` write and verify planet builds;
 - `planet_render.py` and `planet_natural.py` render world-frame rasters and the
   atlas;
-- `map_views.py` is the theme registry;
+- `map_views.py` is the theme registry, and `planet_maps.py` draws a planet's
+  themes, each the first time it is asked for;
 - `map_projection.py` draws globe, polar and flat views;
 - `map_topographic.py`, `map_parchment.py` and `map_thematic.py` render themes;
 - `planet_region.py` composes and exports regional windows.

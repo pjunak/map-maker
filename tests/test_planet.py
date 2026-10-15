@@ -276,7 +276,7 @@ def test_thematic_maps_cover_plates_basins_geology_and_sea_floor(world_path: Pat
         geology_provinces,
     )
     from map_maker.terrain.adapters.map_views import THEME_BY_ID
-    from map_maker.terrain.adapters.planet_natural import render_previews
+    from map_maker.terrain.adapters.planet_maps import PlanetMaps
 
     # Drainage roots follow receivers to the sea or to a closed-basin sink.
     receiver = np.array([-1, 0, 1, 3, 3, 2])
@@ -285,9 +285,49 @@ def test_thematic_maps_cover_plates_basins_geology_and_sea_floor(world_path: Pat
     province = geology_provinces(result)
     assert np.all(province[~result.land] == -1)
     assert set(np.unique(province[result.land]).tolist()) <= set(range(len(PROVINCES)))
-    previews = render_previews(result, 256, 25_000.0)
+    maps = PlanetMaps(result, 256, 25_000.0)
     for theme in ("plates", "seafloor", "basins", "geology"):
-        assert previews[THEME_BY_ID[theme].label].size == (256, 128)
+        assert maps.draw(THEME_BY_ID[theme].label).size == (256, 128)
+
+
+def test_planet_maps_are_drawn_once_when_first_asked_for(
+    world_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    from map_maker.terrain.adapters import planet_maps
+    from map_maker.terrain.adapters.map_views import THEME_BY_ID, THEMES
+
+    result = generate_planet(open_world(world_path), FAST)
+    drawn: list[str] = []
+    for theme_id, paint in planet_maps._PAINTERS.items():  # pyright: ignore[reportPrivateUsage]
+        def counted(maps: planet_maps.PlanetMaps, theme_id: str = theme_id,
+                    paint: planet_maps.Painter = paint) -> Image.Image:
+            drawn.append(theme_id)
+            return paint(maps)
+
+        monkeypatch.setitem(
+            planet_maps._PAINTERS, theme_id, counted  # pyright: ignore[reportPrivateUsage]
+        )
+    maps = planet_maps.PlanetMaps(result, 256, 25_000.0)
+    # Every registered theme has a painter; this planet has climate, plates and volcanoes.
+    assert maps.labels == tuple(theme.label for theme in THEMES)
+    assert not drawn and all(maps.image(label) is None for label in maps.labels)
+    # A map is drawn when first asked for, once, however many threads ask at the same time.
+    rain = THEME_BY_ID["precipitation"].label
+    with ThreadPoolExecutor(4) as pool:
+        images = list(pool.map(maps.draw, [rain] * 4))
+    assert drawn == ["precipitation"] and all(image is images[0] for image in images)
+    assert maps.image(rain) is images[0] and maps.draw(rain) is images[0]
+    # The volcano map is drawn over the atlas, which is drawn once for both.
+    maps.draw(THEME_BY_ID["volcanoes"].label)
+    maps.draw(THEME_BY_ID["atlas"].label)
+    assert drawn == ["precipitation", "volcanoes", "atlas"]
+    for label in maps.labels:
+        maps.draw(label)
+    assert sorted(drawn) == sorted(theme.id for theme in THEMES)
+    with pytest.raises(ValueError, match="no Political map"):
+        maps.draw("Political")
 
 
 def test_cancelled_planet_build_never_looks_complete(world_path: Path, tmp_path: Path) -> None:
@@ -1233,7 +1273,7 @@ def test_aged_wonders_are_built_saved_and_listed(world_path: Path, tmp_path: Pat
 
     run = generate_planet_run(
         open_world(world_path).project, None, replace(FAST, climate_passes=0),
-        wonder_settings=WonderSettings(("crater",), 15.0), preview_width=0,
+        wonder_settings=WonderSettings(("crater",), 15.0),
     )
     aging = run.result.wonders.aging
     assert len(aging) == len(run.result.wonders.craters) >= 1
@@ -1305,7 +1345,6 @@ def test_wonders_are_a_pass_on_the_base_planet(world_path: Path) -> None:
     settings = replace(FAST, climate_passes=0)
     run = generate_planet_run(
         project, None, settings, wonder_settings=WonderSettings(("crater", "chasm")),
-        preview_width=0,
     )
     base, result = run.base.planet, run.result
     # The base planet has no wonders; the planet adds them on top of it.
@@ -1324,7 +1363,13 @@ def test_wonders_are_a_pass_on_the_base_planet(world_path: Path) -> None:
     assert np.array_equal(again.elevation_m, result.elevation_m)
     # Identities: the base outlasts wonder changes; the planet's does not.
     assert run.base_sha256 == base_identity(project, None, settings, run.runtime)
-    other = apply_wonders(run, WonderSettings(("tepui",)), None, preview_width=0)
+    # A run draws only the map its caller shows first; the others wait until asked for.
+    other = apply_wonders(
+        run, WonderSettings(("tepui",)), None, shown=("Political", "Planet relief"),
+        preview_width=256,
+    )
+    assert [label for label in other.maps.labels if other.maps.image(label)] == ["Planet relief"]
+    assert not any(run.maps.image(label) for label in run.maps.labels)
     assert other.base_sha256 == run.base_sha256 and other.base is run.base
     assert planet_identity(other) != planet_identity(run)
     assert len(other.result.wonders.tepuis) >= 1 and len(other.result.wonders.craters) == 0
@@ -1466,7 +1511,7 @@ def test_suggested_sites_are_plausible_repeatable_and_can_be_kept(world_path: Pa
     from map_maker.terrain.pipeline.planet_suggestions import APART_M, PER_KIND
 
     project = open_world(world_path).project
-    run = generate_planet_run(project, None, FAST, preview_width=0)
+    run = generate_planet_run(project, None, FAST)
     found = suggest(run)
     assert found == suggest(run)  # the same planet gives the same suggestions
     counts = Counter(s.kind for s in found)
@@ -1491,5 +1536,5 @@ def test_suggested_sites_are_plausible_repeatable_and_can_be_kept(world_path: Pa
     kept = WorldWonders(project, tuple(
         keep(s, f"{WONDERS[s.kind].label} {n}", n) for n, s in enumerate(best.values())
     ))
-    applied = apply_wonders(run, WonderSettings(), kept, preview_width=0)
+    applied = apply_wonders(run, WonderSettings(), kept)
     assert applied.base is run.base and len(applied.result.wonders.craters) == 1

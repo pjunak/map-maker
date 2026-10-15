@@ -102,7 +102,7 @@ def test_region_build_reuses_cached_tiles_and_publishes_a_manifest(
     from map_maker.terrain.application.planet_region import build_region
 
     run = generate_planet_run(
-        parent.world.project, None, parent.settings, preview_width=0
+        parent.world.project, None, parent.settings
     )
     planet = export_planet(run, tmp_path / "planet", width=256).parent
     settings = RegionalSettings(
@@ -146,7 +146,7 @@ def test_young_landforms_are_lifted_off_the_eroded_surface_and_saved(
 
     run = generate_planet_run(
         parent.world.project, None, parent.settings,
-        wonder_settings=WonderSettings(WONDER_KINDS), preview_width=0,
+        wonder_settings=WonderSettings(WONDER_KINDS),
     )
     result = run.result
     regional = RegionalParent.from_result(result)

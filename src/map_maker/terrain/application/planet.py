@@ -2,18 +2,19 @@
 
 A planet is a base planet without wonders plus a wonder pass (ADR-0097). A run
 keeps its base, so changed wonders are applied without eroding the planet again.
+A run draws only the map its caller shows first; the others are drawn the first
+time they are asked for (``PlanetRun.maps``).
 """
 
 import os
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
 
-from PIL import Image
-
 from map_maker.terrain.adapters.build import canonical_json, file_sha256, runtime_identity
 from map_maker.terrain.adapters.planet_build import write_planet_build
-from map_maker.terrain.adapters.planet_natural import render_previews
+from map_maker.terrain.adapters.planet_maps import PlanetMaps
 from map_maker.terrain.adapters.world_geology import geology_document, read_geology
 from map_maker.terrain.adapters.world_project import read_world_project, world_project_document
 from map_maker.terrain.adapters.world_svg import parse_world_svg
@@ -52,7 +53,7 @@ class PlanetRun:
     result: PlanetResult
     runtime: dict[str, object]
     inputs: dict[str, str | None]  # world, geology and wonder document hashes
-    previews: dict[str, Image.Image]
+    maps: PlanetMaps  # the map themes at preview width, drawn when first asked for
     base_sha256: str  # identity of the planet without wonders; tiles are cached under it
 
 
@@ -114,10 +115,17 @@ def generate_planet_run(
     *,
     wonder_settings: WonderSettings | None = None,
     wonders: WorldWonders | None = None,
+    shown: Sequence[str] = (),
     preview_width: int = DEFAULT_PREVIEW_WIDTH,
     river_km2: float = DEFAULT_RIVER_KM2,
     cancellation: CancellationToken | None = None,
 ) -> PlanetRun:
+    """Generate a planet from a world.
+
+    ``shown`` lists map theme labels by preference: the first one the planet has is
+    drawn before returning, for the caller to show at once. The other maps are drawn
+    when first asked for (``PlanetRun.maps``).
+    """
     check_cancelled(cancellation)
     runtime = runtime_identity()
     if parse_world_svg(project.source.svg, project.source.name) != project.source:
@@ -135,7 +143,8 @@ def generate_planet_run(
         base, wonder_settings, wonders, progress_part(progress, share, 1.0),
         cancellation=cancellation,
     )
-    previews = _previews(result, progress, preview_width, river_km2)
+    maps = PlanetMaps(result, preview_width, river_km2)
+    _draw_shown(maps, shown, progress)
     if runtime_identity() != runtime:
         raise ValueError("Software changed during planet generation; generate again.")
     check_cancelled(cancellation)
@@ -145,7 +154,7 @@ def generate_planet_run(
             **input_identity(project, geology),
             "wonders_sha256": None if wonders is None else wonders_sha256(wonders),
         },
-        previews, base_identity(project, geology, settings, runtime),
+        maps, base_identity(project, geology, settings, runtime),
     )
 
 
@@ -155,32 +164,37 @@ def apply_wonders(
     wonders: WorldWonders | None,
     progress: ProgressCallback | None = None,
     *,
+    shown: Sequence[str] = (),
     preview_width: int = DEFAULT_PREVIEW_WIDTH,
     river_km2: float = DEFAULT_RIVER_KM2,
     cancellation: CancellationToken | None = None,
 ) -> PlanetRun:
-    """``run``'s base planet with these wonders: the wonder pass only (ADR-0097)."""
+    """``run``'s base planet with these wonders: the wonder pass only (ADR-0097).
+
+    ``shown`` is as for ``generate_planet_run``.
+    """
     if runtime_identity() != run.runtime:
         raise ValueError("Software changed since the planet was generated; generate again.")
     _check_wonders(run.result.world.project, wonders)
     result = finish_planet(run.base, wonder_settings, wonders, progress, cancellation=cancellation)
-    previews = _previews(result, progress, preview_width, river_km2)
+    maps = PlanetMaps(result, preview_width, river_km2)
+    _draw_shown(maps, shown, progress)
     check_cancelled(cancellation)
     return PlanetRun(
         run.base, result, run.runtime,
         {**run.inputs, "wonders_sha256": None if wonders is None else wonders_sha256(wonders)},
-        previews, run.base_sha256,
+        maps, run.base_sha256,
     )
 
 
-def _previews(
-    result: PlanetResult, progress: ProgressCallback | None, width: int, river_km2: float
-) -> dict[str, Image.Image]:
-    if not width:
-        return {}
-    if progress is not None:
-        progress(1.0, "Drawing the maps")
-    return render_previews(result, width, river_km2)
+def _draw_shown(
+    maps: PlanetMaps, shown: Sequence[str], progress: ProgressCallback | None
+) -> None:
+    label = next((label for label in shown if label in maps.labels), None)
+    if label is not None:
+        if progress is not None:
+            progress(1.0, "Drawing the map")
+        maps.draw(label)
 
 
 def export_planet(
@@ -236,7 +250,7 @@ def build_planet(
         settings or PlanetSettings(), progress,
         wonder_settings=wonder_settings,
         wonders=None if wonders_path is None else read_wonders(wonders_path)[0],
-        preview_width=0, river_km2=river_km2, cancellation=cancellation,
+        river_km2=river_km2, cancellation=cancellation,
     )
     for path, digest in files.items():
         if file_sha256(path) != digest:

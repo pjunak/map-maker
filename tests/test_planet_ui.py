@@ -13,7 +13,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from map_maker.terrain import ui
+from map_maker.terrain import ui, world_view
+from map_maker.terrain.adapters import planet_maps
 from map_maker.terrain.adapters.map_projection import PROJECTIONS
 from map_maker.terrain.adapters.map_views import PREVIEW_LAYERS, THEMES, MapTheme
 from map_maker.terrain.domain.planet import PlanetSettings
@@ -47,14 +48,22 @@ def wait(app: ui.TerrainApp, seconds: float = 120) -> None:
 
 
 def settle(app: ui.TerrainApp, condition: Callable[[], bool], seconds: float = 30) -> None:
-    """Pump Tk until background view renders are delivered and ``condition`` holds."""
+    """Pump Tk until background view renders and map drawing are delivered and
+    ``condition`` holds."""
+    view = app.world_workspace
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         app.root.update()
-        if app.world_workspace.renders.idle and condition():
+        if view.renders.idle and view.map_drawing.idle and condition():
             return
         time.sleep(0.01)
     raise AssertionError("The view did not finish rendering.")
+
+
+def drawn(app: ui.TerrainApp) -> list[str]:
+    run = app.world_workspace.planet_run
+    assert run is not None
+    return [label for label in run.maps.labels if run.maps.image(label) is not None]
 
 
 def globe_current(app: ui.TerrainApp) -> bool:
@@ -93,14 +102,33 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     # A new planet opens the Explore step, whose actions now work.
     assert view.step == "explore" and view.rail.enabled("explore")
     assert str(panel.zoom_button["state"]) == "normal"
-    assert set(run.previews) == set(PREVIEW_LAYERS)
+    assert run.maps.labels == PREVIEW_LAYERS
     assert maps.display_layer.get() == "Planet atlas" and maps.group.get() == "Planet"
     assert tuple(maps.layer_input.cget("values")) == PREVIEW_LAYERS
     assert "points about" in panel.detail.get() and "need climate" not in panel.detail.get()
+    # Only the map shown was drawn with the planet; it shows at once.
+    assert drawn(app) == ["Planet atlas"]
+    maps.draw_now()
+    assert maps.photo is not None
+    # Another map is drawn in the background when first chosen, and kept.
+    maps.set_layer("Planet rainfall")
+    assert maps.display_layer.get() == "Planet rainfall"
+    assert not maps.planet_maps.ready("Planet rainfall")
+    maps.draw_now()
+    assert maps.photo is None and maps.flat.placeholder == ("Planet rainfall", world_view.DRAWING)
+    settle(app, lambda: maps.planet_maps.ready("Planet rainfall"))
+    maps.draw_now()
+    assert maps.photo is not None and drawn(app) == ["Planet atlas", "Planet rainfall"]
+    rain = run.maps.image("Planet rainfall")
+    maps.set_layer("Planet atlas")
+    maps.set_layer("Planet rainfall")
+    assert app.world_workspace.map_drawing.idle and run.maps.image("Planet rainfall") is rain
     for theme in THEMES:
         maps.set_layer(theme.label)
+        settle(app, lambda theme=theme: maps.planet_maps.ready(theme.label))
         maps.draw_now()
         assert maps.photo is not None and maps.legend.get().startswith(theme.legend)
+    assert drawn(app) == list(PREVIEW_LAYERS)
     # Every projection draws, globe and polar views off the Tk thread.
     maps.set_layer("Planet relief")
     for kind in PROJECTIONS:
@@ -130,16 +158,24 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     maps.save_image(tmp_path / "globe.png", render)
     wait(app)
     assert (tmp_path / "globe.png").stat().st_size > 0
-    # A new registry theme appears without UI code once a build renders it.
+    # A new registry theme appears without UI code once it has a painter.
     extra = MapTheme("political", "Political", "Realms and borders.")
-    monkeypatch.setattr(world_view, "THEMES", (*THEMES, extra))
-    monkeypatch.setattr(world_view, "THEME_BY_LABEL", {t.label: t for t in (*THEMES, extra)})
-    run.previews["Political"] = run.previews["Planet relief"]
+    by_label = {t.label: t for t in (*THEMES, extra)}
+    with monkeypatch.context() as patch:
+        for module in (world_view, planet_maps):
+            patch.setattr(module, "THEMES", (*THEMES, extra))
+            patch.setattr(module, "THEME_BY_LABEL", by_label)
+        patch.setitem(planet_maps._PAINTERS, "political", lambda m: m.draw("Planet relief"))
+        maps.set_planet(replace(run, maps=planet_maps.PlanetMaps(run.result, 512, 25_000.0)),
+                        maps.probe)
+        assert "Political" in maps.layer_input.cget("values")
+        maps.set_layer("Political")
+        assert maps.display_layer.get() == "Political"
+        assert maps.legend.get() == "Realms and borders."
+        settle(app, lambda: maps.planet_maps.ready("Political"))
+        maps.draw_now()
+        assert maps.photo is not None
     maps.set_planet(run, maps.probe)
-    assert "Political" in maps.layer_input.cget("values")
-    maps.set_layer("Political")
-    assert maps.display_layer.get() == "Political" and maps.legend.get() == "Realms and borders."
-    del run.previews["Political"]
     destination = tmp_path / "planet"
     view.export_planet(destination)
     wait(app)
@@ -151,6 +187,21 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     assert view.planet_run is None and maps.display_layer.get() == "Source"
     assert maps.planet_run is None and str(panel.export_button["state"]) == "disabled"
     assert view.step == "generate" and not view.rail.enabled("explore")
+
+
+def test_globe_shows_a_map_once_it_is_drawn(app: ui.TerrainApp) -> None:
+    planet_app(app)
+    maps = app.world_workspace.map_view
+    run = app.world_workspace.planet_run
+    assert run is not None
+    maps.projection.set("globe")
+    maps.set_layer("Planet temperature")
+    assert maps.globe.image is None and maps.current_image() is None
+    texts: list[str] = [maps.globe.itemcget(item, "text") for item in maps.globe.find_all()]
+    assert texts == [world_view.DRAWING]
+    settle(app, lambda: globe_current(app))
+    assert maps.globe.image is run.maps.image("Planet temperature")
+    assert maps.current_image() is not None
 
 
 def test_planet_cancel_and_changed_inputs_never_install_results(app: ui.TerrainApp) -> None:
