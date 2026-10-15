@@ -17,6 +17,8 @@ planet again, and regional detail already built for the planet stays valid.
   `.wonders.json` file beside the world. Pass that file to
   `map-maker world planet` with `--wonders`. Placed wonders of a kind replace the
   random ones of that kind.
+- **From suggestions.** Once a planet exists, the Wonders step suggests plausible
+  sites for every kind; keep the ones you want ([below](#suggested-sites)).
 
 Wonders form after erosion and climate, so they keep their sharp shapes, and
 every map draws them at its own scale, from the world atlas down to local maps.
@@ -74,6 +76,34 @@ Fixing one leaves the others as the wonder's seed draws them.
 | Splitting river | Water taken by the other basin | 10–50 % | 25–45 %. |
 
 Great cliffs and oases have no settings beyond their size.
+
+## Suggested sites
+
+In the Wonders step, after generating a planet, click **Suggest sites**. For every
+kind it lists the best four places found on the planet, each at least 400 km from
+the others, with how well the place fits, and draws them on the map as dashed
+ghosts ([ADR-0099](adr/0099-suggest-wonder-sites-to-keep.md)). Select one to see
+why it fits; **Keep** turns it into a placed wonder at that place and size, which
+you can then change like any other, and **Reject** hides it. Apply to see kept
+wonders in the planet.
+
+Candidates are drawn as random wonders are, then scored by what the planet is like
+there. The scores rest on hypotheses, not proof:
+
+| Kind | Fits best |
+|---|---|
+| Impact crater | Old, stable crust in dry country, where craters survive erosion. |
+| Great chasm | Where plates pull apart or on a high plateau, cut deep. |
+| Great cliff | Where high and low country meet. |
+| Tepui | An old shield in the wet tropics, like the Guiana Shield. |
+| Titan volcano | Over a mantle plume, far inland. |
+| Shattered volcano | On an arc of volcanoes or in a volcanic province. |
+| Giant active volcano | Among active volcanoes, or over a mantle plume. |
+| Oasis | Deep desert below mountains that feed its spring. |
+| Splitting river | The largest rivers with a low divide; one per river. |
+
+Suggestions belong to the planet they were found on: applying wonders keeps them,
+generating a new planet clears them. They are not saved; only kept wonders are.
 
 ## The catalog
 

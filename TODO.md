@@ -17,8 +17,8 @@ See the [plan](docs/strategy/README.md) for states and evidence.
 - [ ] **Wonders** (ADR-0097 is the base for these):
   - [ ] More settings where wanted, such as a shattered volcano's breach direction
     (store it with the volcano) or a random tepui group's size.
-  - [ ] Suggest plausible sites per kind (stable interiors for craters, rifts for
-    chasms, hotspots for titans) to keep or reject, replacing random placement.
+  - [ ] Check suggestion scores against Earth analogues (where large craters,
+    tepuis and escarpments actually survive) before trusting their ranking.
   - [ ] Cache aged wonders per wonder, so applying others does not age them again.
   - [ ] More kinds as needed (natural arches, sinkhole fields, ice canyons);
     below-sea-level floors for chasms and craters.

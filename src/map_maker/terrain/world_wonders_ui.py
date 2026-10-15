@@ -7,6 +7,8 @@ source drawing or, once a planet exists, any of its maps under the wonders. Edit
 are checked at once; opening and saving run on the workspace's job runner. The
 planet adds the wonders after erosion and climate (ADR-0097); the workspace applies
 them to a generated planet. Each kind's settings come from the catalog (ADR-0098).
+Suggested sites found on the planet are drawn as dashed ghosts until the user keeps
+or rejects them (ADR-0099).
 """
 
 from __future__ import annotations
@@ -14,10 +16,10 @@ from __future__ import annotations
 import math
 import random
 import tkinter as tk
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from typing import Literal
+from typing import Literal, Protocol
 from uuid import uuid4
 
 from PIL import Image
@@ -25,6 +27,7 @@ from PIL import Image
 from map_maker.terrain.adapters.map_views import THEME_BY_LABEL, THEMES
 from map_maker.terrain.adapters.world_render import OCEAN, render_world_source
 from map_maker.terrain.adapters.world_wonders import WONDERS_EXTENSION, wonders_file_hash
+from map_maker.terrain.application.wonder_suggestions import SuggestedWonder, keep
 from map_maker.terrain.application.world_wonders import WonderFile, open_wonders, save_wonders
 from map_maker.terrain.domain.models import Point2D
 from map_maker.terrain.domain.seeds import MAX_MASTER_SEED
@@ -49,7 +52,7 @@ from map_maker.terrain.ui_components import (
     section,
 )
 from map_maker.terrain.ui_jobs import JobRunner, Report
-from map_maker.terrain.ui_style import GAP, MAP_FRAME, MAP_HIGHLIGHT, MAP_TEXT
+from map_maker.terrain.ui_style import GAP, MAP_FRAME, MAP_HIGHLIGHT, MAP_TEXT, MAP_TEXT_MUTED
 from map_maker.terrain.viewport import MapViewport
 
 KIND_BY_LABEL: dict[str, WonderKind] = {WONDERS[kind].label: kind for kind in WONDER_KINDS}
@@ -65,19 +68,40 @@ def new_seed() -> int:
     return random.randint(0, MAX_MASTER_SEED)
 
 
+class MapWonder(Protocol):
+    """What a wonder symbol needs: a placed wonder or a suggested site."""
+
+    @property
+    def id(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def kind(self) -> WonderKind: ...
+    @property
+    def position(self) -> Point2D: ...
+    @property
+    def end(self) -> Point2D | None: ...
+    @property
+    def effective_size_km(self) -> float: ...
+
+
 def draw_wonders(
     canvas: FlatMapCanvas,
     frame: WorldFrame,
     rect: Rect,
-    wonders: tuple[WorldWonder, ...],
+    wonders: Sequence[MapWonder],
     selected: str | None,
+    *,
+    ghost: bool = False,
 ) -> None:
     """Wonders to scale on a flat world map whose frame fills ``rect``.
 
     Volcanoes are cones, a tepui a block, other round wonders rings, a chasm a
     broad line and a cliff an escarpment symbol, across the seam where that is
-    shorter.
+    shorter. ``ghost`` draws suggested sites, dashed and muted, naming only the
+    selected one.
     """
+    dash = (3, 3) if ghost else ()
     left, top, right, bottom = rect
     sx, sy = (right - left) / frame.width, (bottom - top) / frame.height
 
@@ -88,21 +112,21 @@ def draw_wonders(
     for w in wonders:
         x, y = at(*w.position)
         r = max(5.0, w.effective_size_km / 2 * px_per_km)
-        colour = MAP_HIGHLIGHT if w.id == selected else MAP_TEXT
+        colour = MAP_HIGHLIGHT if w.id == selected else MAP_TEXT_MUTED if ghost else MAP_TEXT
         if w.end is not None:
             ex, ey = at(
                 w.end[0] + round((w.position[0] - w.end[0]) / frame.width) * frame.width,
                 w.end[1],
             )
             if w.kind == "cliff":
-                draw_scarp(canvas, (x, y), (ex, ey), colour)
+                draw_scarp(canvas, (x, y), (ex, ey), colour, dash)
                 r = 5.0
             else:
                 canvas.create_line(
                     x, y, ex, ey, fill=colour, width=max(3.0, 2 * r), capstyle="round",
-                    stipple="gray50",
+                    stipple="gray25" if ghost else "gray50",
                 )
-                canvas.create_line(x, y, ex, ey, fill=colour, width=2)
+                canvas.create_line(x, y, ex, ey, fill=colour, width=2, dash=dash)
             # Label a line wonder beyond its right-hand end, clear of the line.
             x, y = max((x, y), (ex, ey))
         elif w.kind in ("titan", "shattered", "active"):
@@ -110,36 +134,41 @@ def draw_wonders(
             canvas.create_polygon(
                 x, y - r, x - r, y + r * 0.7, x + r, y + r * 0.7,
                 outline=colour, fill="", width=2,
-                dash=(4, 3) if w.kind == "shattered" else (),
+                dash=(4, 3) if w.kind == "shattered" else dash,
             )
             if w.kind == "active":
                 canvas.create_oval(x - 3, y - r - 3, x + 3, y - r + 3, fill=colour, outline="")
         elif w.kind == "oasis":
-            canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
+            canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2, dash=dash)
             canvas.create_oval(x - 3, y - 3, x + 3, y + 3, fill=colour, outline="")
         elif w.kind == "fork":
             # A river dividing in two.
             r = 7.0
-            canvas.create_line(x, y + r, x, y, fill=colour, width=3)
-            canvas.create_line(x, y, x - r, y - r, fill=colour, width=3)
-            canvas.create_line(x, y, x + r, y - r, fill=colour, width=3)
+            canvas.create_line(x, y + r, x, y, fill=colour, width=3, dash=dash)
+            canvas.create_line(x, y, x - r, y - r, fill=colour, width=3, dash=dash)
+            canvas.create_line(x, y, x + r, y - r, fill=colour, width=3, dash=dash)
         elif w.kind == "tepui":
             canvas.create_rectangle(x - r, y - 0.7 * r, x + r, y + 0.7 * r, outline=colour,
-                                    width=2)
+                                    width=2, dash=dash)
         else:
-            canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2)
-        canvas.create_text(x + r + 4, y, text=w.name, fill=colour, anchor="w")
+            canvas.create_oval(x - r, y - r, x + r, y + r, outline=colour, width=2, dash=dash)
+        if not ghost or w.id == selected:  # many ghosts at once would bury the map in names
+            canvas.create_text(x + r + 4, y, text=w.name, fill=colour, anchor="w")
 
 
 def draw_scarp(
-    canvas: FlatMapCanvas, start: tuple[float, float], end: tuple[float, float], colour: str
+    canvas: FlatMapCanvas,
+    start: tuple[float, float],
+    end: tuple[float, float],
+    colour: str,
+    dash: tuple[int, ...] = (),
 ) -> None:
     """The map symbol of an escarpment: its edge with ticks down the low side.
 
     The high side lies to the left going from ``start`` to ``end`` (north up).
     """
     (x, y), (ex, ey) = start, end
-    canvas.create_line(x, y, ex, ey, fill=colour, width=3)
+    canvas.create_line(x, y, ex, ey, fill=colour, width=3, dash=dash)
     length = math.hypot(ex - x, ey - y)
     if length < 1:
         return
@@ -159,12 +188,18 @@ class WonderEditor(ttk.Frame):
         jobs: JobRunner,
         status: tk.StringVar,
         on_change: Callable[[], None] = lambda: None,
+        request_suggestions: Callable[[], None] = lambda: None,
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
         self.world = world
         self.jobs = jobs
         self.status = status
         self.on_change = on_change
+        self._request_suggestions = request_suggestions
+        # Suggested sites on the planet they were found on (``_suggestions_base``).
+        self.suggestions: tuple[SuggestedWonder, ...] = ()
+        self.suggested: str | None = None
+        self._suggestions_base: str | None = None
         self.file: WonderFile | None = None
         self.wonders = blank_wonders(world.project)
         self._saved: WorldWonders | None = None
@@ -258,7 +293,32 @@ class WonderEditor(ttk.Frame):
         history = button_row(placed, pady=(GAP // 2, 0))
         for text, command in (("Undo", self.undo), ("Redo", self.redo)):
             self._button(history, text, command, style="Small").pack(side="left", padx=(0, 4))
+        self._build_suggestions()
         self._build_form()
+
+    def _build_suggestions(self) -> None:
+        box = section(self, "Suggested sites")
+        hint(box, "Plausible places on the generated planet, each scored by what the planet is "
+             "like there. Keep one to place it; Reject hides it.")
+        self.suggest_button = ttk.Button(
+            box, text="Suggest sites", style="Quiet.TButton", command=self._request_suggestions,
+            state="disabled",
+        )
+        self.suggest_button.pack(fill="x", pady=(GAP // 2, 0))
+        self.suggestion_tree = ttk.Treeview(box, show="tree", selectmode="browse", height=6)
+        self.suggestion_tree.column("#0", width=260)
+        self.suggestion_tree.pack(fill="x", pady=(GAP // 2, 0))
+        self.suggestion_tree.bind("<<TreeviewSelect>>", self._suggestion_selected)
+        self.suggestion_reason = tk.StringVar(self)
+        hint(box, textvariable=self.suggestion_reason)
+        actions = button_row(box, pady=(GAP // 2, 0))
+        actions.columnconfigure((0, 1), weight=1, uniform="suggestions")
+        self._button(actions, "Keep", self.keep_suggestion).grid(
+            row=0, column=0, sticky="ew", padx=(0, 3)
+        )
+        self._button(actions, "Reject", self.reject_suggestion).grid(
+            row=0, column=1, sticky="ew", padx=(3, 0)
+        )
 
     def _build_form(self) -> None:
         box = section(self, "Wonder")
@@ -430,8 +490,10 @@ class WonderEditor(ttk.Frame):
 
     def _wonder_name(self, kind: WonderKind, keep: str | None = None) -> str:
         name = self.values["name"].get().strip()
-        if name:
-            return name
+        return name or self._free_name(kind, keep)
+
+    def _free_name(self, kind: WonderKind, keep: str | None = None) -> str:
+        """The kind's label with the first number no other wonder uses."""
         names = {w.name for w in self.wonders.wonders if w.id != keep}
         label = WONDERS[kind].label
         return next(f"{label} {n}" for n in range(1, 1000) if f"{label} {n}" not in names)
@@ -441,17 +503,18 @@ class WonderEditor(ttk.Frame):
 
     # Editing
 
-    def _commit(self, wonders: tuple[WorldWonder, ...], selected: str | None, done: str) -> None:
+    def _commit(self, wonders: tuple[WorldWonder, ...], selected: str | None, done: str) -> bool:
         try:
             candidate = WorldWonders(self.wonders.world, wonders)
         except ValueError as error:
             self.status.set(str(error))
-            return
+            return False
         self._undo.append(self.wonders)
         self._undo = self._undo[-20:]
         self._redo.clear()
         self.wonders, self.selected = candidate, selected
         self._refresh(done)
+        return True
 
     def _refresh(self, message: str) -> None:
         self._populate()
@@ -685,12 +748,84 @@ class WonderEditor(ttk.Frame):
     def set_busy(self, busy: bool) -> None:
         for widget, normal in (*self._controls, *((e, "normal") for e in self._option_inputs)):
             widget["state"] = "disabled" if busy else normal
+        self.suggest_button.configure(
+            state="normal" if self._previews and not busy else "disabled"
+        )
+
+    # Suggested sites
+
+    def show_suggestions(self, suggestions: tuple[SuggestedWonder, ...], base: str) -> None:
+        """Suggested sites found on the planet without wonders identified by ``base``."""
+        self.suggestions, self._suggestions_base, self.suggested = suggestions, base, None
+        self._populate_suggestions()
+        self.canvas.redraw()
+
+    def _populate_suggestions(self) -> None:
+        tree = self.suggestion_tree
+        tree.delete(*tree.get_children())
+        for s in self.suggestions:
+            parent = f"kind-{s.kind}"
+            if not tree.exists(parent):
+                tree.insert("", "end", iid=parent, text=WONDERS[s.kind].label, open=True)
+            size = "" if s.size_km is None else f" · {s.size_km:,.4g} km"
+            tree.insert(parent, "end", iid=s.id, text=f"{s.score:.0%} fit{size}")
+        if self.suggested and tree.exists(self.suggested):
+            tree.selection_set(self.suggested)
+        else:
+            self.suggested = None
+        current = self._suggestion()
+        self.suggestion_reason.set("" if current is None else f"{current.name}: {current.reason}.")
+
+    def _suggestion(self) -> SuggestedWonder | None:
+        return next((s for s in self.suggestions if s.id == self.suggested), None)
+
+    def _suggestion_selected(self, _event: tk.Event[tk.Misc] | None = None) -> None:
+        chosen = self.suggestion_tree.selection()
+        self.suggested = chosen[0] if chosen and not chosen[0].startswith("kind-") else None
+        current = self._suggestion()
+        self.suggestion_reason.set("" if current is None else f"{current.name}: {current.reason}.")
+        self.canvas.redraw()
+
+    def keep_suggestion(self) -> None:
+        """Place the selected suggestion as a wonder with its own seed."""
+        current = self._suggestion()
+        if self.busy or current is None:
+            self.status.set("Select a suggested site to keep.")
+            return
+        kept = keep(current, self._free_name(current.kind), new_seed())
+        if self._commit((*self.wonders.wonders, kept), kept.id, f"Kept {kept.name}."):
+            self._drop_suggestion(current)
+
+    def reject_suggestion(self) -> None:
+        current = self._suggestion()
+        if self.busy or current is None:
+            self.status.set("Select a suggested site to reject.")
+            return
+        self._drop_suggestion(current)
+        self.status.set(f"Rejected a suggested {current.name.lower()}.")
+
+    def _drop_suggestion(self, gone: SuggestedWonder) -> None:
+        self.suggestions = tuple(s for s in self.suggestions if s.id != gone.id)
+        self.suggested = None
+        self._populate_suggestions()
+        self.canvas.redraw()
 
     # The map under the wonders
 
-    def set_planet(self, previews: dict[str, Image.Image], probe: PlanetProbe | None) -> None:
-        """Offer the generated planet's maps (theme label -> image) as backgrounds."""
+    def set_planet(
+        self, previews: dict[str, Image.Image], probe: PlanetProbe | None, base: str | None
+    ) -> None:
+        """Offer the generated planet's maps (theme label -> image) as backgrounds.
+
+        ``base`` identifies the planet without wonders; suggestions found on another
+        one no longer apply.
+        """
         self._previews, self.probe = previews, probe
+        if base != self._suggestions_base:
+            self.show_suggestions((), base or "")
+        self.suggest_button.configure(
+            state="normal" if previews and not self.busy else "disabled"
+        )
         self._pyramids = {}
         layers = (SOURCE_LAYER, *(theme.label for theme in THEMES if theme.label in previews))
         self.layer_input.configure(values=layers)
@@ -758,6 +893,7 @@ class WonderEditor(ttk.Frame):
 
     def _overlay(self, canvas: FlatMapCanvas, rect: Rect) -> None:
         frame = self.world.project.frame
+        draw_wonders(canvas, frame, rect, self.suggestions, self.suggested, ghost=True)
         draw_wonders(canvas, frame, rect, self.wonders.wonders, self.selected)
         left, top, right, bottom = rect
         if self._line_start is not None:

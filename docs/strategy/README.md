@@ -59,7 +59,8 @@ backlog, and [status](../research/status.md) records what works now.
      again. Regional tiles come from the base, so wonder edits keep them.
    - Each kind's settings are declared once in the catalog (ADR-0098), and
      wonders are placed on the planet's maps.
-   - Next: suggest plausible sites to keep or reject, replacing random placement.
+   - The Wonders step suggests plausible sites per kind, scored by stated
+     hypotheses, to keep or reject (ADR-0099). Next: more kinds as needed.
 3. **Political and civilization overlays** as registered themes.
 
 ## Integration and adoption checks

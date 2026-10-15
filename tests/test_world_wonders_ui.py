@@ -196,6 +196,7 @@ def test_applying_wonders_reruns_only_the_wonder_pass(app: ui.TerrainApp) -> Non
     run = view.planet_run
     assert run is not None and run is not first
     assert run.base is first.base and run.base_sha256 == first.base_sha256
+    first_base = first.base
     assert run.result.placed is not None and len(run.result.wonders.craters) == 1
     assert run.inputs["wonders_sha256"] is not None
     assert view.result_panel.outdated.get() == ""
@@ -210,3 +211,29 @@ def test_applying_wonders_reruns_only_the_wonder_pass(app: ui.TerrainApp) -> Non
     assert again is not None and again.base is first.base and view.step == "explore"
     assert again.result.wonder_settings == WonderSettings(("tepui",))
     assert len(again.result.wonders.tepuis) >= 1 and len(again.result.wonders.craters) == 1
+    # Suggested sites: found on the planet, kept as placed wonders or rejected.
+    assert str(editor.suggest_button["state"]) == "normal"
+    view.suggest_wonders()
+    wait(app)
+    found = editor.suggestions
+    assert found and editor.suggestion_tree.get_children()
+    first, second = found[0], found[1]
+    editor.suggestion_tree.selection_set(first.id)
+    editor.update()
+    assert editor.suggested == first.id and first.reason in editor.suggestion_reason.get()
+    editor.keep_suggestion()
+    kept = editor.wonders.wonders[-1]
+    assert (kept.kind, kept.position, kept.size_km) == (first.kind, first.position, first.size_km)
+    assert first not in editor.suggestions and editor.selected == kept.id
+    editor.suggestion_tree.selection_set(second.id)
+    editor.update()
+    editor.reject_suggestion()
+    assert second not in editor.suggestions and len(editor.wonders.wonders) == 2
+    # Applying keeps the planet without wonders, so the suggestions still apply.
+    view.apply_wonders()
+    wait(app)
+    assert editor.suggestions and view.planet_run is not None
+    assert view.planet_run.base is first_base
+    # Another planet without wonders makes them stale.
+    editor.set_planet({}, None, "another planet")
+    assert editor.suggestions == () and str(editor.suggest_button["state"]) == "disabled"

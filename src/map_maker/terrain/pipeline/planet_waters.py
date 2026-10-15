@@ -158,26 +158,24 @@ def oasis_cover(
     return green, pond
 
 
-def find_fork(
+def fork_candidates(
     mesh: SphereMesh,
     land: B,
     coast_m: F64,
     elevation_m: F64,
     lakes: Lakes,
-    rng: np.random.Generator,
     near: F64 | None = None,
-) -> tuple[int, int] | None:
-    """A river node and its neighbour across a low divide that reaches the sea another way.
+) -> tuple[I64, I64, F64]:
+    """River nodes and their neighbours across a low divide, best first, with scores.
 
-    The split lies well inland and the two courses reach the sea far apart, as
-    the Orinoco and the Amazon do, so it is a divided river and not a delta.
-
-    With ``near`` (a unit vector) the fork is the best one within
-    ``FORK_REACH_M`` of it; otherwise one of the best few, drawn at random.
+    Each neighbour reaches the sea another way. The split lies well inland and the
+    two courses reach the sea far apart, as the Orinoco and the Amazon do, so it is
+    a divided river and not a delta. With ``near`` (a unit vector) only rivers
+    within ``FORK_REACH_M`` of it count.
     """
     receiver = lakes.flow.receiver
     discharge = lakes.discharge_m3_s
-    outlet = _outlets(receiver)
+    outlet = river_outlets(receiver)
     to_sea = ~land[outlet]
     # Large rivers well inland.
     river = land & (lakes.lake < 0) & to_sea & (coast_m > FORK_INLAND_M) & (
@@ -195,13 +193,31 @@ def find_fork(
     )
     mouths = np.sum(mesh.xyz[outlet[src]] * mesh.xyz[outlet[dst]], axis=1)
     ok &= mouths < np.cos(FORK_MOUTHS_APART_M / mesh.radius_m)
-    if not ok.any():
-        return None
     u, v = src[ok], dst[ok]
     score = discharge[u] * np.exp(-np.maximum(elevation_m[v] - elevation_m[u], 0.0) / 150.0)
     order = np.argsort(-score)
-    pick = 0 if near is not None else int(rng.integers(0, min(5, len(order))))
-    return int(u[order[pick]]), int(v[order[pick]])
+    return u[order], v[order], score[order]
+
+
+def find_fork(
+    mesh: SphereMesh,
+    land: B,
+    coast_m: F64,
+    elevation_m: F64,
+    lakes: Lakes,
+    rng: np.random.Generator,
+    near: F64 | None = None,
+) -> tuple[int, int] | None:
+    """A river node and its neighbour across a low divide that reaches the sea another way.
+
+    With ``near`` (a unit vector) the fork is the best one within ``FORK_REACH_M``
+    of it; otherwise one of the best few, drawn at random (``fork_candidates``).
+    """
+    u, v, _ = fork_candidates(mesh, land, coast_m, elevation_m, lakes, near)
+    if not len(u):
+        return None
+    pick = 0 if near is not None else int(rng.integers(0, min(5, len(u))))
+    return int(u[pick]), int(v[pick])
 
 
 def split_river(
@@ -231,7 +247,7 @@ def split_river(
     return replace(lakes, discharge_m3_s=discharge, flow=flow), forks
 
 
-def _outlets(receiver: I64) -> I64:
+def river_outlets(receiver: I64) -> I64:
     """The node each node finally drains to (a sea node, or a closed basin's sink)."""
     target = np.where(receiver >= 0, receiver, np.arange(len(receiver)))
     for _ in range(64):

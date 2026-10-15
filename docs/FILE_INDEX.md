@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**246 Markdown files + 1 legal notice = 247 documentation files.**
+**247 Markdown files + 1 legal notice = 248 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 98 |
+| Architecture decision records | 99 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **247** |
+| **Total** | **248** |
 
 ## Project entry and guidance (4)
 
@@ -76,7 +76,7 @@ Current user workflows and numeric/file semantics, with future limits labelled i
 | [docs/terrain-water.md](terrain-water.md) | Authored lakes and dry basins |
 | [docs/terrain-worlds.md](terrain-worlds.md) | Import, map, validate and save retained world sources; geographic and workflow limits. |
 | [docs/world-planet.md](world-planet.md) | Experimental whole-planet relief, climate and biomes: command, options, outputs, alignment with the SVG and limits. |
-| [docs/wonders.md](wonders.md) | Wonder catalog: what each kind is, random placement, the Wonders step with per-wonder seeds, and age. |
+| [docs/wonders.md](wonders.md) | Wonder catalog: what each kind is, random placement, the Wonders step with per-wonder seeds and settings, suggested sites, and age. |
 | [docs/world-bathymetry.md](world-bathymetry.md) | Explicit ocean selection, shelf/slope/basin hypotheses, numerical depth/error/support and portable input/result workflow. |
 | [docs/world-context.md](world-context.md) | Generate spherical geography, inspect water/resolution support and export context products. |
 | [docs/world-geology.md](world-geology.md) | Author continent defaults and independent province hypotheses; priority, time, coverage and portable recipe contracts. |
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (98)
+## Architecture decision records (99)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -202,6 +202,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0096-guided-world-steps.md](adr/0096-guided-world-steps.md) | The World workspace guides creation through five numbered steps with explained defaults; geology is a step in the main window, generation uses its recipe, and the recipe follows world edits. |
 | [docs/adr/0097-wonders-as-a-layer-on-a-base-planet.md](adr/0097-wonders-as-a-layer-on-a-base-planet.md) | Wonders are a pass on a base planet without them: their own settings and `.wonders.json` document, a seed per placed wonder, base and planet identities, and regional tiles cached under the base. |
 | [docs/adr/0098-wonder-settings-from-the-catalog.md](adr/0098-wonder-settings-from-the-catalog.md) | Each wonder kind's settings are declared once in the catalog, from which validation, the document and the form follow; blank is automatic, and wonders are placed on the planet's maps. |
+| [docs/adr/0099-suggest-wonder-sites-to-keep.md](adr/0099-suggest-wonder-sites-to-keep.md) | The random placers draw candidate sites per kind, scored by stated hypotheses about the planet there; the best few are suggested to keep or reject, and random placement stays. |
 
 ## Dated research reports (99)
 

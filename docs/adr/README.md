@@ -127,3 +127,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0096: Guide world creation through numbered steps, with geology in the main window](0096-guided-world-steps.md)
 - [ADR-0097: Add wonders as a separate layer on a base planet](0097-wonders-as-a-layer-on-a-base-planet.md)
 - [ADR-0098: Describe each wonder kind's settings once, in the catalog](0098-wonder-settings-from-the-catalog.md)
+- [ADR-0099: Suggest plausible wonder sites for the user to keep or reject](0099-suggest-wonder-sites-to-keep.md)

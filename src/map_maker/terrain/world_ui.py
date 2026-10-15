@@ -33,6 +33,7 @@ from map_maker.terrain.application.planet import (
 )
 from map_maker.terrain.application.planet_region import RegionRun, export_region, region_window
 from map_maker.terrain.application.region_views import region_themes, render_region_theme
+from map_maker.terrain.application.wonder_suggestions import SuggestedWonder, suggest
 from map_maker.terrain.application.world import (
     continent_from_name,
     open_world,
@@ -1176,8 +1177,31 @@ class WorldWorkspace(ttk.Frame):
         if self.wonders is not None:
             run = self.planet_run
             self.wonders.set_planet(
-                {} if run is None else run.previews, None if run is None else self.map_view.probe
+                {} if run is None else run.previews,
+                None if run is None else self.map_view.probe,
+                None if run is None else run.base_sha256,
             )
+
+    def suggest_wonders(self) -> None:
+        """Find plausible sites for every kind of wonder on the planet without wonders."""
+        run, editor = self.planet_run, self.wonders
+        if self.busy or run is None or editor is None:
+            return
+
+        def done(found: tuple[SuggestedWonder, ...]) -> None:
+            if run is not self.planet_run or editor is not self.wonders:
+                self.status.set("The planet changed meanwhile; suggest sites again.")
+                return
+            editor.show_suggestions(found, run.base_sha256)
+            self.status.set(
+                f"{len(found)} suggested sites, best first within each kind. Select one to see "
+                "why it fits; Keep places it."
+            )
+
+        self._run(
+            "Finding sites for wonders", lambda _report, _token: suggest(run), done,
+            cancellable=False,
+        )
 
     def export_planet(self, destination: Path) -> None:
         run = self.planet_run
@@ -1351,7 +1375,7 @@ class WorldWorkspace(ttk.Frame):
         def create(world: WorldMap) -> None:
             editor = WonderEditor(
                 self.wonders_holder, self.map_area, world, jobs=self.jobs, status=self.status,
-                on_change=self._refresh_steps,
+                on_change=self._refresh_steps, request_suggestions=self.suggest_wonders,
             )
             editor.pack(fill="x")
             self.wonders = editor

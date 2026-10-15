@@ -1454,3 +1454,42 @@ def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands
     assert not result.volcanoes.emergent.any() and not result.islands.any()
+
+
+def test_suggested_sites_are_plausible_repeatable_and_can_be_kept(world_path: Path) -> None:
+    from collections import Counter
+
+    from map_maker.terrain.application.planet import apply_wonders, generate_planet_run
+    from map_maker.terrain.application.wonder_suggestions import keep, suggest
+    from map_maker.terrain.domain.wonders import WONDERS
+    from map_maker.terrain.domain.world_wonders import WorldWonders
+    from map_maker.terrain.pipeline.planet_suggestions import APART_M, PER_KIND
+
+    project = open_world(world_path).project
+    run = generate_planet_run(project, None, FAST, preview_width=0)
+    found = suggest(run)
+    assert found == suggest(run)  # the same planet gives the same suggestions
+    counts = Counter(s.kind for s in found)
+    assert {"crater", "chasm", "titan", "tepui"} <= set(counts)
+    assert all(n <= PER_KIND for n in counts.values())
+    frame = project.frame
+    for kind in counts:
+        mine = [s for s in found if s.kind == kind]
+        assert [s.score for s in mine] == sorted((s.score for s in mine), reverse=True)
+        lonlat = [frame.source_to_lonlat(s.position) for s in mine]
+        for i, a in enumerate(lonlat):
+            assert all(frame.distance_km(a, b) >= APART_M / 1e3 - 1 for b in lonlat[i + 1:])
+    for s in found:
+        assert 0.0 <= s.score <= 1.0 and s.reason
+        assert (s.end is not None) == WONDERS[s.kind].line
+        size = WONDERS[s.kind].size_km
+        assert (s.size_km is None) == (size is None)
+        if size is not None and s.size_km is not None:
+            assert size[0] <= s.size_km <= size[1]
+    # The best of each kind, kept as placed wonders, all fit the planet.
+    best = {s.kind: s for s in reversed(found)}
+    kept = WorldWonders(project, tuple(
+        keep(s, f"{WONDERS[s.kind].label} {n}", n) for n, s in enumerate(best.values())
+    ))
+    applied = apply_wonders(run, WonderSettings(), kept, preview_width=0)
+    assert applied.base is run.base and len(applied.result.wonders.craters) == 1
