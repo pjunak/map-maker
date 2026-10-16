@@ -4,12 +4,15 @@
 
 Columns and rows map linearly to the world frame (and therefore to longitude and
 latitude), so a preview can sit directly under the source drawing. Land/sea is
-the exact vector coastline rasterised at the output size. Land values are
+the exact vector coastline rasterised at the output size; coast pixels are
+supersampled for the share of land that anti-aliases drawn coasts. Land values are
 interpolated from a field with sea level on water nodes, and sea values from a
 field with zero depth on land nodes, so near-coast pixels never mix the two.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from affine import Affine
@@ -17,7 +20,10 @@ from numpy.typing import NDArray
 from PIL import Image
 from rasterio import features
 from scipy.spatial import KDTree
+from shapely import contains_xy, prepare
 from shapely.geometry import Polygon, mapping
+from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
 
 from map_maker.terrain.domain.world import WorldFrame
 from map_maker.terrain.pipeline.planet import PlanetResult
@@ -84,15 +90,75 @@ class FrameRaster:
         return Affine(360 / columns, 0, self.frame.central_meridian_deg - 180, 0, -180 / rows, 90)
 
 
+def _land_polygons(world: WorldMap) -> list[Polygon]:
+    return [Polygon(c.exterior, c.holes) for view in world.land for c in view.components]
+
+
 def land_mask(world: WorldMap, raster: FrameRaster) -> B:
-    shapes = [
-        mapping(Polygon(c.exterior, c.holes)) for view in world.land for c in view.components
-    ]
     burned = features.rasterize(
-        ((shape, 1) for shape in shapes), out_shape=raster.shape, transform=raster.transform(),
-        fill=0, dtype="uint8", all_touched=False,
+        ((mapping(shape), 1) for shape in _land_polygons(world)), out_shape=raster.shape,
+        transform=raster.transform(), fill=0, dtype="uint8", all_touched=False,
     )
     return np.asarray(burned, dtype=np.uint8).astype(bool)
+
+
+def neighbour_sum(values: F64, *, wrap: bool = False) -> F64:
+    """Sum over each pixel's 3 x 3 neighbourhood (itself included).
+
+    Rows repeat their edge values; columns wrap around when ``wrap`` (a world
+    raster's east and west edges meet), else repeat theirs too.
+    """
+    padded = np.pad(values, ((1, 1), (0, 0)), mode="edge")
+    padded = np.pad(padded, ((0, 0), (1, 1)), mode="wrap" if wrap else "edge")
+    rows, columns = values.shape
+    return sum(
+        (padded[r : r + rows, c : c + columns] for r in range(3) for c in range(3)),
+        start=np.zeros(values.shape),
+    )
+
+
+def edge_coverage(
+    mask: B, inside: Callable[[F64, F64], B], *, samples: int = 4, wrap: bool = False
+) -> F64:
+    """Share (0..1) of each pixel inside a region whose pixel-centre test is ``mask``.
+
+    Only pixels whose 3 x 3 neighbourhood holds both sides are supersampled, with
+    ``samples`` x ``samples`` points per pixel tested by ``inside(row, column)``
+    (fractional pixel coordinates, pixel centres at k + 0.5). The rest keep
+    their mask value.
+    """
+    cover = mask.astype(np.float64)
+    count = neighbour_sum(cover, wrap=wrap)
+    rows, columns = np.nonzero((count > 0) & (count < 9))
+    if not len(rows):
+        return cover
+    offsets = (np.arange(samples) + 0.5) / samples
+    dr, dc = (grid.ravel() for grid in np.meshgrid(offsets, offsets, indexing="ij"))
+    hits = inside((rows[:, None] + dr).ravel(), (columns[:, None] + dc).ravel())
+    cover[rows, columns] = hits.reshape(len(rows), -1).mean(axis=1)
+    return cover
+
+
+@lru_cache(maxsize=2)
+def _drawn_land(world: WorldMap) -> BaseGeometry:
+    """The world's land as one prepared geometry, built once per world and process."""
+    land = unary_union(_land_polygons(world))
+    prepare(land)
+    return land
+
+
+def land_cover(world: WorldMap, raster: FrameRaster, land_px: B, islands_px: B) -> F64:
+    """Share of each pixel on land: the drawn coast anti-aliased, islands whole pixels."""
+    coast = _drawn_land(world)
+    transform = raster.transform()
+
+    def inside(row: F64, column: F64) -> B:
+        x = transform.c + column * transform.a
+        y = transform.f + row * transform.e
+        own = islands_px[np.floor(row).astype(np.intp), np.floor(column).astype(np.intp)]
+        return own | np.asarray(contains_xy(coast, x, y), dtype=bool)
+
+    return edge_coverage(land_px, inside, wrap=True)
 
 
 def elevation_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> F64:
@@ -182,6 +248,7 @@ class PlanetRasters:
     elevation_m: F64
     lakes_px: NDArray[np.int64]
     islands_px: B  # volcanic islands beyond the authored coastline (opt-in)
+    land_cover: F64  # share of each pixel on land, for anti-aliased coasts
 
 
 def planet_rasters(result: PlanetResult, width: int) -> PlanetRasters:
@@ -190,7 +257,10 @@ def planet_rasters(result: PlanetResult, width: int) -> PlanetRasters:
     islands_px, island_z = island_pixels(result, raster, authored)
     land_px = authored | islands_px
     z = np.where(islands_px, island_z, elevation_raster(result, raster, land_px))
-    return PlanetRasters(raster, land_px, z, lake_raster(result, raster, land_px), islands_px)
+    return PlanetRasters(
+        raster, land_px, z, lake_raster(result, raster, land_px), islands_px,
+        land_cover(result.world, raster, land_px, islands_px),
+    )
 
 
 def island_pixels(result: PlanetResult, raster: FrameRaster, authored: B) -> tuple[B, F64]:

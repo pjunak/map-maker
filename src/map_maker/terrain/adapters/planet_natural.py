@@ -863,16 +863,48 @@ def river_coverage(
     return np.asarray(mask, dtype=np.float64) / 255.0
 
 
+def blend_coast(land_rgb: F64, sea_rgb: F64, land: B, cover: F64, *, wrap: bool = False) -> F64:
+    """Land over sea, mixed by each pixel's land share ``cover`` along the coast.
+
+    Each colour is valid only on its own side of the pixel-centre mask ``land``,
+    so a coast pixel takes the other side's colour from its neighbours there.
+    """
+    rgb = np.where(land[..., None], land_rgb, sea_rgb)
+    rows, columns = np.nonzero((cover > 0) & (cover < 1))
+    if not len(rows):
+        return rgb
+    height, width = land.shape
+    own_land = land[rows, columns]
+    # Mean land colour of the land neighbours, or sea colour of the sea neighbours.
+    total, count = np.zeros((len(rows), 3)), np.zeros(len(rows))
+    for dr in (-1, 0, 1):
+        r = np.clip(rows + dr, 0, height - 1)
+        for dc in (-1, 0, 1):
+            c = (columns + dc) % width if wrap else np.clip(columns + dc, 0, width - 1)
+            other = land[r, c] != own_land
+            total += np.where(
+                other[:, None], np.where(own_land[:, None], sea_rgb[r, c], land_rgb[r, c]), 0.0
+            )
+            count += other
+    around = total / np.maximum(count, 1)[:, None]
+    share = np.where(own_land, cover[rows, columns], 1 - cover[rows, columns])
+    share = np.where(count > 0, share, 1.0)
+    rgb[rows, columns] = rgb[rows, columns] * share[:, None] + around * (1 - share[:, None])
+    return rgb
+
+
 def compose(
     land_rgb: F64,
     sea_rgb: F64,
     land_px: B,
+    cover: F64,
     rivers: F64,
     result: PlanetResult,
     lakes_px: NDArray[np.int64],
     slope: F64 | None = None,
 ) -> Image.Image:
-    rgb = np.where(land_px[..., None], land_rgb, sea_rgb)
+    """The world map: land over sea (anti-aliased by ``cover``), lakes, rivers and falls."""
+    rgb = blend_coast(land_rgb, sea_rgb, land_px, cover, wrap=True)
     rgb = paint_water(rgb, result, lakes_px)
     alpha = (0.9 * rivers)[..., None]
     rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha

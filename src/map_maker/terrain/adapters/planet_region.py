@@ -39,6 +39,7 @@ from map_maker.terrain.adapters.planet_natural import (
     SALT_FLAT,
     IcePixels,
     PixelClimate,
+    blend_coast,
     erg_cover,
     ice_surface,
     ice_undulation,
@@ -51,6 +52,7 @@ from map_maker.terrain.adapters.planet_natural import (
     shading,
     vegetation,
 )
+from map_maker.terrain.adapters.planet_render import edge_coverage
 from map_maker.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
 from map_maker.terrain.pipeline.planet_climate import potential_evapotranspiration
 from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m, window_finest_m
@@ -159,6 +161,7 @@ class RegionWindow:
     pixels: int
     elevation_m: F64  # (pixels, pixels); NaN outside the window circle
     land: B
+    land_cover: F64  # share of each pixel on land, for anti-aliased coasts
     climate: PixelClimate | None
     rivers: F64  # anti-aliased river coverage 0..1
     points: F64  # pixel unit vectors (pixels * pixels, 3)
@@ -245,6 +248,7 @@ def crop_window(window: RegionWindow, extra: int, pixels: int) -> RegionWindow:
         pixels,
         np.where(circle, cut(window.elevation_m), np.nan),
         cut(window.land) & circle,
+        cut(window.land_cover),
         climate,
         np.where(circle, cut(window.rivers), 0.0),
         window.points.reshape(size, size, 3)[rows, rows].reshape(-1, 3),
@@ -285,8 +289,9 @@ def _compose(
 
     surfaces = tiles
     finest = window_finest_m(spacing_m, 2 * radius_m / pixels)
-    land = coastline(parent.world).contains(points, finest, parent.settings.seed)
-    land = land.reshape(pixels, pixels) & inside
+    coast = coastline(parent.world)
+    drawn = coast.contains(points, finest, parent.settings.seed).reshape(pixels, pixels)
+    land = drawn & inside
     floor = parent.sea_floor_m
     if floor is None:
         floor = np.where(parent.land, 0.0, -2000.0)
@@ -330,6 +335,14 @@ def _compose(
     elevation = np.where(inside, elevation, np.nan)
     climate = regional_climate(parent, points, elevation, land)
     pixel_m = 2 * radius_m / pixels
+
+    def on_land(row: F64, column: F64) -> B:
+        sub = inverse_aeqd(column * pixel_m - radius_m, radius_m - row * pixel_m, *centre, planet_m)
+        own = islands[np.floor(row).astype(np.intp), np.floor(column).astype(np.intp)]
+        return own | coast.contains(sub, finest, parent.settings.seed)
+
+    # The share of land in each pixel, so coasts are drawn anti-aliased.
+    land_cover = edge_coverage(drawn | islands, on_land)
     ice_surface, ice_balance = window_ice(parent, points, elevation, land, pixel_m, spacing_m)
     flow = window_flow(parent, points, elevation, land, inside, pixel_m)
     # Lakes fill the regional relief up to the parent lake level, so shores
@@ -381,6 +394,7 @@ def _compose(
         pixels,
         elevation,
         land,
+        land_cover,
         climate,
         coverage,
         points,
@@ -843,7 +857,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
         )
     else:
         land_rgb = ramp(z, HYPSOMETRIC) * (0.30 + 0.70 * np.clip(light, 0, 1.5))[..., None]
-    rgb = np.where(land[..., None], land_rgb, sea_depth_colour(-z, light))
+    rgb = blend_coast(land_rgb, sea_depth_colour(-z, light), land, window.land_cover)
     if window.lakes.any():
         pan = window.salt
         if climate is not None:
@@ -852,14 +866,22 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
             pan = pan & arid & (climate.temperature_c > 12.0)
         else:
             pan = np.zeros_like(pan)
-        rgb[window.lakes & ~pan] = LAKE
-        rgb[pan] = SALT_FLAT
-    rgb[window.playa] = SALT_FLAT
+        rgb = _paint_soft(rgb, window.lakes & ~pan, LAKE)
+        rgb = _paint_soft(rgb, pan, SALT_FLAT)
+    rgb = _paint_soft(rgb, window.playa, SALT_FLAT)
     alpha = (0.9 * window.rivers)[..., None]
     rgb = rgb * (1 - alpha) + np.asarray(RIVER, dtype=np.float64) * alpha
     rgb = paint_falls(rgb, window.rivers * land, slope, REGION_FALLS_SLOPE)
     rgb[~np.isfinite(window.elevation_m)] = (36, 54, 82)
     return Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
+
+
+def _paint_soft(rgb: F64, mask: B, colour: tuple[int, int, int]) -> F64:
+    """``colour`` over ``mask`` with soft, anti-aliased shores, as the world map draws lakes."""
+    if not mask.any():
+        return rgb
+    alpha = gaussian_filter(mask.astype(np.float64), 0.7)[..., None]
+    return rgb * (1 - alpha) + np.asarray(colour, dtype=np.float64) * alpha
 
 
 def window_topographic(window: RegionWindow) -> Image.Image:

@@ -250,6 +250,10 @@ the hand-drawn `parchment.png`.
 texture below the mesh resolution, so slopes do not shade as smooth ramps. This
 detail, including small valleys carved into it, is for display only. It is not in `elevation.tif` and does not change
 rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural-map-rendering.md).
+Atlas and relief images also anti-alias coasts: each coast pixel mixes land and sea
+by the share of it on land, so coasts do not step along the pixel grid. Lake shores
+are softened the same way. The land mask in `elevation.tif` and the other outputs
+still follows pixel centres.
 
 ## Outputs
 

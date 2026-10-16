@@ -149,14 +149,16 @@ def _atlas(maps: PlanetMaps) -> Image.Image:
     m = maps.inputs
     return compose(
         natural_colour(m.result, m.rasters.raster, m.rivers, m.fields), m.sea,
-        m.rasters.land_px, m.rivers, m.result, m.rasters.lakes_px, m.fields.slope,
+        m.rasters.land_px, m.rasters.land_cover, m.rivers, m.result, m.rasters.lakes_px,
+        m.fields.slope,
     )
 
 
 def _relief(maps: PlanetMaps) -> Image.Image:
     m = maps.inputs
     return compose(
-        relief_colour(m.fields), m.sea, m.rasters.land_px, m.rivers, m.result, m.rasters.lakes_px
+        relief_colour(m.fields), m.sea, m.rasters.land_px, m.rasters.land_cover, m.rivers,
+        m.result, m.rasters.lakes_px,
     )
 
 

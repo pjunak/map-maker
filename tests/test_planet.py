@@ -1346,6 +1346,39 @@ def test_waterfalls_mark_rivers_only_where_they_drop_over_steep_ground() -> None
     assert np.allclose(painted[2, 12:14], 80.0)  # and so is the cliff away from it
 
 
+def test_coast_pixels_get_their_share_of_land() -> None:
+    from map_maker.terrain.adapters.planet_render import edge_coverage
+
+    # A disc of radius 12.3 pixels centred between pixel centres.
+    rows, columns = np.mgrid[0:40, 0:40] + 0.5
+
+    def inside(row: np.ndarray, column: np.ndarray) -> np.ndarray:
+        return np.hypot(row - 20.2, column - 19.7) < 12.3
+
+    mask = inside(rows, columns)
+    cover = edge_coverage(mask, inside, samples=8)
+    assert abs(cover.sum() - pi * 12.3**2) < 1.0  # the disc's area, not its pixel count
+    edge = (cover > 0) & (cover < 1)
+    assert edge.sum() > 60  # the rim is shaded all round
+    far = np.hypot(rows - 20.2, columns - 19.7)
+    assert np.all(cover[far < 10] == 1.0) and np.all(cover[far > 15] == 0.0)
+
+
+def test_coast_pixels_mix_land_and_sea_colours_by_their_share() -> None:
+    from map_maker.terrain.adapters.planet_natural import blend_coast
+
+    land = np.zeros((6, 8), dtype=bool)
+    land[:, :4] = True
+    cover = land.astype(np.float64)
+    cover[:, 3], cover[:, 4] = 0.75, 0.25  # the coast runs through columns 3 and 4
+    land_rgb = np.where(land[..., None], np.full(3, 200.0), -1e6)  # undefined off land
+    sea_rgb = np.where(land[..., None], -1e6, np.full(3, 40.0))  # undefined at sea
+    rgb = blend_coast(land_rgb, sea_rgb, land, cover)
+    assert np.allclose(rgb[:, 3], 0.75 * 200 + 0.25 * 40)
+    assert np.allclose(rgb[:, 4], 0.25 * 200 + 0.75 * 40)
+    assert np.allclose(rgb[:, :3], 200.0) and np.allclose(rgb[:, 5:], 40.0)
+
+
 def test_the_map_hover_names_wonders() -> None:
     from map_maker.terrain.pipeline.planet_waters import Oases
     from map_maker.terrain.pipeline.planet_wonders import Craters, Wonders, wonder_at
