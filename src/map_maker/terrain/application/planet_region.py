@@ -8,6 +8,8 @@ windows draw the wonders on top (ADR-0097).
 """
 
 import os
+import pickle
+import tempfile
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
@@ -87,9 +89,10 @@ class _LevelJob:
 _worker_job: _LevelJob | None = None
 
 
-def _start_worker(job: _LevelJob) -> None:
+def _start_worker(path: str) -> None:
     global _worker_job
-    _worker_job = job
+    with open(path, "rb") as stream:
+        _worker_job = pickle.load(stream)
 
 
 def _generate(tile: int) -> int:
@@ -116,21 +119,32 @@ def _run_jobs(
             if progress is not None:
                 progress(done, total)
     elif missing:
-        with ProcessPoolExecutor(
-            max_workers=min(workers, len(missing)), initializer=_start_worker, initargs=(job,)
-        ) as pool:
-            pending: set[Future[int]] = {pool.submit(_generate, tile) for tile in missing}
-            while pending:
-                finished, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
-                for future in finished:
-                    future.result()
-                    done += 1
-                    if progress is not None:
-                        progress(done, total)
-                if cancellation is not None and cancellation.is_cancelled:
-                    for future in pending:
-                        future.cancel()
-                    check_cancelled(cancellation)
+        # The job holds the whole parent planet, 1.3 GB pickled at 3.2M nodes: too
+        # much for the pipe that starts a worker process on Windows. Workers read
+        # it from a file beside the tiles instead.
+        job.store.directory.mkdir(parents=True, exist_ok=True)
+        handle, path = tempfile.mkstemp(prefix=".job-", suffix=".pickle", dir=job.store.directory)
+        try:
+            with os.fdopen(handle, "wb") as stream:
+                pickle.dump(job, stream, protocol=pickle.HIGHEST_PROTOCOL)
+            with ProcessPoolExecutor(
+                max_workers=min(workers, len(missing)), initializer=_start_worker,
+                initargs=(path,),
+            ) as pool:
+                pending: set[Future[int]] = {pool.submit(_generate, tile) for tile in missing}
+                while pending:
+                    finished, pending = wait(pending, timeout=0.5, return_when=FIRST_COMPLETED)
+                    for future in finished:
+                        future.result()
+                        done += 1
+                        if progress is not None:
+                            progress(done, total)
+                    if cancellation is not None and cancellation.is_cancelled:
+                        for future in pending:
+                            future.cancel()
+                        check_cancelled(cancellation)
+        finally:
+            os.unlink(path)
 
 
 def ensure_level_tiles(

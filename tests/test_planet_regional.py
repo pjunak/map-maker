@@ -450,6 +450,27 @@ def test_detail_levels_have_their_own_seeds() -> None:
     assert spacings == sorted(spacings, reverse=True)
 
 
+def test_tile_processes_match_one_process_and_leave_no_job_file(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from map_maker.terrain.application.planet_region import ensure_level_tiles
+
+    planet = RegionalParent.from_result(parent)
+    grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
+    needed = grid.tiles_near(_land_centre(parent), 200e3)[:2]
+    assert len(needed) == 2
+    # Workers read the job (with its whole parent planet) from a file, not a pipe.
+    _, pooled = ensure_level_tiles(
+        planet, "p" * 64, tmp_path / "pool", 1, needed, TINY_LEVELS, workers=2
+    )
+    _, single = ensure_level_tiles(
+        planet, "p" * 64, tmp_path / "one", 1, needed, TINY_LEVELS, workers=1
+    )
+    for tile in needed:
+        assert np.array_equal(pooled[tile].elevation_m, single[tile].elevation_m)
+    assert not list((tmp_path / "pool").rglob(".job-*"))
+
+
 def test_level_parent_carries_the_coarser_relief_and_drains(
     parent: PlanetResult, tmp_path: Path
 ) -> None:
