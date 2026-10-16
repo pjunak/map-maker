@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-15. **Active milestone: M6, nested deterministic regional and local
+Updated 2026-10-17. **Active milestone: M6, nested deterministic regional and local
 maps.** Map views run alongside it. The plan is world-first: one whole-planet
 relief, made by uplift and erosion on a sphere mesh, feeds climate, map views and
 regional zoom ([decision D00a](../research/decision-catalog.md)).
@@ -48,7 +48,9 @@ backlog, and [status](../research/status.md) records what works now.
      (`planet-blended-tiles-v8`).
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
-     (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`).
+     (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is
+     first smoothed east-west, so shapes drawn on the flat map no longer become
+     radial fingers in polar views (ADR-0100, `sphere-mesh-stream-power-v30`).
 2. **Wonder layer** ([wonder guide](../wonders.md)). Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a
    splitting river are done; wonders age on their own patches (ADR-0091) and

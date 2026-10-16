@@ -38,7 +38,7 @@ Only the current formats are supported:
   result hashes. Neither a land DEM nor physical transport/heat capacity.
 
 - [Planet build v2](world/planet-build-v2.schema.json): experimental whole-planet relief
-  (`sphere-mesh-stream-power-v29`), provisional climate and ice sheets
+  (`sphere-mesh-stream-power-v30`), provisional climate and ice sheets
   (`planet-climate-v7`), with wonder settings and the identity of the planet
   without wonders (`base_sha256`, ADR-0097). Node elevation on the sphere mesh is
   authoritative; world-frame GeoTIFF/images are derived. Not a world parent.

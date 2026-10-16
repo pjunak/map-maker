@@ -128,3 +128,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0097: Add wonders as a separate layer on a base planet](0097-wonders-as-a-layer-on-a-base-planet.md)
 - [ADR-0098: Describe each wonder kind's settings once, in the catalog](0098-wonder-settings-from-the-catalog.md)
 - [ADR-0099: Suggest plausible wonder sites for the user to keep or reject](0099-suggest-wonder-sites-to-keep.md)
+- [ADR-0100: Smooth polar land east-west so drawn shapes do not become radial fingers](0100-smooth-polar-land-east-west.md)

@@ -4,6 +4,8 @@
 - Date: 2026-10-13
 - Refines the coast rule of ADR-0085 near the poles. ADR-0090 still refines the
   result at regional levels.
+- Refined by [ADR-0100](0100-smooth-polar-land-east-west.md): polar land is first
+  smoothed east-west, so drawn shapes do not become radial fingers.
 
 ## Context
 

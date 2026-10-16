@@ -203,6 +203,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0097-wonders-as-a-layer-on-a-base-planet.md](adr/0097-wonders-as-a-layer-on-a-base-planet.md) | Wonders are a pass on a base planet without them: their own settings and `.wonders.json` document, a seed per placed wonder, base and planet identities, and regional tiles cached under the base. |
 | [docs/adr/0098-wonder-settings-from-the-catalog.md](adr/0098-wonder-settings-from-the-catalog.md) | Each wonder kind's settings are declared once in the catalog, from which validation, the document and the form follow; blank is automatic, and wonders are placed on the planet's maps. |
 | [docs/adr/0099-suggest-wonder-sites-to-keep.md](adr/0099-suggest-wonder-sites-to-keep.md) | The random placers draw candidate sites per kind, scored by stated hypotheses about the planet there; the best few are suggested to keep or reject, and random placement stays. |
+| [docs/adr/0100-smooth-polar-land-east-west.md](adr/0100-smooth-polar-land-east-west.md) | Polar land is smoothed along latitude circles, by a true width growing from 0 at 55° to 4 drawing units at the pole, so shapes drawn on the flat map do not become radial fingers. |
 
 ## Dated research reports (99)
 

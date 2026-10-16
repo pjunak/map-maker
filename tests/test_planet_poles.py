@@ -110,6 +110,37 @@ def test_polar_coasts_are_smoothed_in_true_distance() -> None:
     assert _at(_land(world), tips_lon, tips_lat).mean() < 0.2
 
 
+def _comb(feature: str, x0: int, x1: int, tooth: int, gap: int) -> str:
+    """Land from 80 to 85 degrees south with teeth reaching to 74 degrees south."""
+    teeth = "".join(
+        f"L {x} 164 L {x + tooth} 164 L {x + tooth} 170 L {x + tooth + gap} 170 "
+        for x in range(x0, x1, tooth + gap)
+    )
+    return f'<path id="{feature}" d="M {x0} 170 {teeth} L {x1} 170 L {x1} 175 L {x0} 175 Z"/>'
+
+
+def test_teeth_drawn_on_the_flat_map_do_not_become_radial_fingers() -> None:
+    # Teeth 2 or 4 drawing units wide and 6 tall look ordinary on the flat map, but
+    # at 77 degrees south they are a fifth as wide as they are long. East-west
+    # smoothing in true distance replaces them by the coast they average to.
+    sparse, dense = _comb("sparse", 40, 100, 2, 4), _comb("dense", 200, 260, 4, 2)
+    drawn = _world(sparse + dense)
+    world = planet_world(drawn, SEED)
+    land, before = _land(world), _land(drawn)
+    lat = np.full(10, -77.0)
+    tooth = np.arange(40, 100, 6) + 1.0 - 180.0  # sparse tooth centres
+    assert _at(before, tooth, lat).all()
+    assert not _at(land, tooth, lat).any()
+    # Dense fjords fill, except within a blur width of the comb's ends.
+    fjord = np.arange(212, 248, 6) + 5.0 - 180.0
+    assert not _at(before, fjord, lat[:6]).any()
+    assert _at(land, fjord, lat[:6]).all()
+    # The coast the teeth stand on stays where it was drawn.
+    base = np.concatenate([np.linspace(50, 90, 15), np.linspace(210, 250, 15)]) - 180.0
+    assert _at(land, base, np.full(30, -82.5)).all()
+    assert not _at(land, base, np.full(30, -72.0)).any()
+
+
 def test_worlds_without_polar_land_are_returned_unchanged() -> None:
     drawn = _world(ISLAND)
     assert planet_world(drawn, SEED) is drawn

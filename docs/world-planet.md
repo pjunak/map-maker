@@ -16,9 +16,16 @@ generator honours those elevations approximately and lets erosion shape every
 valley and divide.
 
 **Near the poles** a flat world drawing breaks down, so the planet works polar land
-in true distance ([ADR-0094](adr/0094-planet-polar-land-in-true-distance.md)):
-- Poleward of 55°, land and water narrower than half a drawing unit are removed,
-  so traced stair-steps do not become radial streaks. Tiny islets stay.
+in true distance ([ADR-0094](adr/0094-planet-polar-land-in-true-distance.md),
+[ADR-0100](adr/0100-smooth-polar-land-east-west.md)):
+- A drawing unit east-west shrinks toward a pole, so shapes that look ordinary on
+  the flat map would become thin radial fingers. Poleward of 55°, land is
+  smoothed east-west only, more strongly nearer the pole (up to 4 drawing units
+  across at the pole). The coast keeps its north-south place and follows the
+  average of fingers and fjords; where smoothing barely moves it, it stays as
+  drawn.
+- Land and water narrower than half a drawing unit are then removed, so traced
+  stair-steps do not become radial streaks. Tiny islets stay.
 - Land drawn down to the map's top or bottom edge along only part of its width
   would meet the pole as a wedge. The planet covers that pole with land about 4°
   across, with a natural coast, so an ice sheet can dome over it. The build's
