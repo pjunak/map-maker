@@ -91,7 +91,10 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
 5. **Save image…** above the map (or **Save the shown map as an image…** in
    Explore) writes what is shown as a PNG: a flat planet map at its full width, or
    the middle square of the current globe or polar view at 2,048 px, zoom included.
-6. **Click Export planet build…** in Explore to write the same build folder as the
+6. **Save the shown map as a 3D globe…** in Explore writes the whole-planet map
+   you are looking at as a globe model (`.glb`) that 3D viewers, Blender and game
+   engines can turn. See [Globe models](#globe-models).
+7. **Click Export planet build…** in Explore to write the same build folder as the
    command line.
 
 Editing the world (names, frame, assignments) discards the generated planet and
@@ -169,6 +172,30 @@ at its edge (0 = the equator). A globe's `--zoom` enlarges it from 1 (the whole
 globe) to 16. Views are deterministic and never overwrite a file
 ([ADR-0087](adr/0087-map-themes-and-projections.md),
 [ADR-0101](adr/0101-interactive-globe-views.md)).
+
+### Globe models
+
+A globe model shows a planet map on a sphere in any 3D viewer, without Map
+Maker. It is a glTF 2.0 binary file (`.glb`), the open standard for 3D scenes, so
+Blender, game engines and browser glTF viewers can open it
+([ADR-0102](adr/0102-globe-models-in-gltf.md)):
+
+```powershell
+map-maker world globe my-planet --theme atlas --output atlas.glb
+```
+
+- `--theme` is a build image's name, as for `world view`. The file must not exist.
+- The model is a smooth desk globe one metre in radius, with north up and your
+  map's central meridian facing the viewer. Its `extras` record the map, the
+  planet's true radius and the build it came from.
+- Between 60° N and 60° S the globe shows the map itself, unchanged, so it is as
+  sharp as the build image (4,096 pixels wide by default). The app's **Save the
+  shown map as a 3D globe…** embeds the map it has drawn, 2,048 pixels wide.
+- Poleward of 60° it shows two polar images drawn from the map, as sharp as the
+  rest. A map stretched over the whole sphere would show radial streaks around
+  the poles in viewers such as three.js.
+- Viewers that support glTF's unlit materials show the map's own shading; others
+  light the globe as a matte ball.
 
 ## Run it from the command line
 

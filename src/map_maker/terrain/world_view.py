@@ -38,6 +38,7 @@ from map_maker.terrain.adapters.world_context_render import (
 from map_maker.terrain.adapters.world_render import OCEAN, render_world_source
 from map_maker.terrain.application.planet import PlanetRun
 from map_maker.terrain.application.planet_region import RegionRun
+from map_maker.terrain.application.planet_views import save_globe
 from map_maker.terrain.application.region_views import region_themes, render_region_theme
 from map_maker.terrain.application.world_context import WorldContextRun
 from map_maker.terrain.domain.planet import REGION_LEVEL_MAX_RADIUS_KM, REGION_LEVEL_NAMES
@@ -938,6 +939,32 @@ class WorldMapView(ttk.Frame):
 
         self._jobs.start(
             "Saving the map image…", work, lambda path: self._status(f"Saved {path.name}"),
+            cancellable=False,
+        )
+
+    def choose_save_globe(self) -> None:
+        """Save the shown planet map as a 3D globe model."""
+        run, layer = self.planet_run, self.display_layer.get()
+        if self.level or self.group.get() != PLANET or run is None or layer not in run.maps.labels:
+            self._status("Show a planet map of the whole world to save it as a 3D globe.")
+            return
+        selected = filedialog.asksaveasfilename(
+            parent=self, title="Save this map as a 3D globe", defaultextension=".glb",
+            initialfile=f"globe-{uuid4().hex[:8]}.glb", filetypes=[("glTF 3D model", "*.glb")],
+        )
+        if selected:
+            self.write_globe(Path(selected), layer)
+
+    def write_globe(self, destination: Path, layer: str) -> None:
+        run = self.planet_run
+        assert run is not None
+        maps, frame = run.maps, run.result.world.project.frame
+
+        def work(_report: Report, _token: CancellationToken) -> Path:
+            return save_globe(destination, maps.draw(layer), layer, frame)
+
+        self._jobs.start(
+            "Saving the 3D globe…", work, lambda path: self._status(f"Saved {path.name}"),
             cancellable=False,
         )
 

@@ -37,7 +37,8 @@ scientific engines; core contracts must not depend on those concrete libraries.
    -> adapters/map_views.py: theme registry; planet_maps.py draws each theme on
       the world frame with map_*.py and planet_natural.py, in the app only when
       it is first shown; map_projection.py shows any theme as a flat world,
-      globe or polar view (ADR-0087), drawn by pipeline/sphere_views.py (ADR-0101)
+      globe or polar view (ADR-0087), drawn by pipeline/sphere_views.py (ADR-0101);
+      globe_model.py writes it as a glTF globe model (ADR-0102)
    -> application/planet_region.py: fixed blended tiles enriched from the
       verified build without its wonders (pipeline/planet_regional.py,
       planet_tiles.py), composed into

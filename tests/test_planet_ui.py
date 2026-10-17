@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from test_globe_model import read_glb
 
 from map_maker.terrain import ui, world_view
 from map_maker.terrain.adapters import planet_maps
@@ -165,6 +166,13 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     maps.save_image(tmp_path / "globe.png", render)
     wait(app)
     assert (tmp_path / "globe.png").stat().st_size > 0
+    # The shown planet map can be saved as a 3D globe model.
+    maps.write_globe(tmp_path / "planet.glb", maps.display_layer.get())
+    wait(app)
+    assert read_glb((tmp_path / "planet.glb").read_bytes()).document["nodes"][0]["extras"][
+        "map"
+    ] == maps.display_layer.get()
+    assert str(view.result_panel.globe_button["state"]) == "normal"
     # A new registry theme appears without UI code once it has a painter.
     extra = MapTheme("political", "Political", "Realms and borders.")
     by_label = {t.label: t for t in (*THEMES, extra)}

@@ -206,6 +206,7 @@ class PlanetResultPanel(ttk.Frame):
         export: Callable[[Path], None],
         zoom: Callable[[], None],
         save_image: Callable[[], None],
+        save_globe: Callable[[], None],
         change_settings: Callable[[], None],
     ) -> None:
         super().__init__(parent, style="Panel.TFrame")
@@ -249,6 +250,13 @@ class PlanetResultPanel(ttk.Frame):
             command=save_image,
         )
         self.image_button.pack(fill="x", pady=(GAP, 0))
+        self.globe_button = ttk.Button(
+            keep, text="Save the shown map as a 3D globe…", style="Quiet.TButton",
+            command=save_globe,
+        )
+        self.globe_button.pack(fill="x", pady=(GAP, 0))
+        hint(keep, "A .glb model of the whole planet with this map, which 3D viewers, "
+             "Blender and game engines can turn.")
         self.change_button = ttk.Button(
             self, text="← Change settings and generate again", style="Quiet.TButton",
             command=change_settings,
@@ -258,7 +266,8 @@ class PlanetResultPanel(ttk.Frame):
 
     def set_busy(self, busy: bool) -> None:
         ready = self.run is not None and not busy
-        for button in (self.export_button, self.zoom_button, self.image_button):
+        for button in (self.export_button, self.zoom_button, self.image_button,
+                       self.globe_button):
             button.configure(state="normal" if ready else "disabled")
         self.change_button.configure(state="disabled" if busy else "normal")
 

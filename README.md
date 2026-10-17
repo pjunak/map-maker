@@ -20,7 +20,7 @@ obsolete features are not supported.
 - **Map views:** `map-maker world view` and the app's World map view. Any map theme
   (natural atlas, relief, topographic, parchment, climate, plates, sea-floor age,
   drainage basins, geology) can be shown as a flat world, a globe you turn and zoom,
-  or a polar view.
+  or a polar view, and saved as a 3D globe model (`.glb`) for other 3D tools.
 - **Regional detail:** `map-maker world region` and **Zoom to region / province / local** in
   the app.
   About 5 km detail for part of the planet, from cached tiles that agree

@@ -264,6 +264,21 @@ def test_planet_build_publishes_verified_world_aligned_products(
         export_view(target, view, "relief", MapProjection("globe"), 128)
     with pytest.raises(ValueError, match="Unknown view"):
         export_view(target, tmp_path / "x.png", "political", MapProjection("globe"), 128)
+    # A saved theme becomes a 3D globe model with the build's image inside, unchanged.
+    from test_globe_model import read_glb
+
+    from map_maker.cli import main
+    from map_maker.terrain.application.planet_views import export_globe
+
+    globe = tmp_path / "relief.glb"
+    assert main(["world", "globe", str(target), "--theme", "relief", "--output", str(globe)]) == 0
+    model = read_glb(globe.read_bytes())
+    assert model.image(0) == (target / "relief.png").read_bytes()
+    assert model.document["nodes"][0]["extras"]["build_sha256"] == manifest["build_sha256"]
+    with pytest.raises(FileExistsError):
+        export_globe(target, globe, "relief")
+    with pytest.raises(ValueError, match=r".glb"):
+        export_globe(target, tmp_path / "relief.png", "relief")
     (target / "relief.png").write_bytes(b"changed")
     with pytest.raises(ValueError, match="changed"):
         export_view(target, tmp_path / "y.png", "relief", MapProjection("globe"), 128)

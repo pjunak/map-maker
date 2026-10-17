@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**249 Markdown files + 1 legal notice = 250 documentation files.**
+**250 Markdown files + 1 legal notice = 251 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 101 |
+| Architecture decision records | 102 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **250** |
+| **Total** | **251** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (101)
+## Architecture decision records (102)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -205,6 +205,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0099-suggest-wonder-sites-to-keep.md](adr/0099-suggest-wonder-sites-to-keep.md) | The random placers draw candidate sites per kind, scored by stated hypotheses about the planet there; the best few are suggested to keep or reject, and random placement stays. |
 | [docs/adr/0100-smooth-polar-land-east-west.md](adr/0100-smooth-polar-land-east-west.md) | Polar land is smoothed along latitude circles, by a true width growing from 0 at 55° to 4 drawing units at the pole, so shapes drawn on the flat map do not become radial fingers. |
 | [docs/adr/0101-interactive-globe-views.md](adr/0101-interactive-globe-views.md) | Globe and polar views drawn by compiled per-pixel kernels from a latitude-prefiltered, mip-mapped world-frame image; zoom to 16x, north-up dragging that keeps the grabbed ground under the cursor, analytic hover and overlays. |
+| [docs/adr/0102-globe-models-in-gltf.md](adr/0102-globe-models-in-gltf.md) | Planet maps saved as glTF binary (`.glb`) desk globes: the map unchanged on a 60° N-60° S band, azimuthal polar cap images so viewers draw no polar streaks, `world globe` and the app's Explore step. |
 
 ## Dated research reports (99)
 

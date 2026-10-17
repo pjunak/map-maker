@@ -221,6 +221,14 @@ def create_parser() -> argparse.ArgumentParser:
     view.add_argument("--graticule", action="store_true", help="Draw a 30-degree grid.")
     view.add_argument("--output", type=Path, required=True, help="New .png file.")
     view.set_defaults(_handler=_run_world_view)
+    globe = world_commands.add_parser(
+        "globe", help="Write a saved planet build's map as a 3D globe model (.glb)."
+    )
+    globe.add_argument("planet", type=Path, help="Planet build folder or its manifest.json.")
+    globe.add_argument("--theme", default="atlas",
+                       help="Map theme, a build image's name without .png (see world view).")
+    globe.add_argument("--output", type=Path, required=True, help="New .glb file.")
+    globe.set_defaults(_handler=_run_world_globe)
     return parser
 
 
@@ -339,6 +347,18 @@ def _run_world_view(arguments: argparse.Namespace) -> int:
         print(f"View failed: {error}", file=sys.stderr)
         return 1
     print(f"View written: {path}")
+    return 0
+
+
+def _run_world_globe(arguments: argparse.Namespace) -> int:
+    from map_maker.terrain.application.planet_views import export_globe
+
+    try:
+        path = export_globe(arguments.planet, arguments.output, arguments.theme)
+    except (OSError, ValueError) as error:
+        print(f"Globe failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Globe written: {path}")
     return 0
 
 
