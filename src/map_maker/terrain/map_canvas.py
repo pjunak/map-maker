@@ -1,5 +1,5 @@
 # pyright: reportUnknownMemberType=false
-"""Interactive map canvases: a pan/zoom flat map and a turnable globe or polar view.
+"""Interactive map canvases: a pan/zoom flat map and a turnable, zoomable globe.
 
 Both are presentation only. They show images they are given (or ask a renderer
 for one) and report what is under the cursor in map coordinates; the screens
@@ -12,18 +12,21 @@ from __future__ import annotations
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
-from math import isfinite
+from math import degrees
 from typing import Protocol
 
-import numpy as np
-from numpy.typing import NDArray
 from PIL import Image, ImageTk
 
 from map_maker.terrain.adapters.map_projection import (
     SPACE,
     MapProjection,
-    displayed_lonlat,
-    reproject,
+    MapTexture,
+    grab,
+    lonlat_screen,
+    render,
+    screen_lonlat,
+    view_radius,
+    zoomed,
 )
 from map_maker.terrain.ui_jobs import LatestWorker
 from map_maker.terrain.ui_style import FONT_HERO, FONT_MAP_LABEL, MAP_TEXT, MAP_TEXT_MUTED
@@ -326,28 +329,25 @@ class FlatMapCanvas(tk.Canvas):
 
 @dataclass(frozen=True, slots=True)
 class GlobeFrame:
-    """A rendered globe or polar frame and, for full frames, each pixel's position."""
+    """A rendered globe or polar frame and the view it shows."""
 
     image: Image.Image
     projection: MapProjection
-    lon: NDArray[np.float64] | None = None
-    lat: NDArray[np.float64] | None = None
-    inside: NDArray[np.bool_] | None = None
+    size: tuple[int, int]
 
 
-POLAR_SPAN_DEG = (30.0, 150.0)  # pole-to-edge angle range for polar zoom
-DEGREES_PER_PIXEL = 0.35
-DRAG_FRAME_SCALE = 0.4  # drag frames render at this fraction of the canvas, then scale up
-DRAG_SOURCE_WIDTH = 1024
 SPACE_COLOUR = "#{:02x}{:02x}{:02x}".format(*SPACE)  # matches the projected views' surround
 
 
 class GlobeCanvas(tk.Canvas):
     """A world-frame map shown as a globe or polar view, rendered off the Tk thread.
 
-    Drag turns the view (quick low-resolution frames while dragging, a sharp one on
-    release); the wheel zooms polar views. Clicks and hover report longitude and
-    latitude in degrees.
+    Every frame is drawn sharp over the whole canvas (``map_projection.render``).
+    Dragging keeps the ground under the cursor under it, north up; the wheel
+    zooms a globe towards the cursor and a polar view about its pole; ``fit``
+    shows the whole globe or hemisphere again. Clicks and hover report
+    longitude and latitude in degrees, and ``overlay`` draws vector marks
+    placed with ``to_canvas`` over each frame.
     """
 
     def __init__(
@@ -367,17 +367,19 @@ class GlobeCanvas(tk.Canvas):
         self.kind = "globe"
         self.lon = 0.0
         self.lat = 20.0
+        self.zoom = 1.0
         self.polar_span = 90.0
         self.graticule = True
         self.central_meridian_deg = 0.0
         self.image: Image.Image | None = None
         self.placeholder = ""  # shown while there is no image
-        self._drag_source: Image.Image | None = None
+        self.overlay: Callable[[GlobeCanvas], None] | None = None
         self.frame: GlobeFrame | None = None
         self.photo: ImageTk.PhotoImage | None = None
+        self._texture: tuple[Image.Image, float, MapTexture] | None = None
         self._press: Point | None = None
+        self._grabbed: Point | None = None  # longitude and latitude held by a drag
         self._dragging = False
-        self._render_id: str | None = None
         self.bind("<Configure>", lambda _e: self.request())
         self.bind("<MouseWheel>", self._wheel)
         self.bind("<Motion>", self._motion)
@@ -387,128 +389,130 @@ class GlobeCanvas(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._release)
 
     def show(self, image: Image.Image | None, central_meridian_deg: float) -> None:
-        changed = image is not self.image or central_meridian_deg != self.central_meridian_deg
-        if image is not self.image:
-            self.image = image
-            self._drag_source = None
-        self.central_meridian_deg = central_meridian_deg
-        if changed and image is not None:
-            self.request(quick=True)
+        self.image, self.central_meridian_deg = image, central_meridian_deg
         self.request()
 
     def set_kind(self, kind: str) -> None:
         if kind != self.kind:
             self.kind = kind
-            if self.image is not None:
-                self.request(quick=True)
             self.request()
 
     def projection(self) -> MapProjection:
         if self.kind == "globe":
-            return MapProjection("globe", self.lon, self.lat)
+            return MapProjection("globe", self.lon, self.lat, zoom=self.zoom)
         sign = 1.0 if self.kind == "north-polar" else -1.0
         return MapProjection(self.kind, self.lon, limit_deg=sign * (90.0 - self.polar_span))
 
-    def view_size(self) -> int:
-        return max(16, min(self.winfo_width(), self.winfo_height()))
+    def set_projection(self, projection: MapProjection) -> None:
+        """Show the view ``projection`` describes."""
+        self.kind, self.lon = projection.kind, projection.lon_deg
+        if projection.kind == "globe":
+            self.lat, self.zoom = projection.lat_deg, projection.zoom
+        else:
+            self.polar_span = projection.polar_span_deg
+        self.request()
+        self._notify()
 
-    def request(self, *, quick: bool = False) -> None:
-        """Ask for a new frame of the current view (coalesced, rendered in the background)."""
-        if self.image is None:
+    def fit(self) -> None:
+        """Show the whole globe, or a polar view out to the equator."""
+        self.zoom, self.polar_span = 1.0, 90.0
+        self.request()
+        self._notify()
+
+    def size(self) -> tuple[int, int]:
+        return max(1, self.winfo_width()), max(1, self.winfo_height())
+
+    def request(self) -> None:
+        """Ask for a frame of the current view, rendered in the background.
+
+        The worker renders the newest request next, so a burst of requests (a
+        drag) costs one frame at a time.
+        """
+        image = self.image
+        if image is None:
             self.delete("all")
             self.photo, self.frame = None, None
             if self.placeholder:
-                self.create_text(
-                    max(1, self.winfo_width()) / 2, max(1, self.winfo_height()) / 2,
-                    text=self.placeholder, fill=MAP_TEXT_MUTED, font=FONT_MAP_LABEL[:2],
-                )
+                width, height = self.size()
+                self.create_text(width / 2, height / 2, text=self.placeholder,
+                                 fill=MAP_TEXT_MUTED, font=FONT_MAP_LABEL[:2])
             return
-        if quick:
-            self._submit(quick=True)
-        elif self._render_id is None:
-            self._render_id = self.after(REDRAW_MS, self._submit)
+        size, projection = self.size(), self.projection()
+        meridian, graticule = self.central_meridian_deg, self.graticule
 
-    def render(self, size: int) -> Image.Image:
-        """The current view at ``size`` pixels (on the calling thread; used for saving)."""
-        assert self.image is not None
-        return reproject(
-            self.image, self.projection(), size,
-            central_meridian_deg=self.central_meridian_deg, graticule=self.graticule,
-        )
-
-    def _submit(self, *, quick: bool = False) -> None:
-        if self._render_id is not None:
-            self.after_cancel(self._render_id)
-            self._render_id = None
-        image = self.image
-        if image is None:
-            return
-        size = self.view_size()
-        projection, meridian, graticule = self.projection(), self.central_meridian_deg, \
-            self.graticule
-        if quick:
-            source = self._quick_source(image)
-            small = max(64, int(size * DRAG_FRAME_SCALE))
-
-            def work() -> GlobeFrame:
-                frame = reproject(source, projection, small, central_meridian_deg=meridian,
-                                  graticule=graticule)
-                return GlobeFrame(frame.resize((size, size), Image.Resampling.BILINEAR),
-                                  projection)
-        else:
-            def work() -> GlobeFrame:
-                frame = reproject(image, projection, size, central_meridian_deg=meridian,
-                                  graticule=graticule)
-                lon, lat, inside = displayed_lonlat(projection, size)
-                return GlobeFrame(frame, projection, lon, lat, inside)
+        def work() -> GlobeFrame:
+            texture = self._texture_of(image, meridian)
+            return GlobeFrame(render(texture, projection, size, graticule=graticule),
+                              projection, size)
 
         self._worker.submit(work, self._present)
 
-    def _quick_source(self, image: Image.Image) -> Image.Image:
-        if self._drag_source is None:
-            factor = max(1, image.width // DRAG_SOURCE_WIDTH)
-            self._drag_source = image.reduce(factor) if factor > 1 else image
-        return self._drag_source
+    def render(self, pixels: int) -> Image.Image:
+        """The middle square of the current view, ``pixels`` square (for saving).
+
+        Runs on the calling thread.
+        """
+        assert self.image is not None
+        texture = self._texture_of(self.image, self.central_meridian_deg)
+        return render(texture, self.projection(), (pixels, pixels), graticule=self.graticule)
+
+    def _texture_of(self, image: Image.Image, meridian: float) -> MapTexture:
+        cached = self._texture
+        if cached is not None and cached[0] is image and cached[1] == meridian:
+            return cached[2]
+        texture = MapTexture.from_image(image, meridian)
+        self._texture = (image, meridian, texture)
+        return texture
 
     def _present(self, frame: GlobeFrame) -> None:
         if self.image is None:
             return
         self.frame = frame
-        self.photo = ImageTk.PhotoImage(frame.image, master=self)
+        photo = self.photo
+        if photo is not None and (photo.width(), photo.height()) == frame.size:
+            photo.paste(frame.image)
+        else:
+            self.photo = ImageTk.PhotoImage(frame.image, master=self)
         self.delete("all")
-        width, height = max(1, self.winfo_width()), max(1, self.winfo_height())
-        self.create_image(width / 2, height / 2, image=self.photo, anchor="center")
+        self.create_image(0, 0, image=self.photo, anchor="nw", tags=("map",))
+        self.draw_overlay()
+
+    def draw_overlay(self) -> None:
+        """Redraw only the vector marks over the current frame (cheap, e.g. on hover)."""
+        self.delete("overlay")
+        if self.overlay is None or self.frame is None:
+            return
+        self.overlay(self)
+        self.addtag_all("overlay")
+        self.dtag("map", "overlay")
 
     def to_lonlat(self, x: float, y: float) -> Point | None:
-        """Longitude/latitude (degrees) under a canvas point of the last full frame."""
+        """Longitude/latitude (degrees) under a canvas point of the shown frame."""
         frame = self.frame
-        if frame is None or frame.lon is None or frame.lat is None or frame.inside is None:
-            return None
-        size = frame.image.width
-        column = int(x - (self.winfo_width() - size) / 2)
-        row = int(y - (self.winfo_height() - size) / 2)
-        if not (0 <= row < size and 0 <= column < size) or not frame.inside[row, column]:
-            return None
-        lon = (float(frame.lon[row, column]) + 180) % 360 - 180
-        lat = float(frame.lat[row, column])
-        return (lon, lat) if isfinite(lon) and isfinite(lat) else None
+        return None if frame is None else screen_lonlat(frame.projection, frame.size, x, y)
+
+    def to_canvas(self, lon: float, lat: float) -> Point | None:
+        """Canvas position of a longitude/latitude on the shown frame, or None if hidden."""
+        frame = self.frame
+        return None if frame is None else lonlat_screen(frame.projection, frame.size, lon, lat)
+
+    # Interaction
 
     def _motion(self, event: tk.Event[tk.Misc]) -> None:
         if self._on_hover is not None and self._press is None:
             self._on_hover(self.to_lonlat(event.x, event.y))
 
     def _wheel(self, event: tk.Event[tk.Misc]) -> str:
-        if self.kind != "globe" and event.delta:
-            low, high = POLAR_SPAN_DEG
-            factor = 1 / WHEEL_STEP if event.delta > 0 else WHEEL_STEP
-            self.polar_span = min(high, max(low, self.polar_span * factor))
-            self.request()
-            self._notify()
+        self.focus_set()
+        if event.delta and self.image is not None:
+            factor = WHEEL_STEP if event.delta > 0 else 1 / WHEEL_STEP
+            self.set_projection(zoomed(self.projection(), self.size(), factor, event.x, event.y))
         return "break"
 
     def _press_left(self, event: tk.Event[tk.Misc]) -> None:
         self.focus_set()
         self._press, self._dragging = (event.x, event.y), False
+        self._grabbed = screen_lonlat(self.projection(), self.size(), event.x, event.y)
 
     def _drag(self, event: tk.Event[tk.Misc]) -> None:
         if self._press is None:
@@ -519,26 +523,42 @@ class GlobeCanvas(tk.Canvas):
         self._dragging = True
         self.configure(cursor="fleur")
         self._press = (event.x, event.y)
-        self.turn(dx, dy)
-        self.request(quick=True)
+        self.drag_to(event.x, event.y, dx, dy)
+
+    def drag_to(self, x: float, y: float, dx: float, dy: float) -> None:
+        """Turn the view so the grabbed ground follows the cursor to (x, y).
+
+        Where no north-up view can do that (a pole dragged sideways, or a press
+        off the planet) the view turns by the drag (dx, dy) instead and grabs
+        the ground now under the cursor.
+        """
+        size = self.size()
+        moved = None if self._grabbed is None else grab(
+            self.projection(), size, self._grabbed, x, y
+        )
+        if moved is None:
+            self.turn(dx, dy)
+            self._grabbed = screen_lonlat(self.projection(), size, x, y)
+        else:
+            self.set_projection(moved)
 
     def turn(self, dx: float, dy: float) -> None:
-        """Turn the view as if dragged by (dx, dy) pixels."""
+        """Turn the view as if its centre were dragged by (dx, dy) pixels."""
+        step = degrees(1.0 / view_radius(self.projection(), self.size()))
         if self.kind == "globe":
-            self.lon = (self.lon - dx * DEGREES_PER_PIXEL + 180) % 360 - 180
-            self.lat = max(-90.0, min(90.0, self.lat + dy * DEGREES_PER_PIXEL))
+            self.lon = (self.lon - dx * step + 180) % 360 - 180
+            self.lat = max(-90.0, min(90.0, self.lat + dy * step))
         else:
             turn = -dx if self.kind == "north-polar" else dx
-            self.lon = (self.lon + turn * DEGREES_PER_PIXEL + 180) % 360 - 180
+            self.lon = (self.lon + turn * step + 180) % 360 - 180
+        self.request()
         self._notify()
 
     def _release(self, event: tk.Event[tk.Misc]) -> None:
         dragged = self._dragging
-        self._press, self._dragging = None, False
+        self._press, self._grabbed, self._dragging = None, None, False
         self.configure(cursor="")
-        if dragged:
-            self.request()
-        elif self._on_click is not None:
+        if not dragged and self._on_click is not None:
             position = self.to_lonlat(event.x, event.y)
             if position is not None:
                 self._on_click(position, event)

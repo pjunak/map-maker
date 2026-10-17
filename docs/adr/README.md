@@ -129,3 +129,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0098: Describe each wonder kind's settings once, in the catalog](0098-wonder-settings-from-the-catalog.md)
 - [ADR-0099: Suggest plausible wonder sites for the user to keep or reject](0099-suggest-wonder-sites-to-keep.md)
 - [ADR-0100: Smooth polar land east-west so drawn shapes do not become radial fingers](0100-smooth-polar-land-east-west.md)
+- [ADR-0101: Draw globe views with a compiled, mip-mapped sampler and turn them by grabbing the ground](0101-interactive-globe-views.md)

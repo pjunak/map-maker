@@ -76,14 +76,21 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
    - The projection list picks **Flat world**, **Globe**, **North polar** or
      **South polar**. **Grid** draws latitude and longitude every 30°.
 
-   On a flat map, drag to pan, use the wheel to zoom and press F to fit. On a globe,
-   drag to turn it; on a polar view the wheel also zooms. Below the map:
+   On a flat map, drag to pan, use the wheel to zoom and press F to fit. On a globe:
+   - drag to turn it: the ground you grab follows the cursor, with north kept up;
+   - use the wheel to zoom towards the cursor, up to 16 times;
+   - press F to see the whole globe again.
+
+   On a polar view, drag to turn it about the pole and use the wheel to show more
+   or less of it. The globe fills the window and stays sharp while it turns
+   ([ADR-0101](adr/0101-interactive-globe-views.md)); opened regions are outlined
+   on it. Below the map:
    - the legend explains the current map;
    - **Under the cursor** reads out the ground height, lake, river discharge,
      temperature, rainfall, Köppen zone and any volcano.
 5. **Save image…** above the map (or **Save the shown map as an image…** in
    Explore) writes what is shown as a PNG: a flat planet map at its full width, or
-   the current globe or polar view at 2,048 px.
+   the middle square of the current globe or polar view at 2,048 px, zoom included.
 6. **Click Export planet build…** in Explore to write the same build folder as the
    command line.
 
@@ -96,8 +103,8 @@ With a planet shown, click **Zoom to region** above the map, or **Pick a region
 on the map** in Explore:
 1. Choose a radius, or keep **Auto**. Auto takes about half the visible width,
    from 150 to 1,200 km.
-2. Click the map, flat or globe. A circle shows the area before you click; Esc
-   cancels.
+2. Click the map, flat, globe or polar. A circle shows the area before you click;
+   Esc cancels.
 
 The region opens in the same view, at about 5 km detail: ridges, valley networks,
 altitude zones and rivers. From a region, **Zoom to province** builds 1 km detail
@@ -147,6 +154,7 @@ A saved build can be viewed the same way from the command line:
 
 ```powershell
 map-maker world view my-planet --theme atlas --projection globe --lon 40 --lat 20 --graticule --output globe.png
+map-maker world view my-planet --theme topographic --lon 40 --lat 35 --zoom 3 --output close.png
 map-maker world view my-planet --theme koppen --projection north-polar --limit 30 --output arctic.png
 ```
 
@@ -157,8 +165,10 @@ map-maker world view my-planet --theme koppen --projection north-polar --limit 3
 (hypsometric tints with contours every 500 m on a 4,096-5,760 px world, every
 fifth bold, and isobaths). A polar view's `--lon` is the
 meridian below (north) or above (south) the pole, and `--limit` is the latitude
-at its edge (0 = the equator). Views are deterministic and never overwrite a
-file ([ADR-0087](adr/0087-map-themes-and-projections.md)).
+at its edge (0 = the equator). A globe's `--zoom` enlarges it from 1 (the whole
+globe) to 16. Views are deterministic and never overwrite a file
+([ADR-0087](adr/0087-map-themes-and-projections.md),
+[ADR-0101](adr/0101-interactive-globe-views.md)).
 
 ## Run it from the command line
 

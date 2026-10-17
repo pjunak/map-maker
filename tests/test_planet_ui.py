@@ -67,10 +67,10 @@ def drawn(app: ui.TerrainApp) -> list[str]:
 
 
 def globe_current(app: ui.TerrainApp) -> bool:
-    """The globe shows a full frame of its current view."""
+    """The globe shows a frame of its current view."""
     globe = app.world_workspace.map_view.globe
     frame = globe.frame
-    return frame is not None and frame.lon is not None and frame.projection == globe.projection()
+    return frame is not None and frame.projection == globe.projection()
 
 
 def planet_app(app: ui.TerrainApp) -> None:
@@ -145,13 +145,20 @@ def test_planet_maps_follow_the_registry_in_every_projection(
     maps._hover_globe(centre)
     assert "°" in maps.inspection.get() and ("Ground" in maps.inspection.get()
                                               or "Sea" in maps.inspection.get())
-    # Dragging turns the globe with quick frames, then a sharp one.
+    # Dragging turns the globe; picking a region previews its circle on the globe.
     before = maps.globe.lon
     maps.globe._press_left(SimpleNamespace(x=200, y=200))  # type: ignore[arg-type]
     maps.globe._drag(SimpleNamespace(x=260, y=180))  # type: ignore[arg-type]
     maps.globe._release(SimpleNamespace(x=260, y=180))  # type: ignore[arg-type]
     settle(app, lambda: globe_current(app))
     assert maps.globe.lon != before
+    maps.start_picking()
+    shown = maps.globe.projection()
+    maps._hover_globe((shown.lon_deg, shown.lat_deg))
+    assert maps.globe.find_withtag("overlay") and any(
+        maps.globe.type(item) == "line" for item in maps.globe.find_withtag("overlay")
+    )
+    maps.escape()
     # Saving writes what is shown.
     render = maps.current_image()
     assert render is not None

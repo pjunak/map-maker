@@ -213,6 +213,8 @@ def create_parser() -> argparse.ArgumentParser:
     view.add_argument("--lon", type=float, default=0.0,
                       help="Globe centre, or the meridian at the bottom/top of a polar view.")
     view.add_argument("--lat", type=float, default=0.0, help="Globe centre latitude.")
+    view.add_argument("--zoom", type=float, default=1.0,
+                      help="Globe zoom: 1 shows the whole globe, up to 16.")
     view.add_argument("--limit", type=float, default=0.0,
                       help="Latitude at the edge of a polar view (0 = the equator).")
     view.add_argument("--pixels", type=int, default=1600, help="View height in pixels.")
@@ -327,7 +329,7 @@ def _run_world_view(arguments: argparse.Namespace) -> int:
 
     try:
         projection = MapProjection(
-            arguments.projection, arguments.lon, arguments.lat, arguments.limit
+            arguments.projection, arguments.lon, arguments.lat, arguments.limit, arguments.zoom
         )
         path = export_view(
             arguments.planet, arguments.output, arguments.theme, projection,

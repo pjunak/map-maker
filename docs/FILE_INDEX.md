@@ -1,11 +1,11 @@
 # Complete documentation file inventory
 
-Updated 2026-10-15. Scope: every version-controlled Markdown document in Map Maker,
+Updated 2026-10-17. Scope: every version-controlled Markdown document in Map Maker,
 plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**247 Markdown files + 1 legal notice = 248 documentation files.**
+**249 Markdown files + 1 legal notice = 250 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 99 |
+| Architecture decision records | 101 |
 | Dated research reports | 99 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **248** |
+| **Total** | **250** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (99)
+## Architecture decision records (101)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -204,6 +204,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0098-wonder-settings-from-the-catalog.md](adr/0098-wonder-settings-from-the-catalog.md) | Each wonder kind's settings are declared once in the catalog, from which validation, the document and the form follow; blank is automatic, and wonders are placed on the planet's maps. |
 | [docs/adr/0099-suggest-wonder-sites-to-keep.md](adr/0099-suggest-wonder-sites-to-keep.md) | The random placers draw candidate sites per kind, scored by stated hypotheses about the planet there; the best few are suggested to keep or reject, and random placement stays. |
 | [docs/adr/0100-smooth-polar-land-east-west.md](adr/0100-smooth-polar-land-east-west.md) | Polar land is smoothed along latitude circles, by a true width growing from 0 at 55° to 4 drawing units at the pole, so shapes drawn on the flat map do not become radial fingers. |
+| [docs/adr/0101-interactive-globe-views.md](adr/0101-interactive-globe-views.md) | Globe and polar views drawn by compiled per-pixel kernels from a latitude-prefiltered, mip-mapped world-frame image; zoom to 16x, north-up dragging that keeps the grabbed ground under the cursor, analytic hover and overlays. |
 
 ## Dated research reports (99)
 

@@ -115,8 +115,8 @@ CONTEXT_LEGENDS: dict[str, str] = {
 HINTS = {
     "source": "Click a shape to select it (Ctrl adds) · drag to pan · wheel to zoom · F fits",
     "flat": "Drag to pan · wheel to zoom · F fits the map",
-    "globe": "Drag to turn the globe",
-    "polar": "Drag to turn · wheel to zoom",
+    "globe": "Drag to turn the globe · wheel to zoom · F shows all of it",
+    "polar": "Drag to turn · wheel to zoom · F shows out to the equator",
     "pick": "Click the map to build {name} detail there · Esc cancels",
     "region": "Drag to pan · wheel to zoom · the path above returns to larger maps",
 }
@@ -293,6 +293,7 @@ class WorldMapView(ttk.Frame):
             on_hover=self._hover_globe, on_view_changed=self._view_changed,
         )
         self.globe.placeholder = DRAWING
+        self.globe.overlay = self._globe_overlay
         for canvas in (self.flat, self.globe):
             canvas.bind("<Escape>", lambda _e: self.escape())
 
@@ -560,6 +561,7 @@ class WorldMapView(ttk.Frame):
         self.globe.configure(cursor=cursor)
         self.inspection.set(self._hint())
         self.flat.draw_overlay()
+        self.globe.draw_overlay()
 
     def start_picking(self) -> None:
         """Wait for a click on the map to zoom into the next detail level there."""
@@ -578,8 +580,7 @@ class WorldMapView(ttk.Frame):
 
     def fit(self) -> None:
         if self._uses_globe():
-            self.globe.polar_span = 90.0
-            self.globe.request()
+            self.globe.fit()
         else:
             self.flat.fit()
 
@@ -590,7 +591,7 @@ class WorldMapView(ttk.Frame):
         choices = REGION_RADII_KM[min(self.level, 2)]
         low = float(choices[0])
         high = min(float(choices[-1]), REGION_LEVEL_MAX_RADIUS_KM[min(self.level, 2)])
-        zoom = 1.0 if self._uses_globe() else self.flat.viewport.zoom
+        zoom = self.globe.projection().zoom if self._uses_globe() else self.flat.viewport.zoom
         # About half the visible width of the map.
         if self.level:
             half = self.levels[self.level - 1].run.window.radius_m / 1000 / zoom
@@ -722,13 +723,10 @@ class WorldMapView(ttk.Frame):
             canvas.create_line(left, y, right, y, fill=MAP_GRID, dash=(2, 6))
 
     @staticmethod
-    def _draw_circle(
-        canvas: FlatMapCanvas, scene: SourceScene, lon: float, lat: float, radius_km: float,
-        colour: str, *, width: int = 1,
-    ) -> None:
-        """A small circle on the sphere drawn on the flat map (split at the seam)."""
-        assert scene.frame is not None
-        angle = radius_km / scene.frame.radius_km
+    def _circle(lon: float, lat: float, radius_km: float, planet_radius_km: float
+                ) -> list[tuple[float, float]]:
+        """Longitude and latitude of points around a small circle on the sphere."""
+        angle = radius_km / planet_radius_km
         phi, lam = radians(lat), radians(lon)
         points: list[tuple[float, float]] = []
         for step in range(0, 361, 5):
@@ -736,19 +734,51 @@ class WorldMapView(ttk.Frame):
             phi2 = asin(sin(phi) * cos(angle) + cos(phi) * sin(angle) * cos(bearing))
             lam2 = lam + atan2(sin(bearing) * sin(angle) * cos(phi),
                                cos(angle) - sin(phi) * sin(phi2))
-            u = ((degrees(lam2) - scene.central_meridian_deg + 180) % 360) / 360
-            points.append((u, (90 - degrees(phi2)) / 180))
+            points.append((degrees(lam2), degrees(phi2)))
+        return points
+
+    def _draw_circle(
+        self, canvas: FlatMapCanvas, scene: SourceScene, lon: float, lat: float,
+        radius_km: float, colour: str, *, width: int = 1,
+    ) -> None:
+        """A small circle on the sphere drawn on the flat map (split at the seam)."""
+        assert scene.frame is not None
         segment: list[float] = []
         previous: float | None = None
-        for u, v in points:
+        for point_lon, point_lat in self._circle(lon, lat, radius_km, scene.frame.radius_km):
+            u = ((point_lon - scene.central_meridian_deg + 180) % 360) / 360
             if previous is not None and abs(u - previous) > 0.5:
                 if len(segment) >= 4:
                     canvas.create_line(*segment, fill=colour, width=width)
                 segment = []
-            segment.extend(canvas.to_canvas(u, v))
+            segment.extend(canvas.to_canvas(u, (90 - point_lat) / 180))
             previous = u
         if len(segment) >= 4:
             canvas.create_line(*segment, fill=colour, width=width)
+
+    def _globe_overlay(self, canvas: GlobeCanvas) -> None:
+        """Opened regions and the region about to be picked, on the globe or polar view."""
+        scene = self.scene
+        if scene is not None and scene.frame is not None:
+            circles = [(*level.run.window.centre, level.run.window.radius_m / 1000, MAP_TEXT)
+                       for level in self.levels]
+            if self.picking.get() and self._pick_at is not None:
+                circles.append((*self._pick_at, self.radius_km(), MAP_HIGHLIGHT))
+            for lon, lat, radius_km, colour in circles:
+                segment: list[float] = []
+                for point in self._circle(lon, lat, radius_km, scene.frame.radius_km):
+                    position = canvas.to_canvas(*point)
+                    if position is None:
+                        if len(segment) >= 4:
+                            canvas.create_line(*segment, fill=colour, width=2)
+                        segment = []
+                    else:
+                        segment.extend(position)
+                if len(segment) >= 4:
+                    canvas.create_line(*segment, fill=colour, width=2)
+        projection = canvas.projection()
+        zoom = f"  ·  {projection.zoom:.1f}x" if projection.kind == "globe" else ""
+        map_label(canvas, 12, 12, f"{self.display_layer.get()}{zoom}")
 
     @staticmethod
     def _draw_local_circle(
@@ -834,6 +864,9 @@ class WorldMapView(ttk.Frame):
         return scene.frame.source_to_lonlat((x0 + u * (x1 - x0), y0 + v * (y1 - y0)))
 
     def _hover_globe(self, lonlat: tuple[float, float] | None) -> None:
+        if self.picking.get():
+            self._pick_at = lonlat
+            self.globe.draw_overlay()
         if lonlat is None or self.probe is None:
             self.inspection.set(self._hint())
             return

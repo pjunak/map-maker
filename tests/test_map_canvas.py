@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from map_maker.terrain.adapters.map_projection import MapProjection, displayed_lonlat
 from map_maker.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, frame_view
 from map_maker.terrain.ui_jobs import LatestWorker, TkPump
 
@@ -82,33 +81,53 @@ def test_flat_canvas_maps_between_canvas_and_map_positions(root: tk.Tk) -> None:
     assert len(clicks) == 1 and np.allclose(canvas.to_map(x + 40, y) or (0, 0), (0.25, 0.75))
 
 
-def test_displayed_globe_positions_follow_the_drawn_disc() -> None:
-    view = MapProjection("globe", 30.0, 10.0)
-    lon, lat, inside = displayed_lonlat(view, 101)
-    assert inside[50, 50] and np.isclose(lon[50, 50], 30.0, atol=2) and np.isclose(
-        lat[50, 50], 10.0, atol=2
-    )
-    assert not inside[0, 0] and not inside[50, 100]  # corner and halo are off the planet
-
-
-def test_globe_canvas_renders_off_the_tk_thread_and_reports_positions(root: tk.Tk) -> None:
+def test_globe_canvas_renders_off_the_tk_thread_and_follows_the_cursor(root: tk.Tk) -> None:
     worker = LatestWorker(TkPump(root), lambda error: (_ for _ in ()).throw(error))
     hovered: list[tuple[float, float] | None] = []
     canvas = GlobeCanvas(root, worker, on_hover=hovered.append)
     canvas.pack(fill="both", expand=True)
     root.update()
+    drawn: list[object] = []
+    canvas.overlay = lambda c: drawn.append(c.frame)
+
+    def settle() -> None:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            root.update()
+            frame = canvas.frame
+            if worker.idle and frame is not None and frame.projection == canvas.projection():
+                return
+            time.sleep(0.01)
+        raise AssertionError("The globe did not render its current view.")
+
     canvas.show(gradient(512, 256), central_meridian_deg=0.0)
     canvas.lon, canvas.lat = 40.0, -20.0
     canvas.request()
-    deadline = time.monotonic() + 10
-    while (canvas.frame is None or canvas.frame.lon is None) and time.monotonic() < deadline:
-        root.update()
-        time.sleep(0.01)
+    settle()
     assert canvas.photo is not None and canvas.frame is not None
-    centre = canvas.to_lonlat(canvas.winfo_width() / 2, canvas.winfo_height() / 2)
-    assert centre is not None and np.allclose(centre, (40.0, -20.0), atol=2)
+    assert canvas.frame.image.size == canvas.size()  # frames fill the whole canvas
+    assert drawn and drawn[-1] is canvas.frame  # the overlay follows each frame
+    width, height = canvas.size()
+    centre = canvas.to_lonlat(width / 2, height / 2)
+    assert centre is not None and np.allclose(centre, (40.0, -20.0), atol=1e-6)
     assert canvas.to_lonlat(1, 1) is None
+    position = canvas.to_canvas(40.0, -20.0)
+    assert position is not None and np.allclose(position, (width / 2, height / 2))
+    # Dragging carries the ground under the cursor with it.
+    start, end = (width / 2 - 30, height / 2 + 20), (width / 2 + 25, height / 2 - 10)
+    held = canvas.to_lonlat(*start)
+    canvas._press_left(SimpleNamespace(x=start[0], y=start[1]))  # type: ignore[arg-type]
+    canvas._drag(SimpleNamespace(x=end[0], y=end[1]))  # type: ignore[arg-type]
+    canvas._release(SimpleNamespace(x=end[0], y=end[1]))  # type: ignore[arg-type]
+    settle()
+    assert held is not None and np.allclose(canvas.to_lonlat(*end) or (0, 0), held, atol=1e-6)
+    # The wheel zooms towards the cursor, and fit shows the whole globe again.
+    canvas._wheel(SimpleNamespace(delta=120, x=end[0], y=end[1]))  # type: ignore[arg-type]
+    settle()
+    assert canvas.zoom > 1 and np.allclose(canvas.to_lonlat(*end) or (0, 0), held, atol=1e-6)
+    canvas.fit()
+    assert canvas.projection().zoom == 1.0
     canvas.turn(20, 0)
-    assert canvas.lon < 40.0
     canvas.set_kind("north-polar")
     assert canvas.projection().kind == "north-polar"
+    settle()
