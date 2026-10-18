@@ -760,6 +760,55 @@ def test_display_detail_is_world_anchored_and_shrinks_with_finer_levels(
     assert added(1_000.0) < 0.5 * added(5_000.0)
 
 
+def test_nested_windows_colour_and_shade_the_same_slopes(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from map_maker.terrain.adapters.planet_region import display_relief, window_shading
+    from map_maker.terrain.application.planet_region import region_window
+
+    planet = RegionalParent.from_result(parent)
+    centre = _land_centre(parent)
+
+    def slopes(level: int, radius_km: float) -> tuple[float, float]:
+        """Median measured slope and median slope that colour and hillshade see."""
+        window = region_window(
+            planet, "p" * 64, tmp_path, centre, radius_km, level=level, levels=TINY_LEVELS,
+            pixels=96, workers=1,
+        ).window
+        relief = display_relief(window)
+        offset = (np.arange(window.pixels) + 0.5 - window.pixels / 2) * window.pixel_m
+        # The ground both windows show: the inner 90 km of the 100 km window.
+        shared = window.land & (np.hypot(*np.meshgrid(offset, offset)) <= 90e3)
+        north, east = np.gradient(relief, window.pixel_m)
+        measured = np.hypot(east, north)
+        seen, _ = window_shading(window, relief)
+        return float(np.median(measured[shared])), float(np.median(seen[shared]))
+
+    coarse, fine = slopes(1, 300.0), slopes(2, 100.0)
+    # The finer level resolves steeper slopes on the same ground...
+    assert fine[0] > 1.3 * coarse[0]
+    # ...but its rock, vegetation and hillshade see them as the coarser level does.
+    assert 0.75 < fine[1] / coarse[1] < 1.33
+
+
+def test_terrain_position_ignores_ground_outside_the_window() -> None:
+    from map_maker.terrain.adapters.planet_region import window_position
+
+    # A 30 km plain at 800 m, with a 300 m hill at its centre; outside the window
+    # disc the relief holds a placeholder depth, as display relief does.
+    pixels, pixel_m = 120, 250.0
+    offset = np.arange(pixels) + 0.5 - pixels / 2
+    distance = np.hypot(*np.meshgrid(offset, offset)) * pixel_m
+    inside = distance <= 15e3
+    plain = np.where(inside, 800.0, -200.0)
+    # The 15 km mean reaches across the whole window, yet a plain is no ridge.
+    assert np.abs(window_position(plain, pixel_m, inside)[inside]).max() < 1e-6
+    hill = plain + np.where(inside, 300.0 * np.exp(-((distance / 2e3) ** 2)), 0.0)
+    position = window_position(hill, pixel_m, inside)
+    assert position[pixels // 2, pixels // 2] > 0.5
+    assert np.abs(position[inside & (distance > 12e3)]).max() < 0.1
+
+
 def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path: Path) -> None:
     from scipy.ndimage import binary_dilation
 

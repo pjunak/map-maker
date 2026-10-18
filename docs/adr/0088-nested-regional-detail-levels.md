@@ -3,6 +3,8 @@
 - Status: accepted (experimental product path)
 - Date: 2026-10-11
 - Extends ADR-0086 (fixed blended tiles) towards ADR-0048 (zoom-driven enrichment).
+- Refined by [ADR-0105](0105-regional-levels-see-level-1-slopes.md): every level
+  is coloured and shaded by its slopes scaled to level 1.
 
 ## Context
 

@@ -80,7 +80,9 @@ REGION_VERSION = 1
 # Display-only regional relief (never exported). Regional pixels are a few
 # hundred metres, far below the 5 km tile mesh, so mountains need sub-tile
 # ridges and valleys; slopes need far less exaggeration than the world preview.
-REGION_EXAGGERATION = 1.3
+# Hillshade sees slopes scaled to level 1 (``window_shading``), so this is level
+# 1's exaggeration; in effect provinces get 1.3 and local windows 0.58.
+REGION_EXAGGERATION = 2.9
 REGION_MOSAIC_WAVELENGTH_M = 8e3
 MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
 CHANNEL_WIDTH_PER_ROOT_Q = 4.8  # bankfull width (m) per sqrt(discharge in m^3/s)
@@ -97,6 +99,15 @@ POND_LAKE_ARIDITY = 0.65  # ponds hold standing water above this P/PET
 LAKE_SHORE_M = 2.0  # lake pixels lie at most this far above the lake level
 # Pixel slopes at ~0.5 km are ~4x those of the same terrain on ~7 km world pixels.
 REGION_SLOPE_SCALE = 3.5
+# Finer levels resolve steeper slopes: over shared Aethelara ground the median
+# slope grew 1.9x from region to province and 2.1x from province to local (mean
+# 2.2x and 2.7x), but only 1.1x when a window of the same level had pixels half
+# as wide. Colour thresholds were set on level-1 windows, so colour and hillshade
+# see every window's slopes scaled to that 5 km mesh, as spacing^0.5. The same
+# ground then keeps its rock, vegetation and shading at every level, and finer
+# levels add forms.
+REGION_SLOPE_SPACING_M = 5000.0
+REGION_SLOPE_EXPONENT = 0.5
 REGION_DETAIL_SEED = 17
 REGION_DETAIL_WAVELENGTH_M = 30e3  # at level 1 (5 km mesh); scales with spacing
 REGION_DETAIL_SPACING_M = 5000.0
@@ -874,8 +885,9 @@ def display_relief(window: RegionWindow) -> F64:
         erg = np.where(
             land,
             erg_cover(
-                window.points, window.planet_m, climate, tile_slope,
-                window_position(relief, window.pixel_m), REGION_SLOPE_SCALE,
+                window.points, window.planet_m, climate,
+                tile_slope * slope_factor(window.detail_spacing_m),
+                window_position(relief, window.pixel_m, inside), REGION_SLOPE_SCALE,
             ),
             0.0,
         )
@@ -929,20 +941,39 @@ def _smooth_step(x: F64, a: float, b: float) -> F64:
     return t * t * (3 - 2 * t)
 
 
-def window_position(z: F64, pixel_m: float) -> F64:
-    """Valley (-1) to ridge (+1) position from height above the local mean at 3-15 km."""
+def window_position(z: F64, pixel_m: float, inside: B) -> F64:
+    """Valley (-1) to ridge (+1) position from height above the local mean at 3-15 km.
+
+    Means are taken over the window's disc (``inside``) only: a 15 km mean reaches
+    across most of a 30 km window, and the ground outside it has no relief.
+    """
     total = np.zeros_like(z)
+    held = np.where(inside, z, 0.0)
+    share = inside.astype(np.float64)
     for radius_m, weight, scale_m in ((3e3, 0.5, 80.0), (15e3, 0.5, 300.0)):
-        total += weight * np.tanh((z - gaussian_filter(z, radius_m / pixel_m)) / scale_m)
+        sigma = radius_m / pixel_m
+        mean = gaussian_filter(held, sigma) / np.maximum(gaussian_filter(share, sigma), 1e-9)
+        total += weight * np.tanh((z - mean) / scale_m)
     return total
+
+
+def slope_factor(spacing_m: float) -> float:
+    """Slopes of a level with mesh ``spacing_m`` times this are as level 1 would make them."""
+    return (spacing_m / REGION_SLOPE_SPACING_M) ** REGION_SLOPE_EXPONENT
+
+
+def window_shading(window: RegionWindow, z: F64) -> tuple[F64, F64]:
+    """Slope and hillshade of display relief ``z``, scaled to the level-1 mesh."""
+    scale = slope_factor(window.detail_spacing_m) / window.pixel_m
+    return shading(
+        np.gradient(z, axis=1) * scale, np.gradient(z, axis=0) * scale, REGION_EXAGGERATION
+    )
 
 
 def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
     """Natural-colour (atlas) or shaded hypsometric view of a regional window."""
     z = display_relief(window)
-    gy = np.gradient(z, axis=0) / window.pixel_m
-    gx = np.gradient(z, axis=1) / window.pixel_m
-    slope, light = shading(gx, gy, REGION_EXAGGERATION)
+    slope, light = window_shading(window, z)
     land = window.land
     climate = window.climate
     if atlas and climate is not None:
@@ -957,7 +988,8 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
         wet = 0.6 * gaussian_filter(window.rivers, 2.0)
         land_rgb = land_colour(
             window.points, window.planet_m, shown, z, slope, light, wet,
-            window_position(z, window.pixel_m), REGION_MOSAIC_WAVELENGTH_M,
+            window_position(z, window.pixel_m, np.isfinite(window.elevation_m)),
+            REGION_MOSAIC_WAVELENGTH_M,
             window.volcanic,
             REGION_SLOPE_SCALE,
             window.basalt,
@@ -1000,9 +1032,7 @@ def _paint_soft(rgb: F64, mask: B, colour: tuple[int, int, int]) -> F64:
 def window_topographic(window: RegionWindow) -> Image.Image:
     """Topographic view of a regional window: tints, contours, hillshade and water."""
     z = display_relief(window)
-    gy = np.gradient(z, axis=0) / window.pixel_m
-    gx = np.gradient(z, axis=1) / window.pixel_m
-    _, light = shading(gx, gy, REGION_EXAGGERATION)
+    _, light = window_shading(window, z)
     shown = np.where(np.isfinite(window.elevation_m), z, np.nan)
     return topographic_image(
         shown, window.land, window.lakes, window.rivers, light, window.pixel_m, window.pixel_m,
@@ -1016,9 +1046,7 @@ def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
     if climate is None:
         return None
     z = display_relief(window)
-    gy = np.gradient(z, axis=0) / window.pixel_m
-    gx = np.gradient(z, axis=1) / window.pixel_m
-    slope, light = shading(gx, gy, REGION_EXAGGERATION)
+    slope, light = window_shading(window, z)
     lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
     shown = PixelClimate(
         climate.temperature_c - lapse, climate.warm_season_c - lapse,
@@ -1026,7 +1054,8 @@ def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
     )
     wet = 0.6 * gaussian_filter(window.rivers, 2.0)
     cover = vegetation(
-        window.points, window.planet_m, shown, slope, window_position(z, window.pixel_m), wet,
+        window.points, window.planet_m, shown, slope,
+        window_position(z, window.pixel_m, np.isfinite(window.elevation_m)), wet,
         REGION_MOSAIC_WAVELENGTH_M, REGION_SLOPE_SCALE,
     )
     inputs = parchment_inputs(

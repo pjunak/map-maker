@@ -6,6 +6,9 @@
   and [ADR-0088](0088-nested-regional-detail-levels.md) (nested regional levels).
 - Refined by [ADR-0104](0104-zoom-the-globe-into-regional-maps.md): the globe
   zooms into the regional maps until their pixels fill the screen's.
+- Refined by [ADR-0105](0105-regional-levels-see-level-1-slopes.md): nested
+  levels agree in tone, so a window hardly stands out by its tone from the one
+  around it.
 
 ## Context
 

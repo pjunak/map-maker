@@ -341,6 +341,14 @@ still follows pixel centres. World-map hillshade exaggerates slopes, because the
 mesh smooths them; volcanoes are drawn at pixel scale with their slopes intact, so
 they are lit with half their height and do not shade as glossy domes.
 
+**Levels agree in tone.** Finer levels resolve steeper slopes, about twice as
+steep per level, so region, province and local images all colour and shade the
+slopes as a region would measure them: the same ground shows the same share of
+rock, bare hills and vegetation, and the same overall shading, at every level,
+while finer levels draw smaller ridges and gullies. Regions shade with the most
+exaggeration and local maps with the least
+([ADR-0105](adr/0105-regional-levels-see-level-1-slopes.md)).
+
 ## Outputs
 
 | File | Contents |
