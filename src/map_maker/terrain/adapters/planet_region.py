@@ -24,6 +24,7 @@ from scipy.ndimage import (
     maximum,
     maximum_filter,
     minimum_position,
+    sum_labels,
 )
 
 from map_maker.terrain.adapters.build import canonical_json, file_sha256
@@ -84,14 +85,21 @@ REGION_VERSION = 1
 # 1's exaggeration; in effect provinces get 1.3 and local windows 0.58.
 REGION_EXAGGERATION = 2.9
 REGION_MOSAIC_WAVELENGTH_M = 8e3
-MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
+MEAN_RUNOFF_M_YR = 0.3  # assumed runoff: discharge per m^2 of drainage area
 CHANNEL_WIDTH_PER_ROOT_Q = 4.8  # bankfull width (m) per sqrt(discharge in m^3/s)
 RIVER_DISPLAY_Q_M3_S = 10_000.0  # discharge drawn at full display width
 DUNE_SPACING_M = 2500.0
 DUNE_HEIGHT_M = 45.0
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
 ROUTE_PAD = 1.25  # rivers are routed over this multiple of a window's radius
+ENTRY_WALL_M = 1e4  # beyond the rim where parent rivers enter: above any spill
 POND_DEPTH_M = 10.0  # filled depressions deeper than this hold water or a playa
+# A river fills a hollow on its course with sediment unless the hollow holds more
+# than its catchment delivers while a lake lasts. The global mean yield, about
+# 170 t/km2 a year (Milliman and Farnsworth 2011), is 0.1 mm a year of deposit
+# over the catchment; lakes on rivers are young, about the Holocene's 10 kyr.
+SEDIMENT_YIELD_M_YR = 1e-4
+HOLLOW_AGE_YR = 1e4
 PLAYA_SHARE = 0.25  # a playa bed spans this share of its basin's depth
 PLAYA_MIN_M = 20.0
 PLAYA_MAX_M = 400.0
@@ -360,7 +368,7 @@ def _compose(
     # The share of land in each pixel, so coasts are drawn anti-aliased.
     land_cover = edge_coverage(drawn | islands, on_land)
     ice_surface, ice_balance = window_ice(parent, points, elevation, land, pixel_m, spacing_m)
-    flow = window_flow(parent, centre, points, elevation, land, inside, pixel_m)
+    flow = window_flow(parent, centre, points, elevation, land, inside, pixel_m, river_km2)
     # Lakes fill the regional relief up to the parent lake level, so shores
     # follow the fine terrain (and a crater's sharp trough) instead of the
     # coarse parent mesh.
@@ -371,23 +379,24 @@ def _compose(
     )
     salt = lakes & closed.reshape(pixels, pixels)
     flow, basin_depth = lake_flow(flow, lakes, salt, level.reshape(pixels, pixels))
-    # Depressions deeper than POND_DEPTH_M (crater troughs, chasm floors,
-    # calderas) hold water or a playa: rivers end there instead of crossing a
-    # filled flat.
-    ponds = land & inside & ~lakes & (basin_depth > POND_DEPTH_M)
+    # Deep hollows (crater troughs, chasm floors, calderas) hold water or a
+    # playa, and rivers end there; rivers cross the others on a filled flat.
+    ponds, spills = window_ponds(flow, basin_depth, land & inside & ~lakes, climate)
     depth = np.where(ponds, basin_depth, 0.0)
     coverage = window_rivers(flow, lakes | ponds, river_km2)
-    # Ponds are closed basins: lakes where it is wet enough, playas where it is dry.
+    # Closed ponds hold lakes where it is wet enough and playas where it is dry.
     dry = np.zeros_like(ponds)
     if climate is not None:
         dry = (
             climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < POND_LAKE_ARIDITY
         )
-    # A wet basin fills to its spill level; a dry one keeps only an ephemeral
-    # lake bed in its lowest part, flat and bright (a playa or salar).
-    playa = ponds & dry & playa_beds(ponds, depth)
-    lakes = lakes | (ponds & ~dry)
-    salt = salt | (ponds & ~dry)
+    # A wet or overflowing basin fills to its spill level; a dry closed one
+    # keeps only an ephemeral lake bed in its lowest part, flat and bright (a
+    # playa or salar).
+    closed = ponds & ~spills
+    playa = closed & dry & playa_beds(closed, depth)
+    lakes = lakes | (ponds & (spills | ~dry))
+    salt = salt | (closed & ~dry)
     cover = (
         None
         if wonders is None
@@ -483,6 +492,44 @@ def _wide_blur(values: F64, sigma: float) -> F64:
     return map_coordinates(coarse, np.meshgrid(r, c, indexing="ij"), order=1, mode="nearest")
 
 
+def window_ponds(
+    flow: WindowFlow, depth: F64, ground: B, climate: PixelClimate | None
+) -> tuple[B, B]:
+    """Pixels of closed hollows that hold water or a playa, and those that overflow.
+
+    ``depth`` is how far ``ground`` lies below its hollow's spill level. Each
+    hollow gathers the runoff and sediment of its catchment, the drainage area
+    where it spills. It overflows when that water exceeds what its area at the
+    spill level evaporates (open-water PET less precipitation), so its river
+    runs on. An overflowing hollow that the river's sediment fills within
+    HOLLOW_AGE_YR is a plain the river crosses, not a lake: the hollows that
+    tile blending leaves along a big river. Pixels deeper than POND_DEPTH_M in
+    the remaining hollows hold water or a playa: crater troughs, chasm floors
+    and calderas, deep for their catchments, and closed basins of dry land.
+    """
+    found = cast(tuple[NDArray[np.int32], int], label(ground & (depth > 0)))
+    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    ponds = ground & (depth > POND_DEPTH_M)
+    if not count:
+        return ponds, np.zeros_like(ponds)
+    ids = np.arange(1, count + 1)
+    cell_m2 = flow.pixel_m**2
+    volume = np.asarray(sum_labels(depth, labels, ids), dtype=np.float64) * cell_m2
+    catchment = np.asarray(
+        maximum(flow.area_m2.reshape(labels.shape), labels, ids), dtype=np.float64
+    )
+    evaporation = np.zeros(count)
+    if climate is not None:
+        net_m = np.maximum(climate.pet_mm - climate.precipitation_mm, 0.0) / 1000
+        evaporation = np.asarray(sum_labels(net_m, labels, ids), dtype=np.float64) * cell_m2
+    spills = np.zeros(count + 1, dtype=bool)
+    spills[1:] = catchment * MEAN_RUNOFF_M_YR > evaporation
+    alluvial = np.zeros(count + 1, dtype=bool)
+    alluvial[1:] = spills[1:] & (volume < catchment * SEDIMENT_YIELD_M_YR * HOLLOW_AGE_YR)
+    ponds = ponds & ~alluvial[labels]
+    return ponds, ponds & spills[labels]
+
+
 def playa_beds(ponds: B, depth: F64) -> B:
     """The lowest part of each closed basin, where an ephemeral lake bed lies."""
     found = cast(tuple[NDArray[np.int32], int], label(ponds))
@@ -533,16 +580,18 @@ def window_flow(
     land: B,
     inside: B,
     pixel_m: float,
+    river_km2: float,
 ) -> WindowFlow:
     """One drainage network over the whole window, with no seams between tiles.
 
     Parent rivers that cross into the window bring their upstream area in near
-    where they cross (``crossing_inflows``, ``entry_pixels``). Beyond the window
+    where they cross (``river_crossings``, ``entry_pixels``). Beyond the window
     circle the ground is a wall at the highest neighbouring height inside, so a
     rim pixel drains along the window's relief: water leaves only where a valley
     reaches the rim, and a river entering on the rim flows in. Ground at the sea
     floor or at zero beyond the rim drained every rim pixel straight out,
-    inherited rivers included.
+    inherited rivers included. Where a river of ``river_km2`` or more flows in,
+    no water leaves (``entry_walls``).
     """
     pixels = elevation.shape[0]
     ground = np.where(inside, np.nan_to_num(elevation, nan=0.0), -np.inf)
@@ -550,11 +599,20 @@ def window_flow(
     z = np.where(inside, ground, np.where(np.isfinite(wall), wall, 0.0))
     outlet = ~inside | ~land
     inflow = np.zeros(pixels * pixels)
-    rows, columns, area = crossing_inflows(parent, centre, pixel_m * pixels / 2, pixel_m)
+    rows, columns, area = river_crossings(parent, centre, pixel_m * pixels / 2, pixel_m)
     if len(area):
+        spread = max(parent.mesh.spacing_m / pixel_m, 2.0)
+        big = area >= river_km2 * 1e6
+        out_rows, out_columns, out_area = river_crossings(
+            parent, centre, pixel_m * pixels / 2, pixel_m, outward=True
+        )
+        leave = out_area >= river_km2 * 1e6
+        walls = entry_walls(
+            (rows[big], columns[big]), (out_rows[leave], out_columns[leave]), inside, spread
+        )
+        z = np.where(walls, float(ground.max()) + ENTRY_WALL_M, z)
         dry = WindowFlow.route(z, outlet, pixel_m, np.zeros((pixels, pixels)))
         reach = downstream_steps(dry.receiver).reshape(pixels, pixels)
-        spread = max(parent.mesh.spacing_m / pixel_m, 2.0)
         target = entry_pixels(rows, columns, reach, inside & land, spread)
         entered = target >= 0
         np.add.at(inflow, target[entered], area[entered])
@@ -572,15 +630,20 @@ def window_flow(
     return WindowFlow.route(z, outlet, pixel_m, inflow, tuple(links))
 
 
-def crossing_inflows(
-    parent: RegionalParent, centre: tuple[float, float], radius_m: float, pixel_m: float
+def river_crossings(
+    parent: RegionalParent,
+    centre: tuple[float, float],
+    radius_m: float,
+    pixel_m: float,
+    *,
+    outward: bool = False,
 ) -> tuple[F64, F64, F64]:
     """Where parent rivers cross into a window's routing circle, and their area.
 
     Every parent river step that crosses into the circle of ``radius_m`` about
     ``centre`` gives its crossing (pixel row and column, fractional) and its
     upstream area, so each inherited river enters once and nothing enters where
-    rivers leave.
+    rivers leave. With ``outward``, the steps that cross out of the circle.
     """
     mesh = parent.mesh
     planet_m = mesh.radius_m
@@ -590,22 +653,60 @@ def crossing_inflows(
     nodes = np.flatnonzero(
         parent.land
         & (parent.receiver >= 0)
-        & (distance > radius_m)
+        & (outward | (distance > radius_m))
         & (distance < radius_m + step_m)
     )
     start = forward_aeqd(mesh.xyz[nodes], *centre, planet_m)
     step = forward_aeqd(mesh.xyz[parent.receiver[nodes]], *centre, planet_m) - start
-    # The first point of each step on the circle: |start + t step| = radius_m.
+    # Where each step meets the circle, |start + t step| = radius_m: the first
+    # root going in, the second going out.
     a = np.einsum("ij,ij->i", step, step)
     b = np.einsum("ij,ij->i", start, step)
     c = np.einsum("ij,ij->i", start, start) - radius_m**2
     root = b**2 - a * c
-    t = (-b - np.sqrt(np.maximum(root, 0.0))) / np.maximum(a, 1e-9)
-    enters = (root >= 0) & (t >= 0) & (t <= 1)
-    crossing = start[enters] + t[enters, None] * step[enters]
+    sign = 1.0 if outward else -1.0
+    t = (-b + sign * np.sqrt(np.maximum(root, 0.0))) / np.maximum(a, 1e-9)
+    crosses = (root >= 0) & (t >= 0) & (t <= 1)
+    crossing = start[crosses] + t[crosses, None] * step[crosses]
     row = (radius_m - crossing[:, 1]) / pixel_m
     column = (crossing[:, 0] + radius_m) / pixel_m
-    return row, column, parent.area_m2[nodes[enters]]
+    return row, column, parent.area_m2[nodes[crosses]]
+
+
+def entry_walls(
+    entries: tuple[F64, F64], exits: tuple[F64, F64], inside: B, spread_px: float
+) -> B:
+    """Ground beyond the rim near where parent rivers cross in, not where they leave.
+
+    ``entries`` and ``exits`` are crossings (pixel rows and columns). A parent
+    river flows in at an entry, so beyond the rim lies its valley upstream,
+    rising away from the window. Water does not leave there: a hollow that a
+    river enters fills and spills onward, not back out past the river's entry.
+    Tile blending can leave the window's relief a few metres off the parent's
+    within one parent spacing (``spread_px``) of where it puts the river; a rim
+    draining there sent a province window's 160,000 km2 river straight back
+    out. The rim stays open nearer an exit than an entry, so a river crossing a
+    window smaller than the parent's spacing still leaves where it should.
+    """
+    entering = rim_distance(entries, inside.shape)
+    if entering is None:
+        return np.zeros_like(inside)
+    leaving = rim_distance(exits, inside.shape)
+    nearer = np.ones_like(inside) if leaving is None else entering < leaving
+    return ~inside & (entering <= spread_px) & nearer
+
+
+def rim_distance(crossings: tuple[F64, F64], shape: tuple[int, ...]) -> F64 | None:
+    """Distance in pixels from the nearest of ``crossings`` (None without any)."""
+    rows, columns = crossings
+    if not len(rows):
+        return None
+    marks = np.ones(shape, dtype=bool)
+    marks[
+        np.clip(np.floor(rows).astype(np.intp), 0, shape[0] - 1),
+        np.clip(np.floor(columns).astype(np.intp), 0, shape[1] - 1),
+    ] = False
+    return np.asarray(distance_transform_edt(marks), dtype=np.float64)
 
 
 def downstream_steps(receiver: NDArray[np.int64]) -> NDArray[np.int64]:
@@ -749,7 +850,7 @@ def window_rivers(flow: WindowFlow, water: B, river_km2: float) -> F64:
     major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
     # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
     # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
-    discharge = area * MEANDER_RUNOFF_M_YR / 3.156e7
+    discharge = area * MEAN_RUNOFF_M_YR / 3.156e7
     channel_px = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(discharge) / pixel_m
     wavelength = 11 * channel_px
     # A river is drawn at least as wide as its channel. Narrower ones get a

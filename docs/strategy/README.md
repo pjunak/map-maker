@@ -53,6 +53,9 @@ backlog, and [status](../research/status.md) records what works now.
      refined below the parent spacing, so shores lose the parent mesh's straight
      edges; crater lakes are no longer pits (ADR-0092, `planet-blended-tiles-v7`).
      Open lakes drain their window basin, so no playa ring lines their shores.
+     Hollows overflow when their catchment outruns evaporation, and big rivers
+     fill shallow ones with sediment and run on; no water leaves a window
+     where a river comes in.
    - Regional plains no longer show straight grid lines: display carving drains
      filled hollows along their thalweg, and ridged detail has no steps
      ([report](../research/2026-10-12-straight-display-lines.md)). Tiles are

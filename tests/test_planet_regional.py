@@ -348,7 +348,7 @@ def test_world_maps_draw_lakes_with_the_refined_outlines(parent: PlanetResult) -
 def test_regional_rivers_are_as_wide_as_their_channels() -> None:
     from map_maker.terrain.adapters.planet_region import (
         CHANNEL_WIDTH_PER_ROOT_Q,
-        MEANDER_RUNOFF_M_YR,
+        MEAN_RUNOFF_M_YR,
         WindowFlow,
         window_rivers,
     )
@@ -368,7 +368,7 @@ def test_regional_rivers_are_as_wide_as_their_channels() -> None:
         cover = window_rivers(flow, np.zeros((n, n), dtype=bool), 2_000.0)
         return float(cover[n // 2, 20:85].sum())
 
-    channel_m = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEANDER_RUNOFF_M_YR / 3.156e7)
+    channel_m = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEAN_RUNOFF_M_YR / 3.156e7)
     fine = width(20.0)
     assert abs(fine - channel_m / 20.0) < 2.0  # about 23 pixels: the channel itself
     assert 0.3 < width(2_000.0) < 1.5  # a visible line where the channel is sub-pixel
@@ -385,7 +385,7 @@ def _winding_valley() -> tuple[WindowFlow, float, float, list[int]]:
     """
     from map_maker.terrain.adapters.planet_region import (
         CHANNEL_WIDTH_PER_ROOT_Q,
-        MEANDER_RUNOFF_M_YR,
+        MEAN_RUNOFF_M_YR,
     )
 
     n, pixel_m, area = 400, 40.0, 2.6e11
@@ -399,7 +399,7 @@ def _winding_valley() -> tuple[WindowFlow, float, float, list[int]]:
     start = round(axis[0, 0])
     inflow[0, start] = area
     flow = WindowFlow.route(z, rows == n - 1, pixel_m, inflow)
-    width = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEANDER_RUNOFF_M_YR / 3.156e7) / pixel_m
+    width = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEAN_RUNOFF_M_YR / 3.156e7) / pixel_m
     valley = float(np.hypot(1.0, np.diff(axis[:, 0])).sum())
     node, chain = start, [start]
     while flow.receiver[node] >= 0:
@@ -1021,6 +1021,104 @@ def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
     leaving = np.setdiff1d(parts[n // 2 - 2 : n // 2 + 2, -3], [0])
     near_shore = np.asarray(binary_dilation(lakes, iterations=2), dtype=bool)
     assert np.any(np.isin(parts, leaving) & near_shore)
+
+
+def test_a_river_fills_the_hollow_it_enters_instead_of_leaving_past_its_entry() -> None:
+    from scipy.ndimage import maximum_filter
+
+    from map_maker.terrain.adapters.planet_region import ENTRY_WALL_M, WindowFlow, entry_walls
+
+    n, pixel_m = 120, 100.0
+    rows, columns = np.mgrid[0:n, 0:n] + 0.5
+    inside = np.hypot(rows - n / 2, columns - n / 2) <= n / 2 - 1
+    # A valley falling west across the window. Blending left its reach by the
+    # east rim 4 m low behind a sill, so that reach drains back out past where
+    # the river enters, 2 m below the sill.
+    ground = 110.0 + 0.05 * columns + 0.1 * np.abs(rows - 60.5)
+    valley = np.abs(rows - 60.5) < 2
+    ground[valley] = 100.0 + 0.05 * columns[valley] - 4.0 * (columns[valley] > 73)
+    ground[valley & (columns > 70) & (columns < 73)] = 104.0
+    ground = np.where(inside, ground, -np.inf)
+    wall = maximum_filter(ground, size=3)
+    z = np.where(inside, ground, np.where(np.isfinite(wall), wall, 0.0))
+
+    def exit_column(relief: np.ndarray) -> int:
+        inflow = np.zeros((n, n))
+        inflow[60, 118] = 1.6e11
+        flow = WindowFlow.route(relief, ~inside, pixel_m, inflow)
+        node = 60 * n + 118
+        while flow.receiver[node] >= 0:
+            node = int(flow.receiver[node])
+        return node % n
+
+    assert exit_column(z) > n / 2
+    # The parent's river crosses the rim at (60.5, 119.5) and leaves at
+    # (60.5, 0.5). Within a parent spacing of its entry no water leaves, so it
+    # fills the reach and spills over the sill.
+    entry, leaving = (np.array([60.5]), np.array([119.5])), (np.array([60.5]), np.array([0.5]))
+    walls = entry_walls(entry, leaving, inside, 3.0)
+    assert walls.any() and not np.any(walls & inside)
+    assert exit_column(np.where(walls, ground.max() + ENTRY_WALL_M, z)) < 10
+    # In a window smaller than the parent spacing the rim stays open nearer the
+    # exit, where the parent's river leaves.
+    wide = entry_walls(entry, leaving, inside, 1000.0)
+    assert wide[:, n // 2 + 1 :].any() and not wide[:, : n // 2 - 1].any()
+
+
+def test_big_rivers_cross_hollows_that_closed_basins_keep() -> None:
+    from map_maker.terrain.adapters.planet_natural import PixelClimate
+    from map_maker.terrain.adapters.planet_region import (
+        POND_DEPTH_M,
+        WindowFlow,
+        lake_flow,
+        window_ponds,
+        window_rivers,
+    )
+
+    n, pixel_m = 160, 100.0
+    rows, columns = np.mgrid[0:n, 0:n] + 0.5
+    # A plain falling 1 m/km to the west edge. A hollow 40 m deep lies on the
+    # course of a river that enters at the east edge; a caldera sits in a cone
+    # to the north, its rim the divide of its own small catchment.
+    z = 100.0 + 0.1 * columns
+    z -= 40.0 * np.exp(-((rows - 110) ** 2 + (columns - 80) ** 2) / (2 * 8.0**2))
+    r = np.hypot(rows - 35, columns - 80)
+    z += np.where(r < 25, 120.0 - 4.8 * r, 0.0) - np.where(r < 8, 60.0 * (1 - (r / 8) ** 2), 0.0)
+    hollow = np.hypot(rows - 110, columns - 80) < 4
+    caldera = r < 3
+    outlet = np.zeros((n, n), dtype=bool)
+    outlet[:, 0] = True
+    shape = (n, n)
+
+    def ponds(inflow_m2: float, precipitation_mm: float, pet_mm: float):
+        inflow = np.zeros(shape)
+        inflow[110, -1] = inflow_m2
+        flow = WindowFlow.route(z, outlet, pixel_m, inflow)
+        flow, depth = lake_flow(flow, np.zeros(shape, dtype=bool), outlet, np.zeros(shape))
+        assert depth[hollow].min() > POND_DEPTH_M and depth[caldera].min() > POND_DEPTH_M
+        climate = PixelClimate(
+            np.full(shape, 15.0), np.full(shape, 22.0), np.full(shape, precipitation_mm),
+            np.full(shape, pet_mm),
+        )
+        return flow, *window_ponds(flow, depth, ~outlet, climate)
+
+    # A 160,000 km2 river brings far more water than the hollow evaporates and
+    # fills it with sediment within the Holocene: it flows on across a plain.
+    flow, held, spills = ponds(1.6e11, 200.0, 1500.0)
+    assert not held[hollow].any()
+    coverage = window_rivers(flow, held, 2000.0)
+    assert np.all(coverage[105:116, 70:91].max(axis=0) > 0.5)
+    # The caldera drains only its crater, which evaporates more than it gathers
+    # in a dry climate: a closed basin, a playa in the window.
+    assert held[caldera].all() and not spills[caldera].any()
+    # In a wet climate it overflows but gathers too little sediment to fill: an
+    # open lake.
+    _, held, spills = ponds(1.6e11, 1500.0, 800.0)
+    assert held[caldera].all() and spills[caldera].all()
+    # Without the river, the 56 km2 of plain draining to the hollow brings too
+    # little sediment to fill it within the Holocene: it holds water.
+    _, held, _ = ponds(0.0, 200.0, 1500.0)
+    assert held[hollow].all()
 
 
 def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult) -> None:
