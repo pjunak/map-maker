@@ -5,7 +5,9 @@
 Level-n tiles are enriched like level-1 tiles, but their parent is a patch mesh
 at level n-1 spacing (ADR-0088). The patch carries:
 - the blended level n-1 relief;
-- planet forcing, climate, lakes and young landforms sampled onto the patch;
+- planet forcing sampled smoothly onto the patch, as level 1 takes it, and
+  climate and young landforms sampled onto it;
+- the planet's lakes and sediment basins, which every level refines itself;
 - drainage routed on the patch, with planet rivers entering across its rim.
 
 A patch depends only on the build, the cached coarser tiles and its own
@@ -23,7 +25,11 @@ from scipy.spatial import KDTree
 from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m
 from map_maker.terrain.pipeline.planet_evolution import route
 from map_maker.terrain.pipeline.planet_patch import regional_mesh
-from map_maker.terrain.pipeline.planet_regional import RegionalParent, parent_inflows
+from map_maker.terrain.pipeline.planet_regional import (
+    MIN_RUNOFF_WEIGHT,
+    RegionalParent,
+    parent_inflows,
+)
 from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend
 
 type F64 = NDArray[np.float64]
@@ -71,7 +77,19 @@ def level_parent(
     def sample(values: F64 | None) -> F64 | None:
         return None if values is None else planet.sample(xyz, values)
 
-    runoff = sample(planet.runoff_weight)
+    # Fields that seed the finer level's relief come smoothly from the planet, as
+    # level 1 takes them (``enrich``): triangle-linear ones carried the planet's
+    # triangles down every level as straight creases.
+    smoothly = planet.smooth_sampler(xyz)
+    runoff = (
+        None if planet.runoff_weight is None
+        else np.maximum(smoothly(planet.runoff_weight), MIN_RUNOFF_WEIGHT)
+    )
+    erodibility = np.clip(
+        smoothly(planet.erodibility),
+        float(planet.erodibility.min()),
+        float(planet.erodibility.max()),
+    )
     flow = route(
         mesh, relief, ~land | region.boundary, runoff, parent_inflows(planet, region)
     )
@@ -82,9 +100,9 @@ def level_parent(
         mesh=mesh,
         land=land,
         surface_m=relief,
-        steady_uplift=planet.sample(xyz, planet.steady_uplift),
-        pulse_uplift=planet.sample(xyz, planet.pulse_uplift),
-        erodibility=planet.sample(xyz, planet.erodibility),
+        steady_uplift=np.maximum(smoothly(planet.steady_uplift), 0.0),
+        pulse_uplift=np.maximum(smoothly(planet.pulse_uplift), 0.0),
+        erodibility=erodibility,
         runoff_weight=runoff,
         receiver=flow.receiver,
         area_m2=flow.area_m2,
@@ -94,11 +112,12 @@ def level_parent(
         warm_season_c=sample(planet.warm_season_c),
         coast_m=sample(planet.coast_m),
         sea_floor_m=sample(planet.sea_floor_m),
-        basin_depth_m=sample(planet.basin_depth_m),
+        # Basins stay on the planet mesh, like lakes, so every level refines the
+        # same margins instead of the coarser level's sampled contour.
+        basin_depth_m=planet.basin_depth_m,
         volcanic_m=sample(planet.volcanic_m),
         volcanoes=planet.volcanoes,
         precip_warm_mm=sample(planet.precip_warm_mm),
-        # Lakes stay on the planet mesh, so every level refines the same outlines.
         lake=planet.lake,
         lake_level_m=planet.lake_level_m,
         lake_endorheic=planet.lake_endorheic,

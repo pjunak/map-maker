@@ -55,6 +55,11 @@ backlog, and [status](../research/status.md) records what works now.
      seeded from smooth parent fields on a more irregular lattice, so province
      and local relief no longer shows the parent's triangles as creased facets
      (`planet-blended-tiles-v8`).
+   - Plains meet mountains along dissected fronts. Every level samples the
+     planet's sediment-basin depth smoothly at points displaced by nested noise,
+     as lake shores are refined, so plains run up valleys and spurs reach out
+     into them, where the front was straight within each planet triangle. Level
+     parents take planet forcing smoothly too (`planet-blended-tiles-v11`).
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is

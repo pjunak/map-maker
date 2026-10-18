@@ -10,7 +10,8 @@ A circular region is regenerated with finer, physically eroded detail:
 * **Boundary.** Ring land nodes are fixed at the parent surface. Parent rivers
   that cross into the region enter as drainage-area sources.
 * **Forcing.** Parent uplift, erodibility and runoff are interpolated, with finer
-  rock texture and a smaller process area, so smaller valleys resolve.
+  rock texture and a smaller process area, so smaller valleys resolve. Sediment
+  basins keep their plain; their margins are refined down to the spacing.
 * **Consistency.** A per-node uplift correction (ratio, then secant) makes the
   regional relief, smoothed over the parent spacing, match the parent surface.
 """
@@ -25,9 +26,15 @@ from scipy.interpolate import CloughTocher2DInterpolator
 from scipy.spatial import Delaunay, KDTree
 
 from map_maker.terrain.domain.planet import PlanetSettings
+from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken, check_cancelled
 from map_maker.terrain.pipeline.planet import PlanetResult
-from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m
+from map_maker.terrain.pipeline.planet_coast import (
+    coastline,
+    displace,
+    level_finest_m,
+    noise_octaves,
+)
 from map_maker.terrain.pipeline.planet_evolution import EvolutionRun, evolve
 from map_maker.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
 from map_maker.terrain.pipeline.planet_ice import (
@@ -50,6 +57,16 @@ type B = NDArray[np.bool_]
 
 FINE_TEXTURE = 0.5
 BASIN_FULL_M = 200.0  # basin depth at which a node counts as fully depositional
+# Basin margins are refined below the planet mesh spacing like lake shores
+# (ADR-0092), with noise octaves from BASIN_TOP_SPACINGS planet spacings down to
+# a level's finest scale. They wander further than shores: sediment runs up the
+# valleys of a range front and spurs reach out into the plain, kilometres at the
+# scale of the range's valleys. With BASIN_AMPLITUDE_SPACINGS at the top, every
+# octave from one spacing down is as steep as the coast's, so fronts look alike
+# at every level.
+BASIN_MARGIN_STAGE = "planet.basin-margin"
+BASIN_TOP_SPACINGS = 4.0
+BASIN_AMPLITUDE_SPACINGS = 0.5
 LAKE_CORE_COVER = 0.5  # parent lake cover above which regional ground is lake water
 # Rock texture at every level: its wavelength follows the mesh spacing (40 km at
 # 5 km). A fixed wavelength left fine tiles uniform, so water cut straight,
@@ -79,7 +96,7 @@ class RegionalParent:
     warm_season_c: F64 | None = None
     coast_m: F64 | None = None
     sea_floor_m: F64 | None = None  # display bathymetry on water nodes; 0 on land
-    basin_depth_m: F64 | None = None  # sediment-filled flexural basins (deposition zones)
+    basin_depth_m: F64 | None = None  # sediment-filled flexural basins, on the lake mesh
     volcanic_m: F64 | None = None  # edifice height the mesh carries from volcanoes
     volcanoes: Volcanoes | None = None
     precip_warm_mm: F64 | None = None  # warm-half-year precipitation rate
@@ -92,7 +109,7 @@ class RegionalParent:
     wonder_m: F64 | None = None  # height change the mesh carries from craters and chasms
     wonders: Wonders | None = None
     crater_floor_m: F64 | None = None  # crater floors levelled below their relief
-    planet_mesh: SphereMesh | None = None  # the mesh lakes and ice are on, if not `mesh`
+    planet_mesh: SphereMesh | None = None  # the mesh lakes, basins and ice are on, if not `mesh`
     ice: IceSheets | None = None  # on the planet mesh
     ice_margin: F64 | None = None  # signed margin distance on the planet mesh; computed if None
 
@@ -192,40 +209,75 @@ class RegionalParent:
         mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
         return sample_ice(mesh, self.ice, margin, xyz, detail_m, self.settings.seed)
 
+    def basin_at(self, xyz: F64, detail_m: float) -> F64 | None:
+        """Sediment-basin depth (m) at unit vectors ``xyz``, its margin refined to ``detail_m``.
+
+        Like lakes, basins stay on the planet mesh. Depth is sampled smoothly at
+        points displaced by noise down to ``detail_m``, so a plain meets the
+        mountains along a dissected front, with re-entrants up the valleys and
+        spurs out into the plain, instead of along a contour that is straight
+        within each planet triangle. Every level samples the same octaves down
+        to its own detail, so finer levels only add detail. None without basins.
+        """
+        if self.basin_depth_m is None:
+            return None
+        mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
+        spacing = mesh.spacing_m
+        moved = displace(
+            xyz, mesh.radius_m,
+            noise_octaves(
+                BASIN_TOP_SPACINGS * spacing, BASIN_AMPLITUDE_SPACINGS * spacing, detail_m
+            ),
+            stage_seed(self.settings.seed, BASIN_MARGIN_STAGE),
+        )
+        return np.maximum(smooth_sampler(mesh, moved)(self.basin_depth_m), 0.0)
+
     def sample(self, xyz: F64, values: F64) -> F64:
         """Triangle-linear interpolation of a parent node field at unit vectors."""
         return sample_field(self.mesh, xyz, values)
 
     def smooth_sampler(self, xyz: F64) -> Callable[[F64], F64]:
-        """Smooth (C1) interpolation of parent node fields at unit vectors ``xyz``.
+        """Smooth (C1) interpolation of parent node fields at unit vectors ``xyz``."""
+        return smooth_sampler(self.mesh, xyz)
 
-        Clough-Tocher cubics in a local azimuthal plane equal a field at parent
-        nodes but have no creases along parent triangle edges, which regional
-        relief seeded from triangle-linear fields keeps as straight lines. The
-        plane and its triangulation are built once for every field sampled.
-        Points outside the parent nodes' hull fall back to ``sample``.
-        """
-        mesh = self.mesh
-        centre = xyz.mean(axis=0)
-        centre /= np.linalg.norm(centre)
-        reach = float(np.arccos(np.clip(xyz @ centre, -1, 1)).max())
-        reach += 4 * mesh.spacing_m / mesh.radius_m
-        near = np.flatnonzero(mesh.xyz @ centre >= np.cos(min(reach, np.pi)))
-        if len(near) < 4:
-            return partial(self.sample, xyz)
-        lon = float(np.degrees(np.arctan2(centre[1], centre[0])))
-        lat = float(np.degrees(np.arcsin(np.clip(centre[2], -1, 1))))
-        triangulation = Delaunay(forward_aeqd(mesh.xyz[near], lon, lat, mesh.radius_m))
-        plane = forward_aeqd(xyz, lon, lat, mesh.radius_m)
 
-        def sample(values: F64) -> F64:
-            cubic = np.asarray(CloughTocher2DInterpolator(triangulation, values[near])(plane))
-            outside = ~np.isfinite(cubic)
-            if outside.any():
-                cubic[outside] = self.sample(xyz[outside], values)
-            return cubic
+def smooth_sampler(mesh: SphereMesh, xyz: F64) -> Callable[[F64], F64]:
+    """Smooth (C1) interpolation of ``mesh`` node fields at unit vectors ``xyz``.
 
-        return sample
+    Clough-Tocher cubics in a local azimuthal plane equal a field at mesh nodes
+    but have no creases along mesh triangle edges, which regional relief seeded
+    from triangle-linear fields keeps as straight lines. The plane and its
+    triangulation are built once for every field sampled. Points outside the
+    nodes' hull fall back to triangle-linear interpolation.
+    """
+    centre = xyz.mean(axis=0)
+    centre /= np.linalg.norm(centre)
+    reach = float(np.arccos(np.clip(xyz @ centre, -1, 1)).max())
+    reach += 4 * mesh.spacing_m / mesh.radius_m
+    near = np.flatnonzero(mesh.xyz @ centre >= np.cos(min(reach, np.pi)))
+    if len(near) < 4:
+        return partial(sample_field, mesh, xyz)
+    lon = float(np.degrees(np.arctan2(centre[1], centre[0])))
+    lat = float(np.degrees(np.arcsin(np.clip(centre[2], -1, 1))))
+    # SciPy estimates the cubics' gradients to an absolute tolerance, so fields
+    # are interpolated at unit scale on a plane measured in mesh spacings. In
+    # metres, uplift (metres a year) kept almost no gradient, and its cubics
+    # were worse than linear interpolation.
+    unit_m = mesh.spacing_m
+    triangulation = Delaunay(forward_aeqd(mesh.xyz[near], lon, lat, mesh.radius_m) / unit_m)
+    plane = forward_aeqd(xyz, lon, lat, mesh.radius_m) / unit_m
+
+    def sample(values: F64) -> F64:
+        local = values[near]
+        low, span = float(local.min()), float(np.ptp(local)) or 1.0
+        unit = CloughTocher2DInterpolator(triangulation, (local - low) / span)(plane)
+        cubic = low + span * np.asarray(unit)
+        outside = ~np.isfinite(cubic)
+        if outside.any():
+            cubic[outside] = sample_field(mesh, xyz[outside], values)
+        return cubic
+
+    return sample
 
 
 def parent_inflows(parent: RegionalParent, region: Region) -> F64:
@@ -300,10 +352,11 @@ def enrich(
         FINE_TEXTURE
         * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / (FINE_TEXTURE_SPACINGS * mesh.spacing_m))
     )
-    if parent.basin_depth_m is not None:
+    basin_depth = parent.basin_at(mesh.xyz, level_finest_m(region.spacing_m))
+    if basin_depth is not None:
         # Sediment-filled basins are deposition zones: the parent plain is kept
         # (no uplift, almost no erosion) instead of being re-dissected into hills.
-        basin = np.clip(parent.sample(mesh.xyz, parent.basin_depth_m) / BASIN_FULL_M, 0, 1)
+        basin = np.clip(basin_depth / BASIN_FULL_M, 0, 1)
         steady, pulse = steady * (1 - basin), pulse * (1 - basin)
         erodibility = erodibility * (1 - 0.97 * basin)
     runoff = (

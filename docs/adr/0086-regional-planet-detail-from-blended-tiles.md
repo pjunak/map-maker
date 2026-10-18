@@ -61,6 +61,23 @@ The regional tile algorithm becomes `planet-blended-tiles-v8`, and the relief
 algorithm `sphere-mesh-stream-power-v27`, since wonder aging uses the same
 lattice ([regional facets report](../research/2026-10-13-regional-facets.md)).
 
+## Revision (2026-10-18)
+
+Inside a sediment basin a tile keeps its parent plain: where basin depth reaches
+200 m, uplift stops and erodibility drops by 97 %. Basin depth was sampled
+linearly in each planet triangle, so local maps showed plain meeting mountains
+along a straight front with kinks at triangle edges; sampling it smoothly only
+bent the kinks. Basin depth now stays on the planet mesh, like lakes (ADR-0092),
+and every level samples it smoothly at points displaced by rotated noise octaves
+from four planet spacings down to twice its own spacing. Fronts gain re-entrants
+and spurs at every scale a level resolves, alike at every level, and a finer
+level only adds smaller ones. Level parents (ADR-0088) take uplift, erodibility
+and runoff from the planet smoothly, as level 1 does. The cubics are built at
+unit scale on a plane measured in mesh spacings: SciPy estimates their gradients
+to an absolute tolerance, so uplift in metres a year had kept almost no gradient
+and was interpolated worse than linearly. The regional tile algorithm becomes
+`planet-blended-tiles-v11`.
+
 ## Consequences
 
 - Detail is reproducible and independent of the requested window. Tiles are

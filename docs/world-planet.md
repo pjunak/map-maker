@@ -174,6 +174,10 @@ rivers meander along their valley, with bends about eleven channel widths apart.
   lake's basin drain into it, so no ring of playa or ponds lines its shore, and
   an open lake drains out over its basin's lowest pass
   ([ADR-0092](adr/0092-regional-lakes-fill-the-regional-relief.md)).
+- Where a sediment plain meets mountains, its edge gains detail as you zoom: the
+  plain runs up valleys and spurs of the range reach out into it. Each deeper
+  level only adds smaller bends, so the front keeps its course, usually within
+  3 km of where the planet puts it and rarely more than 8 km.
 - A scale bar shows distance. Hovering shows the place, the offset from the centre
   and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
