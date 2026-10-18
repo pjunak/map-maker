@@ -72,7 +72,9 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
      drainage basins and geology. The map shown when the planet is ready (the
      one you last looked at, else the first in the list) is drawn with it. Any
      other is drawn in the background the first time you choose it, while the
-     map says **Drawing this map…**, and is then kept.
+     map says **Drawing this map…**, and is then kept. Maps are 2,048 pixels
+     wide, or 4,096 for Detailed and Fine planets, whose finer mesh would blur at
+     2,048; they then take about three times as long to draw.
    - The projection list picks **Flat world**, **Globe**, **North polar** or
      **South polar**. **Grid** draws latitude and longitude every 30°.
 
@@ -195,7 +197,8 @@ map-maker world globe my-planet --theme atlas --output atlas.glb
   planet's true radius and the build it came from.
 - Between 60° N and 60° S the globe shows the map itself, unchanged, so it is as
   sharp as the build image (4,096 pixels wide by default). The app's **Save the
-  shown map as a 3D globe…** embeds the map it has drawn, 2,048 pixels wide.
+  shown map as a 3D globe…** embeds the map it has drawn, 2,048 pixels wide, or
+  4,096 for Detailed and Fine planets.
 - Poleward of 60° it shows two polar images drawn from the map, as sharp as the
   rest. A map stretched over the whole sphere would show radial streaks around
   the poles in viewers such as three.js.

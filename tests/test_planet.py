@@ -1651,3 +1651,18 @@ def test_suggested_sites_are_plausible_repeatable_and_can_be_kept(world_path: Pa
     ))
     applied = apply_wonders(run, WonderSettings(), kept)
     assert applied.base is run.base and len(applied.result.wonders.craters) == 1
+    assert applied.maps.width == run.maps.width
+
+
+def test_app_maps_are_wide_enough_for_the_mesh() -> None:
+    from map_maker.terrain.application.planet import (
+        DEFAULT_PREVIEW_WIDTH,
+        DEFAULT_RASTER_WIDTH,
+        app_map_width,
+    )
+
+    # Quick and Standard meshes show about three pixels per spacing at 2,048 px;
+    # Detailed and Fine meshes need the build width.
+    for nodes, width in ((50_000, DEFAULT_PREVIEW_WIDTH), (200_000, DEFAULT_PREVIEW_WIDTH),
+                         (800_000, DEFAULT_RASTER_WIDTH), (3_200_000, DEFAULT_RASTER_WIDTH)):
+        assert app_map_width(PlanetSettings(nodes=nodes)) == width

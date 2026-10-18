@@ -42,6 +42,7 @@ from map_maker.terrain.pipeline.world import prepare_world_map
 
 DEFAULT_RASTER_WIDTH = 4096
 DEFAULT_PREVIEW_WIDTH = 2048
+FINE_MESH_NODES = 400_000  # meshes finer than this get maps of DEFAULT_RASTER_WIDTH
 DEFAULT_RIVER_KM2 = 25_000.0
 
 
@@ -53,7 +54,7 @@ class PlanetRun:
     result: PlanetResult
     runtime: dict[str, object]
     inputs: dict[str, str | None]  # world, geology and wonder document hashes
-    maps: PlanetMaps  # the map themes at preview width, drawn when first asked for
+    maps: PlanetMaps  # the map themes at the app's width, drawn when first asked for
     base_sha256: str  # identity of the planet without wonders; tiles are cached under it
 
 
@@ -107,6 +108,18 @@ def _check_wonders(project: WorldProject, wonders: WorldWonders | None) -> None:
         raise ValueError("The wonders belong to a different world; open their world.")
 
 
+def app_map_width(settings: PlanetSettings) -> int:
+    """How wide the app draws a planet's maps: wide enough to show its mesh.
+
+    A map needs two or three pixels per mesh spacing to draw valleys and coasts
+    rather than blur them. 2,048 pixels give that up to ``FINE_MESH_NODES``
+    (Standard detail is 200,000 nodes, about 2.8 pixels per spacing). Finer
+    meshes get the build width; wider maps would cost far more memory (drawing
+    4,096-pixel maps already peaks near 5 GB).
+    """
+    return DEFAULT_RASTER_WIDTH if settings.nodes > FINE_MESH_NODES else DEFAULT_PREVIEW_WIDTH
+
+
 def generate_planet_run(
     project: WorldProject,
     geology: WorldGeologyRecipe | None,
@@ -116,7 +129,7 @@ def generate_planet_run(
     wonder_settings: WonderSettings | None = None,
     wonders: WorldWonders | None = None,
     shown: Sequence[str] = (),
-    preview_width: int = DEFAULT_PREVIEW_WIDTH,
+    preview_width: int | None = None,
     river_km2: float = DEFAULT_RIVER_KM2,
     cancellation: CancellationToken | None = None,
 ) -> PlanetRun:
@@ -124,7 +137,8 @@ def generate_planet_run(
 
     ``shown`` lists map theme labels by preference: the first one the planet has is
     drawn before returning, for the caller to show at once. The other maps are drawn
-    when first asked for (``PlanetRun.maps``).
+    when first asked for (``PlanetRun.maps``), ``preview_width`` pixels wide
+    (``app_map_width`` by default).
     """
     check_cancelled(cancellation)
     runtime = runtime_identity()
@@ -143,7 +157,7 @@ def generate_planet_run(
         base, wonder_settings, wonders, progress_part(progress, share, 1.0),
         cancellation=cancellation,
     )
-    maps = PlanetMaps(result, preview_width, river_km2)
+    maps = PlanetMaps(result, preview_width or app_map_width(settings), river_km2)
     _draw_shown(maps, shown, progress)
     if runtime_identity() != runtime:
         raise ValueError("Software changed during planet generation; generate again.")
@@ -165,19 +179,20 @@ def apply_wonders(
     progress: ProgressCallback | None = None,
     *,
     shown: Sequence[str] = (),
-    preview_width: int = DEFAULT_PREVIEW_WIDTH,
+    preview_width: int | None = None,
     river_km2: float = DEFAULT_RIVER_KM2,
     cancellation: CancellationToken | None = None,
 ) -> PlanetRun:
     """``run``'s base planet with these wonders: the wonder pass only (ADR-0097).
 
-    ``shown`` is as for ``generate_planet_run``.
+    ``shown`` is as for ``generate_planet_run``; maps keep ``run``'s width unless
+    ``preview_width`` is given.
     """
     if runtime_identity() != run.runtime:
         raise ValueError("Software changed since the planet was generated; generate again.")
     _check_wonders(run.result.world.project, wonders)
     result = finish_planet(run.base, wonder_settings, wonders, progress, cancellation=cancellation)
-    maps = PlanetMaps(result, preview_width, river_km2)
+    maps = PlanetMaps(result, preview_width or run.maps.width, river_km2)
     _draw_shown(maps, shown, progress)
     check_cancelled(cancellation)
     return PlanetRun(
