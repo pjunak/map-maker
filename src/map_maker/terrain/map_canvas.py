@@ -688,8 +688,11 @@ class GlobeCanvas(tk.Canvas):
         now = time.monotonic()
         elapsed, self._spin_time = now - self._spin_time, now
         vx, vy = self._spin
-        self.turn(vx * elapsed, vy * elapsed)
         slowing = exp(-elapsed / SPIN_FRICTION_S)
+        # The distance covered while slowing, so a stalled frame cannot fling the view
+        # past where friction stops it: a spin travels at most speed * SPIN_FRICTION_S.
+        reach = SPIN_FRICTION_S * (1.0 - slowing)
+        self.turn(vx * reach, vy * reach)
         vx, vy = vx * slowing, vy * slowing
         if hypot(vx, vy) < SPIN_STOP_SPEED:
             self._spin = None

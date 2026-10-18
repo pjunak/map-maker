@@ -18,6 +18,7 @@ from map_maker.terrain.adapters.map_projection import (
 )
 from map_maker.terrain.map_canvas import (
     KEY_TURN,
+    SPIN_FRICTION_S,
     FlatMapCanvas,
     GlobeCanvas,
     ImagePyramid,
@@ -180,18 +181,20 @@ def test_globe_canvas_spins_after_a_flick_and_keys_turn_it(root: tk.Tk) -> None:
     assert canvas.zoom == pytest.approx(drape_zoom(drape, canvas.size()))
     canvas.fit()
     canvas.show(gradient(512, 256), central_meridian_deg=0.0)
-    # A quick flick keeps the globe turning until friction stops it.
+    # A quick flick keeps the globe turning until friction stops it. At this speed it
+    # turns about 140 degrees, well short of the half turn where east and west meet.
     now = time.monotonic()
-    canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 140.0, 100.0)]
+    canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 132.0, 100.0)]
     velocity = canvas._release_velocity()
-    assert velocity is not None and velocity[0] == pytest.approx(1000.0)
+    assert velocity is not None and velocity[0] == pytest.approx(800.0)
     before = canvas.lon
     canvas.spin(velocity)
     deadline = time.monotonic() + 10
     while canvas.spinning and time.monotonic() < deadline:
         root.update()
         time.sleep(0.01)
-    assert not canvas.spinning and canvas.lon < before  # dragged east, so the view turns west
+    turned = (canvas.lon - before + 180) % 360 - 180
+    assert not canvas.spinning and -180 < turned < 0  # dragged east, so the view turns west
     # A slow release, or one too brief to measure, does not spin; a press stops a spin.
     now = time.monotonic()
     canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 102.0, 100.0)]
@@ -203,3 +206,33 @@ def test_globe_canvas_spins_after_a_flick_and_keys_turn_it(root: tk.Tk) -> None:
     canvas.spin((800.0, 0.0))
     canvas._press_left(SimpleNamespace(x=10, y=10))  # type: ignore[arg-type]
     assert not canvas.spinning
+
+
+def test_globe_spin_travels_the_same_distance_however_its_frames_are_paced(
+    root: tk.Tk, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    worker = LatestWorker(TkPump(root), lambda error: (_ for _ in ()).throw(error))
+    canvas = GlobeCanvas(root, worker)
+    canvas.show(gradient(512, 256), central_meridian_deg=0.0)
+    clock = [100.0]
+    monkeypatch.setattr(
+        "map_maker.terrain.map_canvas.time", SimpleNamespace(monotonic=lambda: clock[0])
+    )
+
+    def travelled(frame_s: float) -> float:
+        steps: list[float] = []
+
+        def record(dx: float, dy: float) -> None:
+            steps.append(dx)
+
+        monkeypatch.setattr(canvas, "turn", record)
+        canvas.spin((1000.0, 0.0))
+        while canvas.spinning:
+            clock[0] += frame_s
+            canvas._coast()
+        return sum(steps)
+
+    # A stalled frame must not throw the view past where friction would have stopped it.
+    smooth, stalled = travelled(0.016), travelled(1.0)
+    assert smooth == pytest.approx(1000.0 * SPIN_FRICTION_S, rel=0.05)
+    assert stalled == pytest.approx(smooth, rel=0.05)
