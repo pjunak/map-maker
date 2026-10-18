@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from benchmarks.planet.synthetic_world import WorldSpec, build_world
-from map_maker.terrain.adapters.planet_region import RegionWindow
+from map_maker.terrain.adapters.planet_region import RegionWindow, WindowFlow
 from map_maker.terrain.application.world import open_world
 from map_maker.terrain.domain.planet import PlanetSettings, RegionalSettings
 from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
@@ -368,6 +368,80 @@ def test_regional_rivers_are_as_wide_as_their_channels() -> None:
     assert 0.3 < width(2_000.0) < 1.5  # a visible line where the channel is sub-pixel
     # A larger river elsewhere in the window does not narrow this one.
     assert width(20.0, bigger=True) == pytest.approx(fine, abs=0.5)
+
+
+def _winding_valley() -> tuple[WindowFlow, float, float, list[int]]:
+    """A big river routed down a gently sloping, winding valley with a noisy floor.
+
+    Returns the window flow, the channel width and the valley length (pixels),
+    and the river's pixel path. The noise gives the pixel path the zigzags and
+    filled hollows of real regional relief.
+    """
+    from map_maker.terrain.adapters.planet_region import (
+        CHANNEL_WIDTH_PER_ROOT_Q,
+        MEANDER_RUNOFF_M_YR,
+    )
+
+    n, pixel_m, area = 400, 40.0, 2.6e11
+    rows, columns = np.mgrid[0:n, 0:n].astype(np.float64)
+    axis = 200.0 + 60.0 * np.sin(2 * np.pi * rows / 300.0)
+    z = (
+        500.0 - 2e-4 * pixel_m * rows + 0.01 * pixel_m * np.abs(columns - axis)
+        + np.random.default_rng(5).random((n, n)) * 0.5
+    )
+    inflow = np.zeros((n, n))
+    start = round(axis[0, 0])
+    inflow[0, start] = area
+    flow = WindowFlow.route(z, rows == n - 1, pixel_m, inflow)
+    width = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEANDER_RUNOFF_M_YR / 3.156e7) / pixel_m
+    valley = float(np.hypot(1.0, np.diff(axis[:, 0])).sum())
+    node, chain = start, [start]
+    while flow.receiver[node] >= 0:
+        node = int(flow.receiver[node])
+        chain.append(node)
+    return flow, width, valley, chain
+
+
+def test_meanders_follow_the_valley_without_crossing_themselves() -> None:
+    from scipy.spatial import KDTree
+
+    from map_maker.terrain.adapters.planet_natural import meander
+
+    flow, width, valley, chain = _winding_valley()
+    n = flow.z.shape[0]
+    steps = np.stack((np.array(chain) % n + 0.5, np.array(chain) // n + 0.5), axis=1)
+    wavelength = 11 * width
+    wound = meander(steps, np.full(len(steps), wavelength), 3)
+    assert np.allclose(wound[0], steps[0]) and np.allclose(wound[-1], steps[-1])
+    along = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(wound, axis=0).T))))
+    # No two stretches of channel more than three widths apart along the river
+    # come within a width of each other: the channel never crosses or touches itself.
+    pairs = KDTree(wound).query_pairs(width, output_type="ndarray")
+    assert not np.any(np.abs(along[pairs[:, 0]] - along[pairs[:, 1]]) > 3 * width)
+    # It meanders (longer than its valley) but stays in the valley.
+    assert 1.15 < along[-1] / valley < 2.5
+    gap, _ = KDTree(steps).query(wound)
+    assert gap.max() < 0.6 * wavelength
+
+
+def test_wide_regional_rivers_draw_one_channel_as_wide_as_itself() -> None:
+    from scipy.ndimage import label
+
+    from map_maker.terrain.adapters.map_parchment import distance_transform_edt
+    from map_maker.terrain.adapters.planet_region import window_rivers
+
+    flow, width, valley, _ = _winding_valley()
+    n = flow.z.shape[0]
+    cover = window_rivers(flow, np.zeros((n, n), dtype=bool), 2_000.0)
+    drawn = cover > 0.5
+    # One channel, nowhere much wider than itself: tangled bends merged into
+    # blobs many widths across.
+    parts = np.zeros((n, n), dtype=np.int32)
+    label(drawn, structure=np.ones((3, 3)), output=parts)
+    assert parts.max() == 1
+    assert 2 * float(distance_transform_edt(np.pad(drawn, 1)).max()) < 1.6 * width
+    # Its area is a channel longer than the valley, not a self-overlapping one.
+    assert 1.15 < float(cover.sum()) / (width * valley) < 2.5
 
 
 def test_meanders_keep_river_ends_and_wind_the_middle() -> None:

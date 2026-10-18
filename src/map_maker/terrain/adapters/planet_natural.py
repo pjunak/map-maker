@@ -27,8 +27,9 @@ from typing import Any, cast
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image, ImageDraw
-from scipy.ndimage import gaussian_filter, gaussian_filter1d
+from scipy.ndimage import gaussian_filter, gaussian_filter1d, minimum_filter1d
 from scipy.spatial import KDTree
+from scipy.special import jv
 
 from map_maker.terrain.adapters.map_parchment import ParchmentInputs, parchment_image
 from map_maker.terrain.adapters.planet_render import FrameRaster, PlanetRasters, ice_covered
@@ -749,6 +750,12 @@ def river_layer(
 
 
 MIN_MEANDER_PX = 4.0
+MEANDER_STEP_PX = 0.25  # spacing of the points a meandering river is drawn through
+VALLEY_LINE_SMOOTHING = 0.5  # Gaussian sigma of a meandering river's valley line, in wavelengths
+MEANDER_SWING_RAD = (0.7, 1.8)  # range of each bend's swing (omega of the sine-generated curve)
+MEANDER_REACH_SWING = (0.55, 1.05)  # swing factor of reaches about four bends long
+MEANDER_STRETCH = 0.35  # bend-to-bend variation of the wavelength
+MEANDER_BEND_ROOM = 0.5  # largest bend amplitude times the valley line's curvature
 
 
 def tapered_widths(discharge: F64, major: B, scale_px: float) -> F64:
@@ -757,45 +764,106 @@ def tapered_widths(discharge: F64, major: B, scale_px: float) -> F64:
     return (0.4 + 1.6 * np.sqrt(np.clip(discharge / peak, 0, 1))) * scale_px
 
 
-def meander(path: F64, wavelength_px: F64, seed: int, anchors: F64 | None = None) -> F64:
-    """Wind a river path into meanders of the given (per-point) wavelength.
+def smooth_along(values: F64, sigma: F64) -> F64:
+    """Values at unit spacing along a line, smoothed by ``sigma`` samples at each point.
 
-    Meanders follow the sine-generated curve of Langbein and Leopold (1966): the
-    channel's direction swings as theta = omega sin(2 pi s / lambda), with the
-    swing omega varying from bend to bend (0.6-1.6 rad), which gives the rounded,
-    uneven loops of alluvial rivers. A slower wander of the whole meander belt
-    (about six wavelengths) is added. The lateral displacement tapers to zero at
-    both ends and at ``anchors`` (fractions of the path length, such as
-    tributary junctions) so junctions and mouths stay connected.
+    Three running means of half-width ``sigma`` make a near-Gaussian of that
+    sigma, which may vary along the line. The line is extended by point
+    reflection about each end, so the ends keep their value and direction.
+    """
+    columns = values.reshape(len(values), -1)
+    pad = 3 * (int(np.ceil(float(sigma.max()))) + 1)
+    out = np.pad(columns, ((pad, pad), (0, 0)), mode="reflect", reflect_type="odd")
+    half = np.pad(np.maximum(sigma, 0.5), pad, mode="edge")
+    edges = np.arange(len(out) + 1.0)
+    low = np.clip(edges[:-1] + 0.5 - half, 0, len(out))
+    high = np.clip(edges[:-1] + 0.5 + half, 0, len(out))
+    for _ in range(3):
+        sums = np.concatenate((np.zeros((1, out.shape[1])), np.cumsum(out, axis=0)))
+        out = np.stack(
+            [np.interp(high, edges, column) - np.interp(low, edges, column) for column in sums.T],
+            axis=1,
+        ) / (high - low)[:, None]
+    return out[pad:-pad].reshape(values.shape)
+
+
+def _blend(at: F64, values: F64) -> F64:
+    """``values`` at whole numbers of ``at``, blended smoothly (cosine) in between."""
+    whole = np.clip(np.floor(at).astype(np.intp), 0, len(values) - 2)
+    share = (1 - np.cos(np.pi * np.clip(at - whole, 0, 1))) / 2
+    return values[whole] + (values[whole + 1] - values[whole]) * share
+
+
+def meander(path: F64, wavelength_px: F64, seed: int, anchors: F64 | None = None) -> F64:
+    """Wind a river path into meanders of the given (per-point) down-valley wavelength.
+
+    The path, a drainage path that steps from pixel to pixel, is first smoothed
+    into a valley line over half a wavelength; bends laid along each pixel step
+    swing with its direction and cross into tangles. About that line, bends
+    follow the sine-generated curve of Langbein and Leopold (1966): the
+    channel's direction swings as theta = omega sin(2 pi s / M). The swing
+    omega is drawn for each bend (MEANDER_SWING_RAD) and scaled by reach, so
+    open and tight bends alternate unevenly and some reaches wind more than
+    others, as alluvial rivers do; at the largest swing a bend is 3.5 times
+    longer than the valley it spans, and loops still stay three widths apart.
+    Bends fade where the wavelength falls to MIN_MEANDER_PX, near both ends and
+    near ``anchors`` (fractions of the path length, such as tributary
+    junctions), so junctions and mouths stay connected, and where the valley
+    line turns too tightly for them to swing without folding over.
     """
     step = np.hypot(*np.diff(path, axis=0).T)
     along = np.concatenate(([0.0], np.cumsum(step)))
     total = float(along[-1])
     if total < 2.0:
         return path
-    s = np.linspace(0.0, total, max(2, int(total)))
-    ds = s[1] - s[0] if len(s) > 1 else 1.0
-    resampled = np.stack((np.interp(s, along, path[:, 0]), np.interp(s, along, path[:, 1])), 1)
-    wave = np.maximum(
-        np.interp(s / total, np.linspace(0, 1, len(wavelength_px)), wavelength_px), 1e-6
-    )
+    s = np.linspace(0.0, total, int(total / MEANDER_STEP_PX) + 1)
+    ds = s[1] - s[0]
+    course = np.stack((np.interp(s, along, path[:, 0]), np.interp(s, along, path[:, 1])), 1)
+    # Pixel slopes flicker along a river: average the wavelength over about one.
+    wave = np.interp(s / total, np.linspace(0, 1, len(wavelength_px)), wavelength_px)
+    wave = gaussian_filter1d(wave, max(float(wave.max()), 1.0) / ds, mode="nearest")
+    strength = np.clip(wave / MIN_MEANDER_PX - 1.0, 0.0, 1.0)
+    wave = np.maximum(wave, MIN_MEANDER_PX)
+    valley = smooth_along(course, VALLEY_LINE_SMOOTHING * wave * strength / ds)
+    velocity = np.gradient(valley, ds, axis=0)
+    speed = np.maximum(np.linalg.norm(velocity, axis=1), 1e-9)
+    normal = np.stack((-velocity[:, 1], velocity[:, 0]), 1) / speed[:, None]
+    turn = np.gradient(velocity, ds, axis=0)
+    curvature = np.abs(velocity[:, 0] * turn[:, 1] - velocity[:, 1] * turn[:, 0]) / speed**3
     rng = np.random.default_rng(seed)
-    knots = max(4, int(total / max(float(wave.mean()), 1.0)) + 2)
-    swing = np.interp(s, np.linspace(0, total, knots), rng.uniform(0.6, 1.6, knots))
-    stretch = 1 + 0.3 * np.interp(s, np.linspace(0, total, knots), rng.uniform(-1, 1, knots))
-    phase = np.cumsum(2 * np.pi * ds / (wave * stretch)) + rng.uniform(0, 2 * np.pi)
-    lateral = np.cumsum(np.sin(swing * np.sin(phase))) * ds
-    belt = np.cumsum(2 * np.pi * ds / (6 * wave)) + rng.uniform(0, 2 * np.pi)
-    lateral = lateral + 0.6 * wave * np.sin(belt)
-    # Remove the drift so the river keeps its course, then taper the ends.
-    lateral -= np.interp(s, [0.0, total], [lateral[0], lateral[-1]])
+    knots = max(4, int(2 * total / float(wave.mean())) + 2)
+    stretch = 1 + MEANDER_STRETCH * np.interp(
+        s, np.linspace(0.0, total, knots), rng.uniform(-1, 1, knots)
+    )
+    wavelength = wave * stretch
+    phase = np.concatenate(([0.0], np.cumsum(2 * np.pi * ds / wavelength[1:])))
+    psi = phase + rng.uniform(0, 2 * np.pi)
+    # Each bend's swing peaks at its apex (psi a multiple of pi).
+    bends = int(psi[-1] / np.pi) + 2
+    swing = _blend(psi / np.pi, rng.uniform(*MEANDER_SWING_RAD, bends)) * _blend(
+        psi / (8 * np.pi), rng.uniform(*MEANDER_REACH_SWING, bends // 8 + 2)
+    )
     pins = np.concatenate(([0.0, total], [] if anchors is None else np.asarray(anchors) * total))
     nearest = np.min(np.abs(s[:, None] - pins[None, :]), axis=1)
-    taper = np.clip(nearest / np.maximum(wave, 1.0), 0, 1)
-    tangent = np.gradient(resampled, axis=0)
-    tangent /= np.maximum(np.linalg.norm(tangent, axis=1), 1e-9)[:, None]
-    normal = np.stack((-tangent[:, 1], tangent[:, 0]), 1)
-    return resampled + normal * (lateral * taper)[:, None]
+    omega = swing * strength * np.clip(nearest / wave, 0, 1)
+    # Bends shrink where they would fold over the inside of a valley bend; the
+    # amplitude falls faster than the swing, so scaling the swing is enough.
+    amplitude = jv(1, omega) / (np.pi * jv(0, omega)) * wavelength
+    room = MEANDER_BEND_ROOM / np.maximum(curvature * amplitude, 1e-9)
+    room = minimum_filter1d(np.minimum(room, 1.0), int(float(wave.max()) / ds) + 1)
+    omega = omega * np.clip(smooth_along(room, VALLEY_LINE_SMOOTHING * wave / ds), 0, 1)
+    # The sine-generated curve in closed form (Bessel series of cos and sin of
+    # omega sin psi), so a slowly varying swing needs no integration and leaves
+    # no drift: the channel runs ``ahead`` of the down-valley phase and ``side``
+    # wavelengths across the valley line.
+    j0 = jv(0, omega)
+    ahead = 2 / j0 * sum(jv(k, omega) * np.sin(k * psi) / k for k in (2, 4, 6, 8))
+    side = -1 / (np.pi * j0) * sum(jv(k, omega) * np.cos(k * psi) / k for k in (1, 3, 5, 7, 9))
+    u = np.interp(phase + ahead, phase, s)
+    base = np.stack([np.interp(u, s, valley[:, k]) for k in (0, 1)], 1)
+    across = np.stack([np.interp(u, s, normal[:, k]) for k in (0, 1)], 1)
+    across /= np.maximum(np.linalg.norm(across, axis=1), 1e-9)[:, None]
+    return base + across * (side * np.interp(u, s, wavelength))[:, None]
 
 
 def river_coverage(
@@ -815,8 +883,10 @@ def river_coverage(
 
     ``width_px`` is each node's line width in pixels. ``meander_px`` (per node,
     pixels; 0 for straight reaches) adds meanders of that wavelength, as
-    alluvial rivers wind on gentle ground. ``links`` join node pairs that no
-    receiver joins, such as a splitting river's branch.
+    alluvial rivers wind on gentle ground. A river joins another where that
+    one is drawn, which a meandering river's smoothed valley line moves off
+    its nodes. ``links`` join node pairs that no receiver joins, such as a
+    splitting river's branch.
     """
     rows, columns = shape
     if not major.any():
@@ -827,6 +897,7 @@ def river_coverage(
     mask = Image.new("L", (columns * supersample, rows * supersample), 0)
     draw = ImageDraw.Draw(mask)
     visited = np.zeros(len(receiver), dtype=bool)
+    drawn = np.stack((x, y), axis=1).astype(np.float64)
     for head in heads[np.argsort(-discharge[heads])].tolist():
         chain = [head]
         node = head
@@ -841,9 +912,9 @@ def river_coverage(
             node = nxt
         if len(chain) < 2:
             continue
-        path = np.stack((x[chain], y[chain]), axis=1)
-        if np.any(np.abs(np.diff(path[:, 0])) > columns / 2):
+        if np.any(np.abs(np.diff(x[chain])) > columns / 2):
             continue
+        path = drawn[chain]
         for _ in range(2):
             a, b = path[:-1], path[1:]
             cut = np.empty((2 * len(a), 2))
@@ -858,6 +929,11 @@ def river_coverage(
             path = meander(path, np.interp(
                 np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), meander_px[chain]
             ), head, reach[joins] / max(float(reach[-1]), 1e-9))
+            # Its tributaries, drawn later, end at the nearest point drawn.
+            own = [chain[k] for k in joins.tolist() if k < len(chain) - 1]
+            if own:
+                gap = np.linalg.norm(path[None, :, :] - drawn[own][:, None, :], axis=2)
+                drawn[own] = path[np.argmin(gap, axis=1)]
         width = supersample * np.interp(
             np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), width_px[chain]
         )
@@ -874,8 +950,7 @@ def river_coverage(
             continue
         width = float(width_px[b]) * supersample
         draw.line(
-            ((float(x[a]) * supersample, float(y[a]) * supersample),
-             (float(x[b]) * supersample, float(y[b]) * supersample)),
+            (tuple(drawn[a] * supersample), tuple(drawn[b] * supersample)),
             fill=255, width=max(1, round(width)),
         )
     mask = mask.resize((columns, rows), Image.Resampling.LANCZOS)

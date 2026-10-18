@@ -35,6 +35,9 @@ backlog, and [status](../research/status.md) records what works now.
      spacing. Level parents reach a planet step beyond the area they serve, so
      planet rivers cross into it, and tiles weight inherited drainage once
      (`planet-blended-tiles-v10`).
+   - Wide rivers on fine maps meander about their valley line, the routed path
+     smoothed over half a bend, instead of about each pixel step, where their
+     bends crossed into tangles.
    - Rock texture now follows each level's spacing, so fine tiles branch rather
      than cutting parallel gullies.
    - Regional coasts are refined below the drawing's precision, so local maps
