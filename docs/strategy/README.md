@@ -18,7 +18,7 @@ backlog, and [status](../research/status.md) records what works now.
 | **M3** | implemented, experimental | **Provisional climate:** seasonal temperature, winds, moisture with orographic lift, runoff, biomes and Köppen; ice sheets from mass balance and shallow-ice flow (ADR-0093). | Controlled windward/leeward and coastal/interior responses; closed water budget ([report](../research/2026-10-08-continentality-and-koppen.md)). |
 | **M4** | partly implemented | **Coupled, inspectable workflow:** runoff-weighted erosion and lakes (done); a World-tab stage with cancel and stale state (done); a single map view with background jobs and drill-down through every level (ADR-0089); guided steps with geology edited in place and following world edits (ADR-0096, done); wonders regenerated without eroding again (ADR-0097, done); compare and regenerate. | A user can run, inspect, change an input and regenerate, and sees nonconvergence. |
 | **M5** | queued | **Accepted parent and native core:** reference-world realism gates, an adoption ADR, and a port of the stable kernels to a native core with differential tests. Decide what replaces the local composed generator. | Metric thresholds; Python/native agreement within tolerance; dependency audit. |
-| **M6** | **ACTIVE** | **Regional and local zoom.** Fixed blended tiles (ADR-0086) and nested levels are done: region (5 km), province (1 km) and local (200 m), each enriched from the level above (ADR-0088). Display detail is world-anchored and scaled per level, and every level is coloured and shaded by slopes scaled to level 1 (ADR-0105); fine tiles branch; next: rivers traced on tiles. | Overlapping and nested requests agree; inherited flow is conserved; revisits do not age terrain again (ADR-0048). |
+| **M6** | **ACTIVE** | **Regional and local zoom.** Fixed blended tiles (ADR-0086) and nested levels are done: region (5 km), province (1 km) and local (200 m), each enriched from the level above (ADR-0088). Display detail is world-anchored and scaled per level, every level is coloured and shaded by slopes scaled to level 1 (ADR-0105) and is as warm as the planet at its height (ADR-0107); fine tiles branch; next: finer levels that keep the coarser level's height, and rivers traced on tiles. | Overlapping and nested requests agree; inherited flow is conserved; revisits do not age terrain again (ADR-0048). |
 | **Views** | implemented, experimental | **Map themes and projections** (ADR-0087): an interactive globe (zoom, grab-to-turn, ADR-0101) that shows opened regional maps when zoomed in, down to their own resolution (ADR-0103, ADR-0104), glTF globe models (ADR-0102) and polar views; atlas, relief, climate, topographic, parchment, plates, sea-floor age, basins and geology themes. Political and civilization views will need authored overlays. | Themes are registered once; projections are deterministic and verified against the build. |
 | **M7** | deferred | Water and materials, plus selected landforms (discharge widths, lake storage, glacial, karst), when integrated results show a need. | A control and a conservation ledger for each mechanism. |
 | **M8** | deferred | Accepted ecology and stronger planetary models. | Traceable classifications and uncertainty. |
@@ -70,6 +70,14 @@ backlog, and [status](../research/status.md) records what works now.
    - Smooth parent samples stay within each parent triangle's corner values:
      cubics overshooting a mountain front had set tile rings to sea level and
      drained big rivers to them (`planet-blended-tiles-v13`).
+   - Every level is as warm as the planet at its height, and display detail
+     warms or cools colour only about its own mean (ADR-0107).
+   - **Next:** province tiles stand above region tiles in high mountains (+455 m
+     in 5 km means where the region is 3–4 km high, +722 m above 4 km), so a
+     province draws them colder than its region. Enrichment calibrates a level's
+     relief, smoothed over the parent spacing, against the unsmoothed parent
+     surface; calibrating against the parent surface smoothed alike should let
+     finer levels keep the coarser level's height.
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is

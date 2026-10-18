@@ -872,18 +872,12 @@ def regional_climate(
     parent: RegionalParent, points: F64, elevation: F64, land: B
 ) -> PixelClimate | None:
     """Parent climate at each pixel, lapse-corrected to the fine relief."""
-    if parent.temperature_c is None or parent.precipitation_mm is None:
-        return None
     shape = elevation.shape
     z = np.where(land, np.nan_to_num(elevation, nan=0.0), 0.0).ravel()
-    # Volcanoes and wonders form after the climate is simulated: lapse-correct
-    # them whole.
-    surface = parent.surface_m - parent.young_m()
-    lift = (z - parent.sample(points, surface)) / 1000
-    lapse = parent.settings.climate.lapse_c_per_km
-    temperature = parent.sample(points, parent.temperature_c) - lapse * lift
-    warm_source = parent.warm_season_c if parent.warm_season_c is not None else parent.temperature_c
-    warm = parent.sample(points, warm_source) - lapse * lift
+    temperatures = parent.temperatures_at(points, z)
+    if temperatures is None or parent.precipitation_mm is None:
+        return None
+    temperature, warm = temperatures
     precipitation = np.maximum(parent.sample(points, parent.precipitation_mm), 0.0)
     coast = (
         np.zeros(len(points))
@@ -1045,6 +1039,12 @@ def _smooth_step(x: F64, a: float, b: float) -> F64:
     return t * t * (3 - 2 * t)
 
 
+def masked_mean(values: F64, mask: B, sigma: float) -> F64:
+    """Gaussian mean of ``values`` over ``mask`` only, normalised by the kernel's share in it."""
+    held = gaussian_filter(np.where(mask, values, 0.0), sigma)
+    return held / np.maximum(gaussian_filter(mask.astype(np.float64), sigma), 1e-9)
+
+
 def window_position(z: F64, pixel_m: float, inside: B) -> F64:
     """Valley (-1) to ridge (+1) position from height above the local mean at 3-15 km.
 
@@ -1052,13 +1052,42 @@ def window_position(z: F64, pixel_m: float, inside: B) -> F64:
     across most of a 30 km window, and the ground outside it has no relief.
     """
     total = np.zeros_like(z)
-    held = np.where(inside, z, 0.0)
-    share = inside.astype(np.float64)
     for radius_m, weight, scale_m in ((3e3, 0.5, 80.0), (15e3, 0.5, 300.0)):
-        sigma = radius_m / pixel_m
-        mean = gaussian_filter(held, sigma) / np.maximum(gaussian_filter(share, sigma), 1e-9)
+        mean = masked_mean(z, inside, radius_m / pixel_m)
         total += weight * np.tanh((z - mean) / scale_m)
     return total
+
+
+def display_lift(z: F64, surface_m: F64, land: B, spacing_px: float) -> F64:
+    """Height of display relief ``z`` above the ground's ``surface_m``, as colour sees it.
+
+    Display relief stands in for relief the level's mesh cannot resolve, so only
+    its departure from its own mean over a mesh spacing (``spacing_px``) counts.
+    Its mean is no height: valley carving lowers it everywhere, level-1 display
+    relief by about 750 m on steep Aethelara ground, and lapse-correcting that
+    drew the region's mountains 5 C warmer than the tiles under them.
+    """
+    offset = np.where(land, z - surface_m, 0.0)
+    return np.where(land, offset - masked_mean(offset, land, spacing_px), 0.0)
+
+
+def display_climate(window: RegionWindow, climate: PixelClimate, z: F64) -> PixelClimate:
+    """The window's ``climate`` lapse-corrected to its display relief ``z``.
+
+    The climate holds at the tile relief. An ice sheet's surface is real height
+    above it, so its whole thickness cools; display detail cools only about its
+    own mean.
+    """
+    ground = np.nan_to_num(window.elevation_m)
+    surface = ground if window.ice_surface_m is None else np.fmax(ground, window.ice_surface_m)
+    lift = (surface - ground) + display_lift(
+        z, surface, window.land, window.detail_spacing_m / window.pixel_m
+    )
+    cooling = window.lapse_c_per_km * lift / 1000
+    return PixelClimate(
+        climate.temperature_c - cooling, climate.warm_season_c - cooling,
+        climate.precipitation_mm, climate.pet_mm, climate.growing_mm,
+    )
 
 
 def slope_factor(spacing_m: float) -> float:
@@ -1081,14 +1110,7 @@ def window_image(window: RegionWindow, *, atlas: bool) -> Image.Image:
     land = window.land
     climate = window.climate
     if atlas and climate is not None:
-        lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
-        shown = PixelClimate(
-            climate.temperature_c - lapse,
-            climate.warm_season_c - lapse,
-            climate.precipitation_mm,
-            climate.pet_mm,
-            climate.growing_mm,
-        )
+        shown = display_climate(window, climate, z)
         wet = 0.6 * gaussian_filter(window.rivers, 2.0)
         land_rgb = land_colour(
             window.points, window.planet_m, shown, z, slope, light, wet,
@@ -1151,11 +1173,7 @@ def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
         return None
     z = display_relief(window)
     slope, light = window_shading(window, z)
-    lapse = window.lapse_c_per_km * (z - np.nan_to_num(window.elevation_m)) / 1000
-    shown = PixelClimate(
-        climate.temperature_c - lapse, climate.warm_season_c - lapse,
-        climate.precipitation_mm, climate.pet_mm, climate.growing_mm,
-    )
+    shown = display_climate(window, climate, z)
     wet = 0.6 * gaussian_filter(window.rivers, 2.0)
     cover = vegetation(
         window.points, window.planet_m, shown, slope,

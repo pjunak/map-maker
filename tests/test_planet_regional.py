@@ -663,6 +663,48 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
     assert on_patch is not None and on_planet is not None
     assert np.array_equal(on_patch, on_planet)
 
+
+def test_level_parents_are_as_warm_as_the_planet_at_every_height(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    from map_maker.terrain.application.planet_region import ensure_level_tiles
+    from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
+
+    planet = RegionalParent.from_result(parent)
+    # A climate that cools at the lapse rate with height, held at the planet
+    # surface as a simulated climate is.
+    lapse = planet.settings.climate.lapse_c_per_km
+    ground = planet.surface_m - planet.young_m()
+    planet = replace(
+        planet,
+        temperature_c=15.0 - lapse * ground / 1000,
+        warm_season_c=25.0 - lapse * ground / 1000,
+    )
+    centre = _land_centre(parent)
+    grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
+    relief = ReliefWarp.for_parent(TINY_LEVELS, 2, parent.settings.seed)
+    needed = grid.tiles_near(
+        centre, level_parent_radius(planet, 300e3, 30.0) + relief.reach_m
+    )
+    grid, tiles = ensure_level_tiles(
+        planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
+    )
+    patch = level_parent(planet, grid, tiles, centre, 300e3, 30.0, 11, relief)
+    points = patch.mesh.xyz[patch.land]
+    # The coarser tiles the patch stands on depart from the planet surface...
+    coarse = (patch.surface_m - patch.young_m())[patch.land]
+    assert np.sqrt(np.mean((coarse - planet.sample(points, ground)) ** 2)) > 100.0
+    # ...yet at any height a finer level is as warm as the planet there.
+    heights = np.linspace(0.0, 3000.0, len(points))
+    for source in (planet, patch):
+        found = source.temperatures_at(points, heights)
+        assert found is not None
+        assert np.allclose(found[0], 15.0 - lapse * heights / 1000, atol=0.01)
+        assert np.allclose(found[1], 25.0 - lapse * heights / 1000, atol=0.01)
+
+
 def _river_step(parent: PlanetResult) -> int:
     """The planet node with the largest drainage whose step runs between inland land."""
     receiver = parent.flow.receiver
@@ -819,6 +861,26 @@ def test_terrain_position_ignores_ground_outside_the_window() -> None:
     position = window_position(hill, pixel_m, inside)
     assert position[pixels // 2, pixels // 2] > 0.5
     assert np.abs(position[inside & (distance > 12e3)]).max() < 0.1
+
+
+def test_colour_lapse_corrects_display_relief_about_its_own_mean() -> None:
+    from map_maker.terrain.adapters.planet_region import display_lift
+
+    # A mountain front on a 5 km mesh at 500 m pixels, by the sea. Valley carving
+    # lowers its display relief 700 m below the tiles; ridges and gullies 2 km
+    # apart stand 200 m above and below that.
+    pixels, pixel_m = 160, 500.0
+    rows, columns = np.mgrid[0:pixels, 0:pixels] * pixel_m
+    land = columns < 60e3
+    tile = np.where(land, 500.0 + 0.05 * columns, -200.0)
+    texture = 200.0 * np.sin(2 * np.pi * rows / 2e3)
+    display = np.where(land, tile - 700.0 + texture, tile)
+    lift = display_lift(display, tile, land, 5e3 / pixel_m)
+    # Carving's lowering is no height, even beside the sea; the ridges are. (Rows
+    # near the array's ends see the ridges mirrored; windows are wider than that.)
+    inner = land & (rows > 20e3) & (rows < 60e3)
+    assert np.allclose(lift[inner], texture[inner], atol=1.0)
+    assert np.all(lift[~land] == 0.0)
 
 
 def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path: Path) -> None:
@@ -1153,7 +1215,12 @@ def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
 ) -> None:
     from dataclasses import replace
 
-    from map_maker.terrain.adapters.planet_region import display_relief, window_ice_cover
+    from map_maker.terrain.adapters.planet_natural import PixelClimate
+    from map_maker.terrain.adapters.planet_region import (
+        display_climate,
+        display_relief,
+        window_ice_cover,
+    )
     from map_maker.terrain.application.planet_region import region_window
     from map_maker.terrain.pipeline.planet_ice import IceSheets
 
@@ -1186,6 +1253,15 @@ def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
     assert np.allclose(relief[cover & window.land], np.fmax(relief, window.ice_surface_m)[
         cover & window.land
     ])
+    # That surface is real height, not display detail: colour sees the climate
+    # cooled by the ice's whole thickness.
+    zero = np.zeros(relief.shape)
+    shown = display_climate(window, PixelClimate(zero, zero, zero, zero), relief)
+    thickness = (window.ice_surface_m - window.elevation_m)[middle]
+    assert thickness.min() > 500.0
+    assert np.allclose(
+        -shown.temperature_c[middle], window.lapse_c_per_km * thickness / 1000, atol=0.3
+    )
 
 
 def test_relief_warp_winds_straight_tile_valleys_and_keeps_their_drainage() -> None:

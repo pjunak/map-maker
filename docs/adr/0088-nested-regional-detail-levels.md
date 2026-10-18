@@ -5,6 +5,8 @@
 - Extends ADR-0086 (fixed blended tiles) towards ADR-0048 (zoom-driven enrichment).
 - Refined by [ADR-0105](0105-regional-levels-see-level-1-slopes.md): every level
   is coloured and shaded by its slopes scaled to level 1.
+- Refined by [ADR-0107](0107-regional-temperatures-follow-height-above-the-planet.md): every level
+  is as warm as the planet at its height.
 
 ## Context
 

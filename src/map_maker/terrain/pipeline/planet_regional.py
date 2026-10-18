@@ -90,7 +90,7 @@ class RegionalParent:
     runoff_weight: F64 | None
     receiver: I64
     area_m2: F64
-    temperature_c: F64 | None = None
+    temperature_c: F64 | None = None  # at surface_m without young landforms
     precipitation_mm: F64 | None = None
     biome: NDArray[np.int8] | None = None
     warm_season_c: F64 | None = None
@@ -120,6 +120,20 @@ class RegionalParent:
             if added is not None:
                 young = young + added
         return np.where(self.land, young, 0.0)
+
+    def temperatures_at(self, xyz: F64, height_m: F64) -> tuple[F64, F64] | None:
+        """Annual and warm-season temperature (C) at unit vectors ``xyz`` and ``height_m``.
+
+        The parent's temperatures hold at its surface without young landforms
+        (volcanoes and wonders form after the climate is simulated), so they are
+        lapse-corrected from there. None without a climate.
+        """
+        if self.temperature_c is None:
+            return None
+        lift_km = (height_m - self.sample(xyz, self.surface_m - self.young_m())) / 1000
+        cooling = self.settings.climate.lapse_c_per_km * lift_km
+        warm = self.temperature_c if self.warm_season_c is None else self.warm_season_c
+        return self.sample(xyz, self.temperature_c) - cooling, self.sample(xyz, warm) - cooling
 
     @classmethod
     def from_result(cls, result: PlanetResult) -> RegionalParent:

@@ -7,7 +7,8 @@ at level n-1 spacing (ADR-0088). The patch carries:
 - the blended level n-1 relief, with the valley courses that level's mesh
   resolves (``ReliefWarp``);
 - planet forcing sampled smoothly onto the patch, as level 1 takes it, and
-  climate and young landforms sampled onto it;
+  climate and young landforms sampled onto it, with temperatures lapse-corrected
+  to the patch relief;
 - the planet's lakes and sediment basins, which every level refines itself;
 - drainage routed on the patch, with planet rivers entering across its rim.
 
@@ -97,6 +98,10 @@ def level_parent(
         mesh, relief_m, ~land | region.boundary, runoff, parent_inflows(planet, region)
     )
     nearest = np.asarray(KDTree(planet.mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
+    # A parent's temperatures hold at its own surface, so the planet's are
+    # lapse-corrected to the coarser tiles' relief. Sampled unchanged, they made a
+    # province 6.5 C too warm on level-1 mountains 1 km above the planet surface.
+    temperatures = planet.temperatures_at(xyz, relief_m)
     patch = RegionalParent(
         world=planet.world,
         settings=planet.settings,
@@ -109,10 +114,10 @@ def level_parent(
         runoff_weight=runoff,
         receiver=flow.receiver,
         area_m2=flow.area_m2,
-        temperature_c=sample(planet.temperature_c),
+        temperature_c=None if temperatures is None else temperatures[0],
         precipitation_mm=sample(planet.precipitation_mm),
         biome=None if planet.biome is None else planet.biome[nearest],
-        warm_season_c=sample(planet.warm_season_c),
+        warm_season_c=None if temperatures is None else temperatures[1],
         coast_m=sample(planet.coast_m),
         sea_floor_m=sample(planet.sea_floor_m),
         # Basins stay on the planet mesh, like lakes, so every level refines the

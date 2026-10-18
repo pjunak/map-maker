@@ -359,7 +359,14 @@ slopes as a region would measure them: the same ground shows the same share of
 rock, bare hills and vegetation, and the same overall shading, at every level,
 while finer levels draw smaller ridges and gullies. Regions shade with the most
 exaggeration and local maps with the least
-([ADR-0105](adr/0105-regional-levels-see-level-1-slopes.md)).
+([ADR-0105](adr/0105-regional-levels-see-level-1-slopes.md)). Every level is as
+warm as the planet at the same height. Display detail changes the temperature
+that colours see only by how far it departs from its own mean over a mesh
+spacing, so snow and treelines follow its ridges and gullies, but carved valleys
+do not warm whole mountains
+([ADR-0107](adr/0107-regional-temperatures-follow-height-above-the-planet.md)).
+Province tiles still stand several hundred metres above region tiles in high
+mountains, so provinces draw those mountains colder, with more snow.
 
 ## Outputs
 

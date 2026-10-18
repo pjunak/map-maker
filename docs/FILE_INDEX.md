@@ -210,6 +210,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0104-zoom-the-globe-into-regional-maps.md](adr/0104-zoom-the-globe-into-regional-maps.md) | The globe zooms past 16x towards ground inside an opened regional map, until the finest one there shows a texel per screen pixel; zooming out and turning are unrestricted; `world view` stays at 16x. |
 | [docs/adr/0105-regional-levels-see-level-1-slopes.md](adr/0105-regional-levels-see-level-1-slopes.md) | Every regional level is coloured and shaded by its slopes scaled to the level-1 mesh, and terrain position reads only the window's own ground, so nested windows agree in tone. |
 | [docs/adr/0106-wind-regional-valleys-below-the-tile-mesh.md](adr/0106-wind-regional-valleys-below-the-tile-mesh.md) | Windows and level parents sample the tile blend along an area-preserving curl-noise flow, one octave sequence shared by all levels, so valleys and rivers wind below the tile mesh instead of running straight between its nodes (`planet-blended-tiles-v12`). |
+| [docs/adr/0107-regional-temperatures-follow-height-above-the-planet.md](adr/0107-regional-temperatures-follow-height-above-the-planet.md) | Every regional level is as warm as the planet at its height, and colour lapse-corrects display relief only about its own mean over a mesh spacing. |
 
 ## Dated research reports (99)
 

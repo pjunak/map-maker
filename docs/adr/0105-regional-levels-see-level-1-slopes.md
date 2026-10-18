@@ -4,6 +4,9 @@
 - Date: 2026-10-18
 - Refines: [ADR-0088](0088-nested-regional-detail-levels.md) (nested levels) and
   [ADR-0103](0103-regional-detail-on-the-globe.md) (regional maps on the globe).
+- Refined by [ADR-0107](0107-regional-temperatures-follow-height-above-the-planet.md):
+  the region's remaining darker steep ground came from window climates, the
+  mean of display relief and tile heights, not from display lapse alone.
 
 ## Context
 
