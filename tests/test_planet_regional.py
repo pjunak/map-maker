@@ -1202,6 +1202,27 @@ def test_smooth_parent_sampling_has_no_creases_at_parent_triangle_edges(
     assert kinks(smooth) < 0.25 * kinks(linear)
 
 
+def test_smooth_parent_sampling_stays_within_each_parent_triangle(
+    parent: PlanetResult,
+) -> None:
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+
+    planet = RegionalParent.from_result(parent)
+    mesh = parent.mesh
+    lon, lat = _land_centre(parent)
+    # A plain at 160 m meets a range rising 1,000 m within one parent spacing,
+    # as a sediment basin meets its mountains. Cubics fitted across the front
+    # dipped 85 m below the plain here; a tile ring held at such a dip, at sea
+    # level, drained a big river to it.
+    east = forward_aeqd(mesh.xyz, lon, lat, mesh.radius_m)[:, 0] / mesh.spacing_m
+    field = 160.0 + 1000.0 * np.clip(east, 0.0, 1.0)
+    t = np.linspace(-4, 4, 1601) * mesh.spacing_m
+    for slope in (0.0, 0.4, 1.3):
+        line = inverse_aeqd(t, slope * t, lon, lat, mesh.radius_m)
+        smooth = planet.smooth_sampler(line)(field)
+        assert smooth.min() >= 160.0 - 1e-9 and smooth.max() <= 1160.0 + 1e-9
+
+
 def test_basin_fronts_are_dissected_alike_at_every_level(parent: PlanetResult) -> None:
     from dataclasses import replace
 

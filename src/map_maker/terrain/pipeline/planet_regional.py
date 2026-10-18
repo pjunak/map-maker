@@ -246,9 +246,10 @@ def smooth_sampler(mesh: SphereMesh, xyz: F64) -> Callable[[F64], F64]:
 
     Clough-Tocher cubics in a local azimuthal plane equal a field at mesh nodes
     but have no creases along mesh triangle edges, which regional relief seeded
-    from triangle-linear fields keeps as straight lines. The plane and its
-    triangulation are built once for every field sampled. Points outside the
-    nodes' hull fall back to triangle-linear interpolation.
+    from triangle-linear fields keeps as straight lines. Each sample stays
+    within the values at the corners of its triangle, as a linear one does. The
+    plane and its triangulation are built once for every field sampled. Points
+    outside the nodes' hull fall back to triangle-linear interpolation.
     """
     centre = xyz.mean(axis=0)
     centre /= np.linalg.norm(centre)
@@ -266,12 +267,18 @@ def smooth_sampler(mesh: SphereMesh, xyz: F64) -> Callable[[F64], F64]:
     unit_m = mesh.spacing_m
     triangulation = Delaunay(forward_aeqd(mesh.xyz[near], lon, lat, mesh.radius_m) / unit_m)
     plane = forward_aeqd(xyz, lon, lat, mesh.radius_m) / unit_m
+    # Cubics overshoot at steep steps. Across a mountain front on Aethelara they
+    # fell up to 1,100 m below the lowest corner of their triangle; tile rings
+    # held there at sea level drained a 160,000 km2 river to them.
+    corners = triangulation.simplices[np.maximum(triangulation.find_simplex(plane), 0)]
 
     def sample(values: F64) -> F64:
         local = values[near]
         low, span = float(local.min()), float(np.ptp(local)) or 1.0
         unit = CloughTocher2DInterpolator(triangulation, (local - low) / span)(plane)
         cubic = low + span * np.asarray(unit)
+        at = local[corners]
+        cubic = np.clip(cubic, at.min(axis=1), at.max(axis=1))
         outside = ~np.isfinite(cubic)
         if outside.any():
             cubic[outside] = sample_field(mesh, xyz[outside], values)
@@ -343,12 +350,7 @@ def enrich(
     )
     steady = np.maximum(smoothly(parent.steady_uplift), 0.0)
     pulse = np.maximum(smoothly(parent.pulse_uplift), 0.0)
-    # Cubics overshoot a little at sharp steps; erodibility stays within the parent's.
-    erodibility = np.clip(
-        smoothly(parent.erodibility),
-        float(parent.erodibility.min()),
-        float(parent.erodibility.max()),
-    ) * np.exp(
+    erodibility = smoothly(parent.erodibility) * np.exp(
         FINE_TEXTURE
         * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / (FINE_TEXTURE_SPACINGS * mesh.spacing_m))
     )

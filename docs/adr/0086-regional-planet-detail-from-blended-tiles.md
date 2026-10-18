@@ -78,6 +78,21 @@ to an absolute tolerance, so uplift in metres a year had kept almost no gradient
 and was interpolated worse than linearly. The regional tile algorithm becomes
 `planet-blended-tiles-v11`.
 
+## Revision (2026-10-19)
+
+Since the revision above, the cubics carry real gradients, and they overshot
+where a field steps sharply. Across a mountain front on Aethelara, a plain at
+160 m below a 1,124 m range within one 4.6 km parent spacing, a province tile's
+calibration target fell to −75 m at its ring, and the ring was held at sea level
+there. The tile drained a 160,000 km² river to that outlet, 100–170 m below its
+neighbour over the same ground. In 5 % of that tile's nodes the target lay below
+the lowest corner of their parent triangle, by up to 1,100 m. The levels below
+inherited a 50 m barrier and 30 m pits on the river's course, and the local
+window sent the river back out where it entered. Each smooth sample now stays
+within the values at the corners of its triangle, as a linear sample does.
+Clamping erodibility to the parent's range is no longer needed. The regional
+tile algorithm becomes `planet-blended-tiles-v13`.
+
 ## Consequences
 
 - Detail is reproducible and independent of the requested window. Tiles are

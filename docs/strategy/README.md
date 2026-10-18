@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-18. **Active milestone: M6, nested deterministic regional and local
+Updated 2026-10-19. **Active milestone: M6, nested deterministic regional and local
 maps.** Map views run alongside it. The plan is world-first: one whole-planet
 relief, made by uplift and erosion on a sphere mesh, feeds climate, map views and
 regional zoom ([decision D00a](../research/decision-catalog.md)).
@@ -64,6 +64,9 @@ backlog, and [status](../research/status.md) records what works now.
      as lake shores are refined, so plains run up valleys and spurs reach out
      into them, where the front was straight within each planet triangle. Level
      parents take planet forcing smoothly too (`planet-blended-tiles-v11`).
+   - Smooth parent samples stay within each parent triangle's corner values:
+     cubics overshooting a mountain front had set tile rings to sea level and
+     drained big rivers to them (`planet-blended-tiles-v13`).
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is

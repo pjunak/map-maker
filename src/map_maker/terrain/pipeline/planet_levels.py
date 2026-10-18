@@ -92,11 +92,7 @@ def level_parent(
         None if planet.runoff_weight is None
         else np.maximum(smoothly(planet.runoff_weight), MIN_RUNOFF_WEIGHT)
     )
-    erodibility = np.clip(
-        smoothly(planet.erodibility),
-        float(planet.erodibility.min()),
-        float(planet.erodibility.max()),
-    )
+    erodibility = smoothly(planet.erodibility)
     flow = route(
         mesh, relief_m, ~land | region.boundary, runoff, parent_inflows(planet, region)
     )
