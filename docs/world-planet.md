@@ -78,13 +78,17 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
 
    On a flat map, drag to pan, use the wheel to zoom and press F to fit. On a globe:
    - drag to turn it: the ground you grab follows the cursor, with north kept up;
-   - use the wheel to zoom towards the cursor, up to 16 times;
+   - flick it to set it spinning; it slows to a stop, and a click stops it;
+   - use the wheel to zoom towards the cursor, up to 16 times, or + and - to zoom
+     about the centre;
+   - use the arrow keys to turn it;
    - press F to see the whole globe again.
 
    On a polar view, drag to turn it about the pole and use the wheel to show more
    or less of it. The globe fills the window and stays sharp while it turns
-   ([ADR-0101](adr/0101-interactive-globe-views.md)); opened regions are outlined
-   on it. Below the map:
+   ([ADR-0101](adr/0101-interactive-globe-views.md)). Opened regions are outlined
+   on it, and a scale bar gives the distance at the centre of the view. Below the
+   map:
    - the legend explains the current map;
    - **Under the cursor** reads out the ground height, lake, river discharge,
      temperature, rainfall, Köppen zone and any volcano.

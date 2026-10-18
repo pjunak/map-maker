@@ -9,10 +9,11 @@ of a source that draws them on demand, drawing missing ones in the background.
 
 from __future__ import annotations
 
+import time
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
-from math import degrees
+from math import degrees, exp, hypot
 from typing import Protocol
 
 from PIL import Image, ImageTk
@@ -337,17 +338,27 @@ class GlobeFrame:
 
 
 SPACE_COLOUR = "#{:02x}{:02x}{:02x}".format(*SPACE)  # matches the projected views' surround
+SPIN_SAMPLE_S = 0.08  # a release spins the globe at the drag's speed over this last stretch
+SPIN_MIN_SAMPLE_S = 0.015  # shorter stretches are too noisy to measure a speed
+SPIN_MIN_SPEED = 500.0  # pixels a second; slower releases just stop
+SPIN_MAX_SPEED = 4000.0
+SPIN_STOP_SPEED = 25.0
+SPIN_FRICTION_S = 0.45  # the spin slows by a factor e in this time
+SPIN_MS = 15
+KEY_TURN = 0.125  # an arrow key turns the view by this share of its radius
 
 
 class GlobeCanvas(tk.Canvas):
     """A world-frame map shown as a globe or polar view, rendered off the Tk thread.
 
     Every frame is drawn sharp over the whole canvas (``map_projection.render``).
-    Dragging keeps the ground under the cursor under it, north up; the wheel
-    zooms a globe towards the cursor and a polar view about its pole; ``fit``
-    shows the whole globe or hemisphere again. Clicks and hover report
-    longitude and latitude in degrees, and ``overlay`` draws vector marks
-    placed with ``to_canvas`` over each frame.
+    Dragging keeps the ground under the cursor under it, north up, and a quick
+    flick leaves the view spinning until friction stops it. The wheel and the
+    plus and minus keys zoom a globe towards the cursor (or centre) and a polar
+    view about its pole; arrow keys turn the view; ``fit`` shows the whole globe
+    or hemisphere again. Clicks and hover report longitude and latitude in
+    degrees, and ``overlay`` draws vector marks placed with ``to_canvas`` over
+    each frame.
     """
 
     def __init__(
@@ -380,13 +391,25 @@ class GlobeCanvas(tk.Canvas):
         self._press: Point | None = None
         self._grabbed: Point | None = None  # longitude and latitude held by a drag
         self._dragging = False
+        self._samples: list[tuple[float, float, float]] = []  # recent drag (time, x, y)
+        self._spin: Point | None = None  # pixels a second, as if still dragged
+        self._spin_time = 0.0
+        self._spin_id: str | None = None
         self.bind("<Configure>", lambda _e: self.request())
+        self.bind("<Destroy>", lambda _e: self.stop_spin())
         self.bind("<MouseWheel>", self._wheel)
         self.bind("<Motion>", self._motion)
         self.bind("<Leave>", lambda _e: self._on_hover(None) if self._on_hover else None)
         self.bind("<ButtonPress-1>", self._press_left)
         self.bind("<B1-Motion>", self._drag)
         self.bind("<ButtonRelease-1>", self._release)
+        for key, east, north in (("<Left>", -1, 0), ("<Right>", 1, 0), ("<Up>", 0, 1),
+                                 ("<Down>", 0, -1)):
+            self.bind(key, lambda _e, east=east, north=north: self._key_turn(east, north))
+        for key in ("<plus>", "<equal>", "<KP_Add>"):
+            self.bind(key, lambda _e: self._key_zoom(WHEEL_STEP))
+        for key in ("<minus>", "<KP_Subtract>"):
+            self.bind(key, lambda _e: self._key_zoom(1 / WHEEL_STEP))
 
     def show(self, image: Image.Image | None, central_meridian_deg: float) -> None:
         self.image, self.central_meridian_deg = image, central_meridian_deg
@@ -394,6 +417,7 @@ class GlobeCanvas(tk.Canvas):
 
     def set_kind(self, kind: str) -> None:
         if kind != self.kind:
+            self.stop_spin()
             self.kind = kind
             self.request()
 
@@ -415,6 +439,7 @@ class GlobeCanvas(tk.Canvas):
 
     def fit(self) -> None:
         """Show the whole globe, or a polar view out to the equator."""
+        self.stop_spin()
         self.zoom, self.polar_span = 1.0, 90.0
         self.request()
         self._notify()
@@ -506,12 +531,31 @@ class GlobeCanvas(tk.Canvas):
         self.focus_set()
         if event.delta and self.image is not None:
             factor = WHEEL_STEP if event.delta > 0 else 1 / WHEEL_STEP
+            self.stop_spin()
             self.set_projection(zoomed(self.projection(), self.size(), factor, event.x, event.y))
+        return "break"
+
+    def _key_turn(self, east: float, north: float) -> str:
+        """Turn the view towards east and north by ``KEY_TURN`` of its radius."""
+        if self.image is not None:
+            self.stop_spin()
+            step = KEY_TURN * view_radius(self.projection(), self.size())
+            self.turn(-east * step, north * step)
+        return "break"
+
+    def _key_zoom(self, factor: float) -> str:
+        if self.image is not None:
+            self.stop_spin()
+            width, height = self.size()
+            self.set_projection(zoomed(self.projection(), (width, height), factor,
+                                       width / 2, height / 2))
         return "break"
 
     def _press_left(self, event: tk.Event[tk.Misc]) -> None:
         self.focus_set()
+        self.stop_spin()
         self._press, self._dragging = (event.x, event.y), False
+        self._samples = [(time.monotonic(), float(event.x), float(event.y))]
         self._grabbed = screen_lonlat(self.projection(), self.size(), event.x, event.y)
 
     def _drag(self, event: tk.Event[tk.Misc]) -> None:
@@ -523,6 +567,9 @@ class GlobeCanvas(tk.Canvas):
         self._dragging = True
         self.configure(cursor="fleur")
         self._press = (event.x, event.y)
+        now = time.monotonic()
+        self._samples = [s for s in self._samples if now - s[0] <= SPIN_SAMPLE_S]
+        self._samples.append((now, float(event.x), float(event.y)))
         self.drag_to(event.x, event.y, dx, dy)
 
     def drag_to(self, x: float, y: float, dx: float, dy: float) -> None:
@@ -556,12 +603,63 @@ class GlobeCanvas(tk.Canvas):
 
     def _release(self, event: tk.Event[tk.Misc]) -> None:
         dragged = self._dragging
+        velocity = self._release_velocity() if dragged else None
         self._press, self._grabbed, self._dragging = None, None, False
         self.configure(cursor="")
-        if not dragged and self._on_click is not None:
+        if velocity is not None:
+            self.spin(velocity)
+        elif not dragged and self._on_click is not None:
             position = self.to_lonlat(event.x, event.y)
             if position is not None:
                 self._on_click(position, event)
+
+    def _release_velocity(self) -> Point | None:
+        """The drag's speed over its last moments, if quick enough to spin the view."""
+        now = time.monotonic()
+        recent = [s for s in self._samples if now - s[0] <= SPIN_SAMPLE_S]
+        self._samples = []
+        if len(recent) < 2 or recent[-1][0] - recent[0][0] < SPIN_MIN_SAMPLE_S:
+            return None
+        (t0, x0, y0), (t1, x1, y1) = recent[0], recent[-1]
+        vx, vy = (x1 - x0) / (t1 - t0), (y1 - y0) / (t1 - t0)
+        speed = hypot(vx, vy)
+        if speed < SPIN_MIN_SPEED:
+            return None
+        scale = min(1.0, SPIN_MAX_SPEED / speed)
+        return vx * scale, vy * scale
+
+    def spin(self, velocity: Point) -> None:
+        """Keep turning as if dragged at ``velocity`` (pixels a second), slowing down."""
+        self.stop_spin()
+        self._spin, self._spin_time = velocity, time.monotonic()
+        self._spin_id = self.after(SPIN_MS, self._coast)
+
+    def stop_spin(self) -> None:
+        self._spin = None
+        if self._spin_id is not None:
+            self.after_cancel(self._spin_id)
+            self._spin_id = None
+
+    @property
+    def spinning(self) -> bool:
+        return self._spin is not None
+
+    def _coast(self) -> None:
+        self._spin_id = None
+        if self._spin is None or self.image is None:
+            self._spin = None
+            return
+        now = time.monotonic()
+        elapsed, self._spin_time = now - self._spin_time, now
+        vx, vy = self._spin
+        self.turn(vx * elapsed, vy * elapsed)
+        slowing = exp(-elapsed / SPIN_FRICTION_S)
+        vx, vy = vx * slowing, vy * slowing
+        if hypot(vx, vy) < SPIN_STOP_SPEED:
+            self._spin = None
+            return
+        self._spin = (vx, vy)
+        self._spin_id = self.after(SPIN_MS, self._coast)
 
     def _notify(self) -> None:
         if self._on_view_changed is not None:

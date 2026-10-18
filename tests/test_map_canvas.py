@@ -131,3 +131,44 @@ def test_globe_canvas_renders_off_the_tk_thread_and_follows_the_cursor(root: tk.
     canvas.set_kind("north-polar")
     assert canvas.projection().kind == "north-polar"
     settle()
+
+
+def test_globe_canvas_spins_after_a_flick_and_keys_turn_it(root: tk.Tk) -> None:
+    worker = LatestWorker(TkPump(root), lambda error: (_ for _ in ()).throw(error))
+    canvas = GlobeCanvas(root, worker)
+    canvas.pack(fill="both", expand=True)
+    root.update()
+    canvas.show(gradient(512, 256), central_meridian_deg=0.0)
+    canvas.lon, canvas.lat = 0.0, 0.0
+    # Arrow keys turn the view east and north; plus and minus zoom about the centre.
+    canvas._key_turn(1, 0)
+    assert canvas.lon > 0 and canvas.lat == 0
+    canvas._key_turn(0, 1)
+    assert canvas.lat > 0
+    canvas._key_zoom(2.0)
+    assert canvas.zoom == 2.0
+    canvas._key_zoom(0.25)
+    assert canvas.zoom == 1.0
+    # A quick flick keeps the globe turning until friction stops it.
+    now = time.monotonic()
+    canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 140.0, 100.0)]
+    velocity = canvas._release_velocity()
+    assert velocity is not None and velocity[0] == pytest.approx(1000.0)
+    before = canvas.lon
+    canvas.spin(velocity)
+    deadline = time.monotonic() + 10
+    while canvas.spinning and time.monotonic() < deadline:
+        root.update()
+        time.sleep(0.01)
+    assert not canvas.spinning and canvas.lon < before  # dragged east, so the view turns west
+    # A slow release, or one too brief to measure, does not spin; a press stops a spin.
+    now = time.monotonic()
+    canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 102.0, 100.0)]
+    assert canvas._release_velocity() is None
+    canvas._samples = [(now - 0.002, 100.0, 100.0), (now - 0.001, 140.0, 100.0)]
+    assert canvas._release_velocity() is None
+    canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 900.0, 100.0)]
+    assert canvas._release_velocity() == pytest.approx((4000.0, 0.0))  # capped
+    canvas.spin((800.0, 0.0))
+    canvas._press_left(SimpleNamespace(x=10, y=10))  # type: ignore[arg-type]
+    assert not canvas.spinning

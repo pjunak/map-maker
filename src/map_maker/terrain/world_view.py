@@ -22,7 +22,11 @@ from uuid import uuid4
 
 from PIL import Image
 
-from map_maker.terrain.adapters.map_projection import PROJECTION_LABELS, PROJECTIONS
+from map_maker.terrain.adapters.map_projection import (
+    PROJECTION_LABELS,
+    PROJECTIONS,
+    view_radius,
+)
 from map_maker.terrain.adapters.map_views import (
     PREVIEW_LAYERS,
     THEME_BY_ID,
@@ -116,8 +120,9 @@ CONTEXT_LEGENDS: dict[str, str] = {
 HINTS = {
     "source": "Click a shape to select it (Ctrl adds) · drag to pan · wheel to zoom · F fits",
     "flat": "Drag to pan · wheel to zoom · F fits the map",
-    "globe": "Drag to turn the globe · wheel to zoom · F shows all of it",
-    "polar": "Drag to turn · wheel to zoom · F shows out to the equator",
+    "globe": "Drag or flick to turn the globe · wheel or +/- to zoom · arrows turn · "
+             "F shows all of it",
+    "polar": "Drag or flick to turn · wheel or +/- to zoom · F shows out to the equator",
     "pick": "Click the map to build {name} detail there · Esc cancels",
     "region": "Drag to pan · wheel to zoom · the path above returns to larger maps",
 }
@@ -777,9 +782,19 @@ class WorldMapView(ttk.Frame):
                         segment.extend(position)
                 if len(segment) >= 4:
                     canvas.create_line(*segment, fill=colour, width=2)
-        projection = canvas.projection()
+        frame = canvas.frame
+        assert frame is not None
+        projection = frame.projection
         zoom = f"  ·  {projection.zoom:.1f}x" if projection.kind == "globe" else ""
         map_label(canvas, 12, 12, f"{self.display_layer.get()}{zoom}")
+        if scene is not None and scene.frame is not None:
+            # Ground per pixel at the centre: an orthographic globe is true to scale
+            # there, and a polar view is true along every meridian.
+            ground_m = scene.frame.radius_km * 1000
+            if projection.kind != "globe":
+                ground_m *= radians(projection.polar_span_deg)
+            self._draw_scale_bar(canvas, ground_m / view_radius(projection, frame.size),
+                                 float(frame.size[1]))
 
     @staticmethod
     def _draw_local_circle(
@@ -797,8 +812,12 @@ class WorldMapView(ttk.Frame):
     @staticmethod
     def _draw_scale(canvas: FlatMapCanvas, level: RegionLevel) -> None:
         left, _, right, bottom = canvas.map_rect()
-        window = level.run.window
-        metres_per_px = 2 * window.radius_m / max(right - left, 1.0)
+        metres_per_px = 2 * level.run.window.radius_m / max(right - left, 1.0)
+        WorldMapView._draw_scale_bar(canvas, metres_per_px, bottom)
+
+    @staticmethod
+    def _draw_scale_bar(canvas: tk.Canvas, metres_per_px: float, bottom: float) -> None:
+        """A bar of a round distance about 140 pixels long, at the map's bottom left."""
         target = 140 * metres_per_px
         nice = max((n * 10**p for p in range(0, 8) for n in (1, 2, 5) if n * 10**p <= target),
                    default=target)
