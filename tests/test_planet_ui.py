@@ -16,7 +16,7 @@ from test_globe_model import read_glb
 
 from map_maker.terrain import ui, world_view
 from map_maker.terrain.adapters import planet_maps
-from map_maker.terrain.adapters.map_projection import PROJECTIONS
+from map_maker.terrain.adapters.map_projection import MAX_GLOBE_ZOOM, PROJECTIONS, MapProjection
 from map_maker.terrain.adapters.map_views import PREVIEW_LAYERS, THEMES, MapTheme
 from map_maker.terrain.domain.planet import PlanetSettings
 
@@ -357,6 +357,29 @@ def test_zoom_to_region_drills_down_in_the_map_and_reuses_cached_tiles(
     maps.go_to_level(0)
     assert maps.level == 0 and maps.display_layer.get() == "Planet atlas"
     assert str(maps.pick_button["state"]) == "normal"
+    # The globe shows opened regions drawn in the shown map over it, deepest last.
+    maps.projection.set("globe")
+    maps.set_layer("Planet topographic")
+    drapes = maps.globe.drapes
+    assert [d.image for d in drapes] == [lvl.images["topographic"].image for lvl in maps.levels]
+    window = maps.levels[1].run.window
+    assert drapes[1].centre == window.centre
+    assert drapes[1].angle_rad == pytest.approx(window.radius_m / window.planet_m)
+    settle(app, lambda: globe_current(app))
+
+    def outlines() -> int:
+        """Overlay items drawn two pixels wide: region outlines."""
+        widths: list[str] = [maps.globe.itemcget(item, "width")
+                             for item in maps.globe.find_withtag("overlay")]
+        return sum(1 for width in widths if float(width) == 2)
+
+    assert outlines() >= 2  # the whole globe outlines the regions
+    maps.globe.set_projection(MapProjection("globe", *window.centre, zoom=MAX_GLOBE_ZOOM))
+    settle(app, lambda: globe_current(app))
+    assert outlines() == 0  # zoomed in, their maps show instead
+    maps.set_layer("Planet atlas")
+    maps.projection.set("equirectangular")
+    maps.refresh()
     lon, lat = level.run.window.centre
     view.zoom_region(lon, lat, 600)
     wait(app)

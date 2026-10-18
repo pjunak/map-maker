@@ -56,8 +56,15 @@ class ParchmentInputs:
     volcanoes: tuple[tuple[float, float, bool], ...] = ()  # (column, row, active)
 
 
-def parchment_image(inputs: ParchmentInputs, seed: int, symbol_px: float) -> Image.Image:
-    """The map; ``symbol_px`` is the width of a large mountain symbol in pixels."""
+def parchment_image(
+    inputs: ParchmentInputs, seed: int, symbol_px: float, *, framed: bool = True
+) -> Image.Image:
+    """The map; ``symbol_px`` is the width of a large mountain symbol in pixels.
+
+    ``framed`` rules a double frame inside the sheet's edges. Regional windows
+    are drawn without it: their disc touches the edges, and the globe shows
+    them over the world map.
+    """
     z = inputs.elevation_m
     inside = np.isfinite(z)
     zz = np.where(inside, z, 0.0)
@@ -88,7 +95,8 @@ def parchment_image(inputs: ParchmentInputs, seed: int, symbol_px: float) -> Ima
     rgb = np.where(inside[..., None], rgb, np.array(PAPER, dtype=np.float64) * 0.93)
     image = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
     symbols = _symbols(inputs, zz, land & ~inputs.lakes & ~inputs.ice, rng, symbol_px)
-    return _frame(_stamp(image, symbols))
+    image = _stamp(image, symbols)
+    return _frame(image) if framed else image
 
 
 @dataclass(frozen=True, slots=True)

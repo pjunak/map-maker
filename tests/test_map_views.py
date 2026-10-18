@@ -6,6 +6,8 @@ from map_maker.terrain.adapters.map_parchment import ParchmentInputs
 from map_maker.terrain.adapters.map_projection import (
     MAX_GLOBE_ZOOM,
     SPACE,
+    Drape,
+    DrapeTextures,
     MapProjection,
     MapTexture,
     grab,
@@ -17,7 +19,8 @@ from map_maker.terrain.adapters.map_projection import (
     zoomed,
 )
 from map_maker.terrain.adapters.map_views import PREVIEW_LAYERS, THEME_BY_ID, THEMES, theme_file
-from map_maker.terrain.pipeline.sphere_views import latitude_prefilter
+from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+from map_maker.terrain.pipeline.sphere_views import DRAPE_FADE, latitude_prefilter
 
 
 def _lonlat_image(columns: int = 720) -> Image.Image:
@@ -197,6 +200,139 @@ def test_reprojection_samples_the_world_image_and_is_repeatable() -> None:
     assert flat.size == (200, 100)
     polar = reproject(image, MapProjection("north-polar"), 120, graticule=True)
     assert polar.size == (120, 120)
+
+
+FLAT_SIZE = (2400, 1200)  # a flat world 0.15° a pixel
+
+
+def _flat_lonlat() -> tuple[np.ndarray, np.ndarray]:
+    """Longitude and latitude at the pixel centres of a ``FLAT_SIZE`` flat world."""
+    width, height = FLAT_SIZE
+    lon = (np.arange(width) + 0.5) / width * 360 - 180
+    lat = 90 - (np.arange(height) + 0.5) / height * 180
+    return np.meshgrid(lon, lat)
+
+
+def _unit(lon: np.ndarray, lat: np.ndarray) -> np.ndarray:
+    lam, phi = np.radians(lon), np.radians(lat)
+    return np.stack((np.cos(phi) * np.cos(lam), np.cos(phi) * np.sin(lam), np.sin(phi)), -1)
+
+
+def _distance(lon: np.ndarray, lat: np.ndarray, centre: tuple[float, float]) -> np.ndarray:
+    """Great-circle angle (radians) from ``centre`` to every point."""
+    dot = _unit(lon, lat) @ _unit(np.array(centre[0]), np.array(centre[1]))
+    return np.arccos(np.clip(dot, -1, 1))
+
+
+def _disc_image(size: int, inside: tuple[int, int, int]) -> Image.Image:
+    """A regional window's image: ``inside`` on its disc, the app's outside colour beyond."""
+    centres = np.arange(size) + 0.5 - size / 2
+    disc = np.hypot(*np.meshgrid(centres, centres)) <= size / 2
+    rgb = np.where(disc[..., None], np.array(inside), np.array((36, 54, 82)))
+    return Image.fromarray(rgb.astype(np.uint8))
+
+
+def _flat_with(drapes: tuple[Drape, ...]) -> np.ndarray:
+    """A black world with ``drapes``; its texels are so large every pixel shows them."""
+    black = MapTexture.from_image(Image.new("RGB", (8, 4)))
+    flat = render(black, MapProjection("equirectangular"), FLAT_SIZE,
+                  drapes=DrapeTextures.from_drapes(drapes))
+    return np.asarray(flat, dtype=np.float64)
+
+
+def test_drapes_show_each_regional_pixel_where_its_azimuthal_mapping_puts_it() -> None:
+    planet_m, size = 6.0e6, 128
+    # Red and green encode the window position (u across, v down) of each pixel centre.
+    ramp = (np.arange(size) + 0.5) / size * 255
+    u_code, v_code = np.meshgrid(ramp, ramp)
+    coded = Image.fromarray(np.round(np.stack(
+        (u_code, v_code, np.full_like(u_code, 255)), axis=-1)).astype(np.uint8))
+    lon, lat = _flat_lonlat()
+    # Across the antimeridian at high latitude, and in the southern tropics.
+    for centre, angle in (((170.0, 55.0), 0.3), ((-30.0, -20.0), 0.5)):
+        pixels = _flat_with((Drape(coded, centre, angle),))
+        rho = _distance(lon, lat, centre) / angle
+        shown = rho < 0.9
+        assert shown.sum() > 2000
+        assert np.all(pixels[rho > 1, 2] == 0)  # the black world outside the circle
+        xy = forward_aeqd(_unit(lon[shown], lat[shown]), *centre, planet_m)
+        radius_m = angle * planet_m
+        u = (xy[:, 0] + radius_m) / (2 * radius_m)
+        v = (radius_m - xy[:, 1]) / (2 * radius_m)
+        # Texels are larger than pixels here, so pixels interpolate the code linearly.
+        assert np.abs(pixels[shown, 0] / 255 - u).max() < 1.2 / 255
+        assert np.abs(pixels[shown, 1] / 255 - v).max() < 1.2 / 255
+        # A zoomed globe shows the same positions.
+        globe = MapProjection("globe", *centre, zoom=MAX_GLOBE_ZOOM)
+        size = (120, 90)
+        black = MapTexture.from_image(Image.new("RGB", (8, 4)))
+        shaded = np.asarray(render(black, globe, size, drapes=DrapeTextures.from_drapes(
+            (Drape(coded, centre, angle),))), dtype=np.float64)
+        rows, columns = np.mgrid[0:size[1]:7, 0:size[0]:7]
+        points = [screen_lonlat(globe, size, c + 0.5, r + 0.5)
+                  for r, c in zip(rows.ravel(), columns.ravel(), strict=True)]
+        assert all(point is not None for point in points)
+        xy = forward_aeqd(_unit(*np.array(points).T), *centre, planet_m)
+        # Blue is 255 on the drape, so it measures the globe's limb shading.
+        seen = shaded[rows.ravel(), columns.ravel()]
+        unshaded = seen[:, :2] / seen[:, 2:]
+        assert np.abs(unshaded[:, 0] - (xy[:, 0] + radius_m) / (2 * radius_m)).max() < 2 / 255
+        assert np.abs(unshaded[:, 1] - (radius_m - xy[:, 1]) / (2 * radius_m)).max() < 2 / 255
+
+
+def test_drapes_fade_into_the_world_over_their_outer_rim() -> None:
+    lon, lat = _flat_lonlat()
+    centre, angle = (40.0, 10.0), 0.5
+    rho = _distance(lon, lat, centre) / angle
+    s = np.clip((1 - rho) / DRAPE_FADE, 0, 1)
+    expected = 255 * s * s * (3 - 2 * s)  # smoothstep from the rim inwards
+    band = (rho > 1 - DRAPE_FADE) & (rho < 1)
+    assert band.sum() > 1000
+    # The outside colour must not reach the rim through filtering, whether the
+    # image is magnified (32 px) or minified (4,096 px) on the view.
+    for size in (32, 4096):
+        pixels = _flat_with((Drape(_disc_image(size, (255, 255, 255)), centre, angle),))
+        assert np.abs(pixels[..., 0] - expected).max() <= 1.0
+        assert np.all(pixels[rho <= 1 - DRAPE_FADE] == 255)
+        assert np.all(pixels[rho >= 1] == 0)
+        assert np.all(pixels[band, 2] == pixels[band, 0])  # no blue from beyond the disc
+        assert 0.4 * band.sum() < ((pixels[band, 0] > 10) & (pixels[band, 0] < 245)).sum()
+
+
+def test_the_last_drape_lies_on_top_and_coarse_pixels_skip_drapes() -> None:
+    lon, lat = _flat_lonlat()
+    outer = Drape(_disc_image(64, (255, 0, 0)), (10.0, 0.0), 0.3)
+    inner = Drape(_disc_image(64, (0, 255, 0)), (14.0, 3.0), 0.08)
+    in_inner = _distance(lon, lat, inner.centre) / inner.angle_rad < 0.9
+    only_outer = (_distance(lon, lat, outer.centre) / outer.angle_rad < 0.9) & (
+        _distance(lon, lat, inner.centre) / inner.angle_rad > 1
+    )
+    nested = _flat_with((outer, inner))
+    assert np.all(nested[in_inner] == (0, 255, 0)) and np.all(nested[only_outer] == (255, 0, 0))
+    assert np.all(_flat_with((inner, outer))[in_inner] == (255, 0, 0))
+    # A view whose pixels are larger than a world texel shows the world texture
+    # alone, exactly; zoomed in, the drape replaces it.
+    world = MapTexture.from_image(_lonlat_image(1024))
+    drapes = DrapeTextures.from_drapes((outer, inner))
+    whole = MapProjection("globe", 10.0, 0.0)
+    assert render(world, whole, (200, 200), drapes=drapes).tobytes() == render(
+        world, whole, (200, 200)).tobytes()
+    close = render(world, MapProjection("globe", *inner.centre, zoom=MAX_GLOBE_ZOOM), (200, 200),
+                   drapes=drapes)
+    assert np.allclose(np.asarray(close)[100, 100], (0, 255, 0), atol=1)
+
+
+def test_drapes_are_validated() -> None:
+    square = Image.new("RGB", (16, 16))
+    for image, centre, angle in (
+        (Image.new("RGB", (16, 8)), (0.0, 0.0), 0.1),
+        (square, (0.0, 95.0), 0.1),
+        (square, (float("inf"), 0.0), 0.1),
+        (square, (0.0, 0.0), 0.0),
+        (square, (0.0, 0.0), np.pi),
+    ):
+        with pytest.raises(ValueError):
+            Drape(image, centre, angle)
 
 
 def test_projection_settings_are_validated() -> None:

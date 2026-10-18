@@ -15,7 +15,8 @@ The whole-planet path lives in `planet*.py`:
   `planet_suggestions.py` suggests sites for them (ADR-0099);
 - `planet_regional.py` and `planet_tiles.py` provide regional detail;
 - `sphere_views.py` holds the display kernels that draw globe, polar and flat
-  views of world-frame images (ADR-0101).
+  views of world-frame images (ADR-0101), with regional images draped over
+  them (ADR-0103).
 
 See the [planet guide](../../../../docs/world-planet.md) and ADR-0085/0086. The
 rest of this page describes the local composed generator.

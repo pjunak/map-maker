@@ -131,3 +131,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0100: Smooth polar land east-west so drawn shapes do not become radial fingers](0100-smooth-polar-land-east-west.md)
 - [ADR-0101: Draw globe views with a compiled, mip-mapped sampler and turn them by grabbing the ground](0101-interactive-globe-views.md)
 - [ADR-0102: Save a planet map as a 3D globe model in glTF binary (.glb)](0102-globe-models-in-gltf.md)
+- [ADR-0103: Show opened regional maps on the globe where it is zoomed in on them](0103-regional-detail-on-the-globe.md)

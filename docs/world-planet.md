@@ -89,8 +89,9 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
    On a polar view, drag to turn it about the pole and use the wheel to show more
    or less of it. The globe fills the window and stays sharp while it turns
    ([ADR-0101](adr/0101-interactive-globe-views.md)). Opened regions are outlined
-   on it, and a scale bar gives the distance at the centre of the view. Below the
-   map:
+   on it, and zooming in over one shows its regional map
+   ([below](#zoom-into-regional-province-and-local-detail)). A scale bar gives the
+   distance at the centre of the view. Below the map:
    - the legend explains the current map;
    - **Under the cursor** reads out the ground height, lake, river discharge,
      temperature, rainfall, Köppen zone and any volcano.
@@ -128,6 +129,16 @@ river widens as you zoom in. Rivers narrower than a pixel keep a thin line that
 thickens with their discharge, whatever else the map shows.
 - The path above the map (**World / Region … / Province …**) returns to any larger
   map. Each larger map outlines the smaller ones opened from it.
+- Back on the world's globe or polar view, opened regions lie over the planet map
+  wherever they have been drawn in the map shown. Zoom in over one and its
+  regional map replaces the magnified planet map, fading into it over the outer
+  4 per cent of its radius; a province or local window shows over its region
+  in turn, and their outlines give way to the maps. Regional maps fade in where
+  the planet map starts to be magnified, between about 1x and 4x zoom depending
+  on the window and the planet's detail
+  ([ADR-0103](adr/0103-regional-detail-on-the-globe.md)). A region drawn in
+  another map adds nothing until you show this map in it. Saved globe images
+  include regional maps; globe models do not.
 - Choose **Planet atlas**, **Planet relief**, **Planet topographic** or **Planet
   parchment**. Each renders in the background and is kept. The topographic view
   stretches its tints over the window's own height range and draws contours at

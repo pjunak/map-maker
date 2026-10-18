@@ -5,7 +5,9 @@ resample that image. ``MapTexture`` prepares an image once (latitude prefilter
 and mip levels) and ``render`` draws any view of it at any size with compiled
 kernels (``pipeline.sphere_views``), fast enough to turn a globe interactively.
 Projections are pure functions of the image and the view, so the same build and
-view always give the same picture.
+view always give the same picture. ``DrapeTextures`` prepares regional images
+(``Drape``) that ``render`` shows over the world image where a view is zoomed in
+on them.
 
 The screen functions (``screen_lonlat``, ``lonlat_screen``, ``grab``, ``zoomed``)
 use the same geometry analytically, so hover read-outs, overlays and dragging
@@ -14,14 +16,18 @@ agree with the drawn pixels.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from math import acos, asin, atan2, cos, degrees, hypot, pi, radians, sin, sqrt
+from math import acos, asin, atan2, cos, degrees, hypot, isfinite, pi, radians, sin, sqrt
 
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image
 
 from map_maker.terrain.pipeline.sphere_views import (
+    DETAIL_FULL,
+    FRAME_COLUMNS,
+    fill_beyond_disc,
     globe_points,
     latitude_prefilter,
     polar_points,
@@ -117,6 +123,98 @@ class MapTexture:
         )
 
 
+@dataclass(frozen=True, slots=True, eq=False)
+class Drape:
+    """A regional map to show over the world map.
+
+    ``image`` is a square azimuthal equidistant view about ``centre`` (longitude
+    and latitude in degrees), north up, its sides ``angle_rad`` of arc from the
+    centre (window radius over planet radius). Only its inscribed disc is shown.
+    """
+
+    image: Image.Image
+    centre: tuple[float, float]
+    angle_rad: float
+
+    def __post_init__(self) -> None:
+        if self.image.width != self.image.height or self.image.width < 2:
+            raise ValueError("A drape needs a square image at least two pixels wide.")
+        lon, lat = self.centre
+        if not (isfinite(lon) and -90 <= lat <= 90):
+            raise ValueError("A drape's centre must be a finite longitude and a latitude in ±90°.")
+        if not 0 < self.angle_rad < pi:
+            raise ValueError("A drape must reach between 0 and 180° from its centre.")
+
+    def key(self) -> tuple[int, tuple[float, float], float]:
+        """Identifies the drape for caching: its image object and its geometry."""
+        return id(self.image), self.centre, self.angle_rad
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class DrapeTextures:
+    """Drapes prepared for views, in the order they lie on the map (last on top).
+
+    Each image has its corners filled from inside its disc and is mip-mapped;
+    ``data`` packs every level of every drape. Drape ``k`` has ``levels[k, 1]``
+    levels from index ``levels[k, 0]`` of ``offsets`` and ``sizes``, and its
+    geometry in row ``k`` of ``frames`` (``sphere_views.FRAME_COLUMNS``).
+    """
+
+    data: NDArray[np.uint8]
+    offsets: NDArray[np.int64]
+    sizes: NDArray[np.int64]
+    levels: NDArray[np.int64]
+    frames: F64
+
+    @staticmethod
+    def from_drapes(drapes: Sequence[Drape]) -> DrapeTextures:
+        arrays: list[NDArray[np.uint8]] = []
+        sizes: list[int] = []
+        levels: list[tuple[int, int]] = []
+        frames: list[list[float]] = []
+        for drape in drapes:
+            rgb = np.ascontiguousarray(np.asarray(drape.image.convert("RGB"), dtype=np.uint8))
+            level = Image.fromarray(fill_beyond_disc(rgb))
+            first = len(sizes)
+            while True:
+                arrays.append(np.asarray(level, dtype=np.uint8).ravel())
+                sizes.append(level.width)
+                if level.width <= SMALLEST_LEVEL_ROWS:
+                    break
+                level = level.reduce(2)
+            levels.append((first, len(sizes) - first))
+            east, north, centre = _axes(*drape.centre)
+            frames.append([*centre, *east, *north, drape.angle_rad, cos(drape.angle_rad),
+                           *_box(drape)])
+        offsets = np.cumsum([0, *(array.size for array in arrays[:-1])], dtype=np.int64)
+        return DrapeTextures(
+            np.concatenate(arrays) if arrays else np.zeros(0, dtype=np.uint8),
+            offsets[: len(sizes)],
+            np.array(sizes, dtype=np.int64),
+            np.array(levels, dtype=np.int64).reshape(-1, 2),
+            np.array(frames, dtype=np.float64).reshape(-1, FRAME_COLUMNS),
+        )
+
+
+NO_DRAPES = DrapeTextures.from_drapes(())
+
+
+def _box(drape: Drape) -> tuple[float, float, float, float]:
+    """Latitude range, central longitude and longitude half-width around a drape's circle.
+
+    A small circle of radius ``a`` about latitude ``φ`` spans ``asin(sin a / cos φ)``
+    of longitude either side of its centre unless it reaches a pole. The box is
+    widened slightly so rounding never cuts the circle.
+    """
+    lon, lat = drape.centre
+    reach = degrees(drape.angle_rad)
+    margin = 1e-6
+    half = 180.0
+    if abs(lat) + reach < 90.0:
+        half = degrees(asin(min(1.0, sin(drape.angle_rad) / cos(radians(lat))))) + margin
+    return lat - reach - margin, lat + reach + margin, lon, half
+
+
 def view_radius(projection: MapProjection, size: Size) -> float:
     """Pixels from the centre of a globe or polar view to its rim."""
     short = float(min(size))
@@ -125,10 +223,33 @@ def view_radius(projection: MapProjection, size: Size) -> float:
     return short / 2
 
 
+def drapes_in_full(projection: MapProjection, size: Size, map_width: int) -> bool:
+    """Whether drapes over a map ``map_width`` pixels wide show in full at the view's centre.
+
+    The centre is where a globe or polar view is finest. Drapes replace the map
+    entirely where a pixel spans at most half of its texels.
+    """
+    if projection.kind == "equirectangular":
+        pixel = 2 * pi / size[0]
+    else:
+        reach = 1.0 if projection.kind == "globe" else radians(projection.polar_span_deg)
+        pixel = reach / view_radius(projection, size)
+    return pixel <= DETAIL_FULL * 2 * pi / map_width
+
+
 def render(
-    texture: MapTexture, projection: MapProjection, size: Size, *, graticule: bool = False
+    texture: MapTexture,
+    projection: MapProjection,
+    size: Size,
+    *,
+    graticule: bool = False,
+    drapes: DrapeTextures = NO_DRAPES,
 ) -> Image.Image:
-    """``texture`` drawn in ``projection`` on a view of ``size`` (width, height) pixels."""
+    """``texture`` drawn in ``projection`` on a view of ``size`` (width, height) pixels.
+
+    ``drapes`` show inside their circles wherever a pixel is finer than a
+    texel of ``texture``, fading into it at their rims.
+    """
     width, height = size
     if width < 1 or height < 1:
         raise ValueError("Views need at least one pixel.")
@@ -149,7 +270,8 @@ def render(
     out = np.empty((height, width, 3), dtype=np.uint8)
     colours = np.array((SPACE, HALO, GRATICULE), dtype=np.float64)
     sample_view(lon, lat, cover, light, glow, texture.data, texture.offsets, texture.widths,
-                texture.heights, texture.west_deg, GRATICULE_STEP_DEG if graticule else 0.0,
+                texture.heights, texture.west_deg, drapes.data, drapes.offsets, drapes.sizes,
+                drapes.levels, drapes.frames, GRATICULE_STEP_DEG if graticule else 0.0,
                 colours, out)
     return Image.fromarray(out)
 
@@ -299,7 +421,12 @@ def zoomed(
 
 def _basis(projection: MapProjection) -> F64:
     """World directions of a globe view's right, up and towards-the-viewer axes."""
-    lam, phi = radians(projection.lon_deg), radians(projection.lat_deg)
+    return _axes(projection.lon_deg, projection.lat_deg)
+
+
+def _axes(lon_deg: float, lat_deg: float) -> F64:
+    """World directions of east, north and up (outwards) at a point of the sphere."""
+    lam, phi = radians(lon_deg), radians(lat_deg)
     return np.array((
         (-sin(lam), cos(lam), 0.0),
         (-sin(phi) * cos(lam), -sin(phi) * sin(lam), cos(phi)),

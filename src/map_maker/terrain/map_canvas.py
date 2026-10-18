@@ -20,6 +20,8 @@ from PIL import Image, ImageTk
 
 from map_maker.terrain.adapters.map_projection import (
     SPACE,
+    Drape,
+    DrapeTextures,
     MapProjection,
     MapTexture,
     grab,
@@ -351,7 +353,8 @@ KEY_TURN = 0.125  # an arrow key turns the view by this share of its radius
 class GlobeCanvas(tk.Canvas):
     """A world-frame map shown as a globe or polar view, rendered off the Tk thread.
 
-    Every frame is drawn sharp over the whole canvas (``map_projection.render``).
+    Every frame is drawn sharp over the whole canvas (``map_projection.render``),
+    with any regional ``drapes`` over the map where the view is zoomed in on them.
     Dragging keeps the ground under the cursor under it, north up, and a quick
     flick leaves the view spinning until friction stops it. The wheel and the
     plus and minus keys zoom a globe towards the cursor (or centre) and a polar
@@ -383,11 +386,13 @@ class GlobeCanvas(tk.Canvas):
         self.graticule = True
         self.central_meridian_deg = 0.0
         self.image: Image.Image | None = None
+        self.drapes: tuple[Drape, ...] = ()
         self.placeholder = ""  # shown while there is no image
         self.overlay: Callable[[GlobeCanvas], None] | None = None
         self.frame: GlobeFrame | None = None
         self.photo: ImageTk.PhotoImage | None = None
         self._texture: tuple[Image.Image, float, MapTexture] | None = None
+        self._drape_textures: tuple[tuple[Drape, ...], DrapeTextures] | None = None
         self._press: Point | None = None
         self._grabbed: Point | None = None  # longitude and latitude held by a drag
         self._dragging = False
@@ -411,8 +416,13 @@ class GlobeCanvas(tk.Canvas):
         for key in ("<minus>", "<KP_Subtract>"):
             self.bind(key, lambda _e: self._key_zoom(1 / WHEEL_STEP))
 
-    def show(self, image: Image.Image | None, central_meridian_deg: float) -> None:
+    def show(
+        self, image: Image.Image | None, central_meridian_deg: float,
+        drapes: tuple[Drape, ...] = (),
+    ) -> None:
+        """Show ``image``, with ``drapes`` over it (later ones on top)."""
         self.image, self.central_meridian_deg = image, central_meridian_deg
+        self.drapes = drapes
         self.request()
 
     def set_kind(self, kind: str) -> None:
@@ -463,12 +473,13 @@ class GlobeCanvas(tk.Canvas):
                                  fill=MAP_TEXT_MUTED, font=FONT_MAP_LABEL[:2])
             return
         size, projection = self.size(), self.projection()
-        meridian, graticule = self.central_meridian_deg, self.graticule
+        meridian, graticule, drapes = self.central_meridian_deg, self.graticule, self.drapes
 
         def work() -> GlobeFrame:
             texture = self._texture_of(image, meridian)
-            return GlobeFrame(render(texture, projection, size, graticule=graticule),
-                              projection, size)
+            drawn = render(texture, projection, size, graticule=graticule,
+                           drapes=self._drape_textures_of(drapes))
+            return GlobeFrame(drawn, projection, size)
 
         self._worker.submit(work, self._present)
 
@@ -481,14 +492,15 @@ class GlobeCanvas(tk.Canvas):
         image = self.image
         assert image is not None
         projection, meridian = self.projection(), self.central_meridian_deg
-        graticule = self.graticule
+        graticule, drapes = self.graticule, self.drapes
         width, height = self.size()
         scale = pixels / min(width, height)
         size = (max(1, round(width * scale)), max(1, round(height * scale)))
 
         def draw() -> Image.Image:
             texture = self._texture_of(image, meridian)
-            return render(texture, projection, size, graticule=graticule)
+            return render(texture, projection, size, graticule=graticule,
+                          drapes=self._drape_textures_of(drapes))
 
         return draw
 
@@ -499,6 +511,14 @@ class GlobeCanvas(tk.Canvas):
         texture = MapTexture.from_image(image, meridian)
         self._texture = (image, meridian, texture)
         return texture
+
+    def _drape_textures_of(self, drapes: tuple[Drape, ...]) -> DrapeTextures:
+        cached = self._drape_textures
+        if cached is not None and [d.key() for d in cached[0]] == [d.key() for d in drapes]:
+            return cached[1]
+        textures = DrapeTextures.from_drapes(drapes)
+        self._drape_textures = (drapes, textures)
+        return textures
 
     def _present(self, frame: GlobeFrame) -> None:
         if self.image is None:

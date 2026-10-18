@@ -1033,7 +1033,7 @@ def window_parchment(window: RegionWindow, seed: int = 0) -> Image.Image | None:
         shown, cover, np.where(np.isfinite(window.elevation_m), z, np.nan), window.land,
         window.lakes | window.playa, window.rivers, light, window_ice_cover(window, z) > 0.5,
     )
-    return parchment_image(inputs, seed, float(np.clip(window.pixels / 45, 12, 30)))
+    return parchment_image(inputs, seed, float(np.clip(window.pixels / 45, 12, 30)), framed=False)
 
 
 def aeqd_crs_wkt(lon0: float, lat0: float, radius_m: float) -> str:

@@ -25,6 +25,8 @@ from PIL import Image
 from map_maker.terrain.adapters.map_projection import (
     PROJECTION_LABELS,
     PROJECTIONS,
+    Drape,
+    drapes_in_full,
     view_radius,
 )
 from map_maker.terrain.adapters.map_views import (
@@ -625,6 +627,7 @@ class WorldMapView(ttk.Frame):
             self.globe.show(
                 self.planet_maps.image(self.display_layer.get()),
                 run.result.world.project.frame.central_meridian_deg,
+                self._drapes(),
             )
         else:
             self.globe.grid_remove()
@@ -641,6 +644,21 @@ class WorldMapView(ttk.Frame):
     def draw_now(self) -> None:
         if not self._uses_globe():
             self.flat.draw_now()
+
+    def _drape_image(self, level: RegionLevel) -> Image.Image | None:
+        """The level's image of the shown map, if drawn: it lies over the globe."""
+        theme = THEME_BY_LABEL.get(self.display_layer.get())
+        pyramid = None if theme is None else level.images.get(theme.id)
+        return None if pyramid is None else pyramid.image
+
+    def _drapes(self) -> tuple[Drape, ...]:
+        """Opened regions drawn in the shown map, to show on the globe, deepest last."""
+        return tuple(
+            Drape(image, level.run.window.centre,
+                  level.run.window.radius_m / level.run.window.planet_m)
+            for level in self.levels
+            if (image := self._drape_image(level)) is not None
+        )
 
     def _flat_content(
         self,
@@ -763,11 +781,27 @@ class WorldMapView(ttk.Frame):
             canvas.create_line(*segment, fill=colour, width=width)
 
     def _globe_overlay(self, canvas: GlobeCanvas) -> None:
-        """Opened regions and the region about to be picked, on the globe or polar view."""
+        """Opened regions and the region about to be picked, on the globe or polar view.
+
+        A region whose map lies over the view is outlined until the view's centre
+        shows that map in full.
+        """
+        frame = canvas.frame
+        assert frame is not None
+        projection = frame.projection
         scene = self.scene
         if scene is not None and scene.frame is not None:
+            # Ground per pixel at the centre: an orthographic globe is true to scale
+            # there, and a polar view is true along every meridian.
+            planet_m = scene.frame.radius_km * 1000
+            ground_m = planet_m if projection.kind == "globe" else (
+                planet_m * radians(projection.polar_span_deg))
+            metres_per_px = ground_m / view_radius(projection, frame.size)
+            image = canvas.image
+            detailed = image is not None and drapes_in_full(projection, frame.size, image.width)
             circles = [(*level.run.window.centre, level.run.window.radius_m / 1000, MAP_TEXT)
-                       for level in self.levels]
+                       for level in self.levels
+                       if not (detailed and self._drape_image(level) is not None)]
             if self.picking.get() and self._pick_at is not None:
                 circles.append((*self._pick_at, self.radius_km(), MAP_HIGHLIGHT))
             for lon, lat, radius_km, colour in circles:
@@ -782,19 +816,9 @@ class WorldMapView(ttk.Frame):
                         segment.extend(position)
                 if len(segment) >= 4:
                     canvas.create_line(*segment, fill=colour, width=2)
-        frame = canvas.frame
-        assert frame is not None
-        projection = frame.projection
+            self._draw_scale_bar(canvas, metres_per_px, float(frame.size[1]))
         zoom = f"  ·  {projection.zoom:.1f}x" if projection.kind == "globe" else ""
         map_label(canvas, 12, 12, f"{self.display_layer.get()}{zoom}")
-        if scene is not None and scene.frame is not None:
-            # Ground per pixel at the centre: an orthographic globe is true to scale
-            # there, and a polar view is true along every meridian.
-            ground_m = scene.frame.radius_km * 1000
-            if projection.kind != "globe":
-                ground_m *= radians(projection.polar_span_deg)
-            self._draw_scale_bar(canvas, ground_m / view_radius(projection, frame.size),
-                                 float(frame.size[1]))
 
     @staticmethod
     def _draw_local_circle(
