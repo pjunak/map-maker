@@ -120,7 +120,10 @@ The region opens in the same view, at about 5 km detail: ridges, valley networks
 altitude zones and rivers. From a region, **Zoom to province** builds 1 km detail
 (30–300 km radius); from a province, **Zoom to local** builds 200 m detail
 (6–60 km radius). Each level is enriched from the one above
-([ADR-0088](adr/0088-nested-regional-detail-levels.md)).
+([ADR-0088](adr/0088-nested-regional-detail-levels.md)). Rivers are drawn at least
+as wide as their channel, about 4.8 √Q metres for a discharge of Q m³/s, so a large
+river widens as you zoom in. Rivers narrower than a pixel keep a thin line that
+thickens with their discharge, whatever else the map shows.
 - The path above the map (**World / Region … / Province …**) returns to any larger
   map. Each larger map outlines the smaller ones opened from it.
 - Choose **Planet atlas**, **Planet relief**, **Planet topographic** or **Planet

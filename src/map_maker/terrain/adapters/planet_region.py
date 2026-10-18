@@ -83,6 +83,8 @@ REGION_VERSION = 1
 REGION_EXAGGERATION = 1.3
 REGION_MOSAIC_WAVELENGTH_M = 8e3
 MEANDER_RUNOFF_M_YR = 0.3  # assumed runoff for discharge from drainage area
+CHANNEL_WIDTH_PER_ROOT_Q = 4.8  # bankfull width (m) per sqrt(discharge in m^3/s)
+RIVER_DISPLAY_Q_M3_S = 10_000.0  # discharge drawn at full display width
 DUNE_SPACING_M = 2500.0
 DUNE_HEIGHT_M = 45.0
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
@@ -629,13 +631,19 @@ def window_rivers(flow: WindowFlow, water: B, river_km2: float) -> F64:
     # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
     # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
     discharge = area * MEANDER_RUNOFF_M_YR / 3.156e7
-    wavelength = 11 * 4.8 * np.sqrt(discharge) / pixel_m
+    channel_px = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(discharge) / pixel_m
+    wavelength = 11 * channel_px
+    # A river is drawn at least as wide as its channel. Narrower ones get a
+    # visible width tapered by discharge against a fixed reference, not against
+    # the largest river in the window, so other rivers do not change it.
+    shown = (0.4 + 1.6 * np.sqrt(np.clip(discharge / RIVER_DISPLAY_Q_M3_S, 0, 1))) * pixels / 1100
+    width_px = np.maximum(channel_px, shown)
     target = np.maximum(receiver, 0)
     drop = z.ravel() - z.ravel()[target]
     run = np.hypot(flat % pixels - target % pixels, flat // pixels - target // pixels) * pixel_m
     gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
     return river_coverage(
-        x, y, receiver, area, major, stop, (pixels, pixels), pixels / 1100,
+        x, y, receiver, area, major, stop, (pixels, pixels), width_px,
         meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=flow.links,
     )
 

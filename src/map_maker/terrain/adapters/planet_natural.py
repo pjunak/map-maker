@@ -743,12 +743,18 @@ def river_layer(
                         strict=True)
     )
     return river_coverage(
-        x, y, flow.receiver, discharge, major, stop, (rows, columns), columns / 4800, supersample,
-        links=links,
+        x, y, flow.receiver, discharge, major, stop, (rows, columns),
+        tapered_widths(discharge, major, columns / 4800), supersample, links=links,
     )
 
 
 MIN_MEANDER_PX = 4.0
+
+
+def tapered_widths(discharge: F64, major: B, scale_px: float) -> F64:
+    """River widths (pixels) tapered with discharge, the largest river shown at 2 x ``scale_px``."""
+    peak = float(discharge[major].max()) if major.any() else 1.0
+    return (0.4 + 1.6 * np.sqrt(np.clip(discharge / peak, 0, 1))) * scale_px
 
 
 def meander(path: F64, wavelength_px: F64, seed: int, anchors: F64 | None = None) -> F64:
@@ -800,16 +806,17 @@ def river_coverage(
     major: B,
     stop: B,
     shape: tuple[int, int],
-    width_scale: float,
+    width_px: F64,
     supersample: int = 2,
     meander_px: F64 | None = None,
     links: tuple[tuple[int, int], ...] = (),
 ) -> F64:
-    """Tapered, Chaikin-smoothed, anti-aliased river lines for nodes at pixel (x, y).
+    """Chaikin-smoothed, anti-aliased river lines for nodes at pixel (x, y).
 
-    ``meander_px`` (per node, pixels; 0 for straight reaches) adds meanders of
-    that wavelength, as alluvial rivers wind on gentle ground. ``links`` join
-    node pairs that no receiver joins, such as a splitting river's branch.
+    ``width_px`` is each node's line width in pixels. ``meander_px`` (per node,
+    pixels; 0 for straight reaches) adds meanders of that wavelength, as
+    alluvial rivers wind on gentle ground. ``links`` join node pairs that no
+    receiver joins, such as a splitting river's branch.
     """
     rows, columns = shape
     if not major.any():
@@ -817,7 +824,6 @@ def river_coverage(
     donors = np.zeros(len(receiver), dtype=np.int64)
     np.add.at(donors, receiver[major], 1)
     heads = np.flatnonzero(major & (donors == 0))
-    peak = float(discharge[major].max())
     mask = Image.new("L", (columns * supersample, rows * supersample), 0)
     draw = ImageDraw.Draw(mask)
     visited = np.zeros(len(receiver), dtype=bool)
@@ -852,20 +858,21 @@ def river_coverage(
             path = meander(path, np.interp(
                 np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), meander_px[chain]
             ), head, reach[joins] / max(float(reach[-1]), 1e-9))
-        flow_along = np.interp(
-            np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), discharge[chain]
+        width = supersample * np.interp(
+            np.linspace(0, 1, len(path)), np.linspace(0, 1, len(chain)), width_px[chain]
         )
-        width = (0.4 + 1.6 * (flow_along / peak) ** 0.5) * width_scale * supersample
         for k in range(len(path) - 1):
-            draw.line(
-                (tuple(path[k] * supersample), tuple(path[k + 1] * supersample)),
-                fill=255,
-                width=max(1, round(float(width[k]))),
-            )
+            a, b = path[k] * supersample, path[k + 1] * supersample
+            w = max(1, round(float(width[k])))
+            draw.line((tuple(a), tuple(b)), fill=255, width=w)
+            if w >= 3:
+                # Wide channels join their segments with round elbows, not notches.
+                r = w / 2
+                draw.ellipse((b[0] - r, b[1] - r, b[0] + r, b[1] + r), fill=255)
     for a, b in links:
         if abs(float(x[a] - x[b])) > columns / 2:
             continue
-        width = (0.4 + 1.6 * (float(discharge[b]) / peak) ** 0.5) * width_scale * supersample
+        width = float(width_px[b]) * supersample
         draw.line(
             ((float(x[a]) * supersample, float(y[a]) * supersample),
              (float(x[b]) * supersample, float(y[b]) * supersample)),

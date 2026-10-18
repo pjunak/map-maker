@@ -339,6 +339,37 @@ def test_world_maps_draw_lakes_with_the_refined_outlines(parent: PlanetResult) -
     assert np.array_equal(lake_raster(parent, raster, land), ids)
 
 
+def test_regional_rivers_are_as_wide_as_their_channels() -> None:
+    from map_maker.terrain.adapters.planet_region import (
+        CHANNEL_WIDTH_PER_ROOT_Q,
+        MEANDER_RUNOFF_M_YR,
+        WindowFlow,
+        window_rivers,
+    )
+
+    n = 200
+    rows, columns = np.mgrid[0:n, 0:n].astype(np.float64)
+    area = 1e12  # a million square kilometres entering at the top of the valley
+
+    def width(pixel_m: float, bigger: bool = False) -> float:
+        # Steep valleys (no meanders) running down the map at columns 60 and 150.
+        z = 5000.0 - rows * 10.0 + np.minimum(np.abs(columns - 60), np.abs(columns - 150))
+        inflow = np.zeros((n, n))
+        inflow[0, 60] = area
+        if bigger:
+            inflow[0, 150] = 30 * area
+        flow = WindowFlow.route(z, rows == n - 1, pixel_m, inflow)
+        cover = window_rivers(flow, np.zeros((n, n), dtype=bool), 2_000.0)
+        return float(cover[n // 2, 20:85].sum())
+
+    channel_m = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEANDER_RUNOFF_M_YR / 3.156e7)
+    fine = width(20.0)
+    assert abs(fine - channel_m / 20.0) < 2.0  # about 23 pixels: the channel itself
+    assert 0.3 < width(2_000.0) < 1.5  # a visible line where the channel is sub-pixel
+    # A larger river elsewhere in the window does not narrow this one.
+    assert width(20.0, bigger=True) == pytest.approx(fine, abs=0.5)
+
+
 def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
     from map_maker.terrain.adapters.planet_natural import meander
 
