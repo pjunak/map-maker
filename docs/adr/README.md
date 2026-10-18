@@ -132,3 +132,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0101: Draw globe views with a compiled, mip-mapped sampler and turn them by grabbing the ground](0101-interactive-globe-views.md)
 - [ADR-0102: Save a planet map as a 3D globe model in glTF binary (.glb)](0102-globe-models-in-gltf.md)
 - [ADR-0103: Show opened regional maps on the globe where it is zoomed in on them](0103-regional-detail-on-the-globe.md)
+- [ADR-0104: Zoom the globe past 16x into opened regional maps, until their pixels fill the screen's](0104-zoom-the-globe-into-regional-maps.md)

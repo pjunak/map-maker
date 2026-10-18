@@ -347,7 +347,7 @@ SPIN_MAX_SPEED = 4000.0
 SPIN_STOP_SPEED = 25.0
 SPIN_FRICTION_S = 0.45  # the spin slows by a factor e in this time
 SPIN_MS = 15
-KEY_TURN = 0.125  # an arrow key turns the view by this share of its radius
+KEY_TURN = 0.125  # an arrow key turns the view by this share of half its shorter side
 
 
 class GlobeCanvas(tk.Canvas):
@@ -357,11 +357,11 @@ class GlobeCanvas(tk.Canvas):
     with any regional ``drapes`` over the map where the view is zoomed in on them.
     Dragging keeps the ground under the cursor under it, north up, and a quick
     flick leaves the view spinning until friction stops it. The wheel and the
-    plus and minus keys zoom a globe towards the cursor (or centre) and a polar
-    view about its pole; arrow keys turn the view; ``fit`` shows the whole globe
-    or hemisphere again. Clicks and hover report longitude and latitude in
-    degrees, and ``overlay`` draws vector marks placed with ``to_canvas`` over
-    each frame.
+    plus and minus keys zoom a globe towards the cursor (or centre), into a
+    drape until its texels fill the pixels, and a polar view about its pole;
+    arrow keys turn the view; ``fit`` shows the whole globe or hemisphere again.
+    Clicks and hover report longitude and latitude in degrees, and ``overlay``
+    draws vector marks placed with ``to_canvas`` over each frame.
     """
 
     def __init__(
@@ -563,14 +563,19 @@ class GlobeCanvas(tk.Canvas):
         if event.delta and self.image is not None:
             factor = WHEEL_STEP if event.delta > 0 else 1 / WHEEL_STEP
             self.stop_spin()
-            self.set_projection(zoomed(self.projection(), self.size(), factor, event.x, event.y))
+            self.set_projection(zoomed(self.projection(), self.size(), factor, event.x, event.y,
+                                       self.drapes))
         return "break"
 
     def _key_turn(self, east: float, north: float) -> str:
-        """Turn the view towards east and north by ``KEY_TURN`` of its radius."""
+        """Turn the view towards east and north by ``KEY_TURN`` of the visible half.
+
+        The step is in screen pixels, so it moves the view alike at any zoom.
+        """
         if self.image is not None:
             self.stop_spin()
-            step = KEY_TURN * view_radius(self.projection(), self.size())
+            size = self.size()
+            step = KEY_TURN * min(view_radius(self.projection(), size), min(size) / 2)
             self.turn(-east * step, north * step)
         return "break"
 
@@ -579,7 +584,7 @@ class GlobeCanvas(tk.Canvas):
             self.stop_spin()
             width, height = self.size()
             self.set_projection(zoomed(self.projection(), (width, height), factor,
-                                       width / 2, height / 2))
+                                       width / 2, height / 2, self.drapes))
         return "break"
 
     def _press_left(self, event: tk.Event[tk.Misc]) -> None:

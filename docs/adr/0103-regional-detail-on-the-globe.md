@@ -4,6 +4,8 @@
 - Date: 2026-10-18
 - Builds on: [ADR-0101](0101-interactive-globe-views.md) (the globe's sampler)
   and [ADR-0088](0088-nested-regional-detail-levels.md) (nested regional levels).
+- Refined by [ADR-0104](0104-zoom-the-globe-into-regional-maps.md): the globe
+  zooms into the regional maps until their pixels fill the screen's.
 
 ## Context
 

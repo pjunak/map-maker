@@ -6,6 +6,8 @@
   projections). Themes are still rendered once on the world frame.
 - Replaces the globe hover of [ADR-0089](0089-one-map-view-with-drill-down-levels.md),
   which looked positions up in per-pixel arrays (`displayed_lonlat`).
+- Refined by [ADR-0104](0104-zoom-the-globe-into-regional-maps.md): the globe
+  zooms past 16x into opened regional maps.
 
 ## Context
 

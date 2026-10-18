@@ -10,7 +10,19 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from map_maker.terrain.map_canvas import FlatMapCanvas, GlobeCanvas, ImagePyramid, frame_view
+from map_maker.terrain.adapters.map_projection import (
+    MAX_GLOBE_ZOOM,
+    Drape,
+    drape_zoom,
+    lonlat_screen,
+)
+from map_maker.terrain.map_canvas import (
+    KEY_TURN,
+    FlatMapCanvas,
+    GlobeCanvas,
+    ImagePyramid,
+    frame_view,
+)
 from map_maker.terrain.ui_jobs import LatestWorker, TkPump
 
 
@@ -152,6 +164,22 @@ def test_globe_canvas_spins_after_a_flick_and_keys_turn_it(root: tk.Tk) -> None:
     assert canvas.zoom == 2.0
     canvas._key_zoom(0.25)
     assert canvas.zoom == 1.0
+    # Zoomed in, an arrow key still turns the view by the same share of the canvas.
+    canvas.lon, canvas.lat, canvas.zoom = 0.0, 0.0, 12.0
+    canvas._key_turn(1, 0)
+    width, height = canvas.size()
+    moved = lonlat_screen(canvas.projection(), (width, height), 0.0, 0.0)
+    assert moved is not None
+    assert moved[0] == pytest.approx(width / 2 - KEY_TURN * min(width, height) / 2, abs=0.01)
+    # Past 16x, the keys zoom only into a drape, until its texels fill the pixels.
+    drape = Drape(gradient(900, 900), (0.0, 0.0), 0.005)
+    canvas.show(gradient(512, 256), central_meridian_deg=0.0, drapes=(drape,))
+    canvas.lon, canvas.lat, canvas.zoom = 0.0, 0.0, MAX_GLOBE_ZOOM
+    for _ in range(40):
+        canvas._key_zoom(2.0)
+    assert canvas.zoom == pytest.approx(drape_zoom(drape, canvas.size()))
+    canvas.fit()
+    canvas.show(gradient(512, 256), central_meridian_deg=0.0)
     # A quick flick keeps the globe turning until friction stops it.
     now = time.monotonic()
     canvas._samples = [(now - 0.05, 100.0, 100.0), (now - 0.01, 140.0, 100.0)]

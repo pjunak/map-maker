@@ -11,7 +11,8 @@ on them.
 
 The screen functions (``screen_lonlat``, ``lonlat_screen``, ``grab``, ``zoomed``)
 use the same geometry analytically, so hover read-outs, overlays and dragging
-agree with the drawn pixels.
+agree with the drawn pixels. A globe zooms to ``MAX_GLOBE_ZOOM`` over the world
+map and further into drapes, until their own texels fill the screen's pixels.
 """
 
 from __future__ import annotations
@@ -50,7 +51,7 @@ HALO: tuple[int, int, int] = (110, 160, 230)
 GRATICULE: tuple[int, int, int] = (235, 235, 225)
 GRATICULE_STEP_DEG = 30.0
 GLOBE_DISC = 0.96  # globe diameter at zoom 1 as a fraction of the view, leaving room for the halo
-MAX_GLOBE_ZOOM = 16.0
+MAX_GLOBE_ZOOM = 16.0  # over the world map alone; drapes let ``zoomed`` go further
 SMALLEST_LEVEL_ROWS = 4
 
 
@@ -62,7 +63,9 @@ class MapProjection:
     globe's ``zoom`` enlarges it beyond the whole disc (1). Polar views show the
     pole out to ``limit_deg`` of latitude (0 = the equator), with ``lon_deg`` at
     the bottom of a north-polar view and at the top of a south-polar one, east
-    to the right as is usual.
+    to the right as is usual. How far a globe may zoom depends on what it shows,
+    so ``zoomed`` limits it, not the projection; views of the world map alone
+    stop at ``MAX_GLOBE_ZOOM``.
     """
 
     kind: str = "equirectangular"
@@ -78,8 +81,10 @@ class MapProjection:
             raise ValueError("The view centre must be a finite longitude and a latitude in ±90°.")
         if not -60 <= self.limit_deg <= 80:
             raise ValueError("Polar views reach a latitude between -60° and 80°.")
-        if not 1 <= self.zoom <= MAX_GLOBE_ZOOM or (self.kind != "globe" and self.zoom != 1):
-            raise ValueError(f"Only a globe zooms, from 1 to {MAX_GLOBE_ZOOM:g} times.")
+        if not (isfinite(self.zoom) and self.zoom >= 1) or (
+            self.kind != "globe" and self.zoom != 1
+        ):
+            raise ValueError("Only a globe zooms, by a finite factor from 1 (the whole globe).")
 
     @property
     def polar_sign(self) -> float:
@@ -221,6 +226,31 @@ def view_radius(projection: MapProjection, size: Size) -> float:
     if projection.kind == "globe":
         return GLOBE_DISC / 2 * short * projection.zoom
     return short / 2
+
+
+def drape_zoom(drape: Drape, size: Size) -> float:
+    """Globe zoom at which one of the drape's texels spans a pixel at the view's centre.
+
+    There a pixel spans ``1 / view_radius`` radians of arc and a texel
+    ``2 angle / width``; the orthographic globe is true to scale at its centre.
+    """
+    return drape.image.width / (GLOBE_DISC * min(size) * drape.angle_rad)
+
+
+def zoom_limit(size: Size, lonlat: Point | None, drapes: Sequence[Drape]) -> float:
+    """How far a globe may zoom in towards ``lonlat`` (degrees).
+
+    ``MAX_GLOBE_ZOOM`` over the world map; where drapes cover the point, until
+    the finest of them shows a texel per pixel (``drape_zoom``).
+    """
+    limit = MAX_GLOBE_ZOOM
+    if lonlat is not None:
+        lam, phi = radians(lonlat[0]), radians(lonlat[1])
+        for drape in drapes:
+            lon, lat = drape.centre
+            if _angle(lam, phi, radians(lon), radians(lat)) < drape.angle_rad:
+                limit = max(limit, drape_zoom(drape, size))
+    return limit
 
 
 def drapes_in_full(projection: MapProjection, size: Size, map_width: int) -> bool:
@@ -400,17 +430,22 @@ def grab(
 
 
 def zoomed(
-    projection: MapProjection, size: Size, factor: float, x: float, y: float
+    projection: MapProjection, size: Size, factor: float, x: float, y: float,
+    drapes: Sequence[Drape] = (),
 ) -> MapProjection:
     """``projection`` zoomed in by ``factor`` (below 1 zooms out).
 
-    A globe keeps the ground under (x, y) in place; a polar view zooms about
-    its pole, between 30° and 150° from it.
+    A globe keeps the ground under (x, y) in place and zooms in as far as
+    ``zoom_limit`` allows there, so only towards ``drapes`` beyond
+    ``MAX_GLOBE_ZOOM``. A view already deeper, turned away from its drape,
+    keeps its zoom until zoomed out. A polar view zooms about its pole, between
+    30° and 150° from it.
     """
     if projection.kind == "globe":
-        zoom = min(MAX_GLOBE_ZOOM, max(1.0, projection.zoom * factor))
-        target = replace(projection, zoom=zoom)
         under = screen_lonlat(projection, size, x, y)
+        deepest = max(projection.zoom, zoom_limit(size, under, drapes))
+        zoom = max(1.0, min(deepest, projection.zoom * factor))
+        target = replace(projection, zoom=zoom)
         moved = None if under is None else grab(target, size, under, x, y)
         return moved or target
     if projection.kind == "equirectangular":

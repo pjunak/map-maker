@@ -158,6 +158,72 @@ def test_zoom_keeps_the_ground_under_the_cursor_within_limits() -> None:
     assert zoomed(polar, size, 0.1, *cursor).polar_span_deg == 150.0
 
 
+def test_a_globe_zooms_into_drapes_until_their_texels_fill_the_pixels() -> None:
+    # A province (150 km) and a local window (30 km) on a 6,000 km planet, 900 px each.
+    size = (1500, 1000)
+    province = Drape(Image.new("RGB", (900, 900)), (12.0, 47.0), 150 / 6000)
+    local = Drape(Image.new("RGB", (900, 900)), (12.2, 47.1), 30 / 6000)
+    drapes = (province, local)
+    view = MapProjection("globe", *local.centre, zoom=MAX_GLOBE_ZOOM)
+
+    def at(lonlat: tuple[float, float]) -> tuple[float, float]:
+        position = lonlat_screen(view, size, *lonlat)
+        assert position is not None
+        return position
+
+    # Towards the local window: until one of its 67 m texels spans a pixel.
+    cursor = at((12.25, 47.08))
+    deep = zoomed(view, size, 1e6, *cursor, drapes)
+    assert deep.zoom == pytest.approx(187.5)
+    assert 1 / view_radius(deep, size) == pytest.approx(2 * local.angle_rad / 900)
+    assert _near(screen_lonlat(deep, size, *cursor), (12.25, 47.08), 1e-9)
+    # Over the province alone its own texels limit the zoom; elsewhere 16x does.
+    assert zoomed(view, size, 1e6, *at((11.5, 46.5)), drapes).zoom == pytest.approx(37.5)
+    assert zoomed(view, size, 1e6, *at((12.0, 45.0)), drapes).zoom == MAX_GLOBE_ZOOM
+    assert zoomed(view, size, 1e6, *cursor).zoom == MAX_GLOBE_ZOOM  # no drapes
+    # A deep view turned away from its drape keeps its zoom until zoomed out.
+    away = MapProjection("globe", 40.0, 10.0, zoom=deep.zoom)
+    kept = zoomed(away, size, 2.0, 750, 500, drapes)
+    assert kept.zoom == away.zoom and _near((kept.lon_deg, kept.lat_deg), (40.0, 10.0), 1e-9)
+    assert zoomed(away, size, 0.5, 750, 500, drapes).zoom == pytest.approx(deep.zoom / 2)
+
+
+@pytest.mark.parametrize("centre", [(12.2, 47.1), (-179.999, -30.0), (60.0, 89.999)])
+def test_screen_geometry_stays_exact_at_the_deepest_zoom(centre: tuple[float, float]) -> None:
+    # A 2 km local window, the smallest, 900 px on a 6,000 km planet, in a small view.
+    size = (500, 300)
+    drape = Drape(Image.new("RGB", (900, 900)), centre, 2 / 6000)
+    view = zoomed(MapProjection("globe", *centre, zoom=MAX_GLOBE_ZOOM), size, 1e6, 250, 150,
+                  (drape,))
+    assert view.zoom == pytest.approx(9375)  # a texel spans 4.4 m
+    rng = np.random.default_rng(7)
+    for x, y, x1, y1 in rng.uniform(0, 1, (50, 4)) * (*size, *size):
+        lonlat = screen_lonlat(view, size, x, y)
+        assert lonlat is not None
+        assert np.allclose(lonlat_screen(view, size, *lonlat) or (0, 0), (x, y), atol=1e-4)
+        moved = grab(view, size, lonlat, x1, y1)
+        if moved is not None:  # none moves the pole sideways
+            assert np.allclose(lonlat_screen(moved, size, *lonlat) or (0, 0), (x1, y1),
+                               atol=1e-4)
+    # The drawn pixels: red and green encode the window position of each texel.
+    ramp = np.round((np.arange(900) + 0.5) / 900 * 255)
+    coded = np.stack((*np.meshgrid(ramp, ramp), np.full((900, 900), 255.0)), axis=-1)
+    drape = Drape(Image.fromarray(coded.astype(np.uint8)), centre, drape.angle_rad)
+    black = MapTexture.from_image(Image.new("RGB", (8, 4)))
+    shaded = np.asarray(render(black, view, size, drapes=DrapeTextures.from_drapes((drape,))),
+                        dtype=np.float64)
+    rows, columns = np.mgrid[0:size[1]:9, 0:size[0]:9]
+    points = [screen_lonlat(view, size, c + 0.5, r + 0.5)
+              for r, c in zip(rows.ravel(), columns.ravel(), strict=True)]
+    xy = forward_aeqd(_unit(*np.array(points).T), *centre, 6.0e6)
+    radius_m = 2000.0
+    seen = shaded[rows.ravel(), columns.ravel()]
+    unshaded = seen[:, :2] / seen[:, 2:]
+    # Each code steps once per 3.5 texels, so this places pixels to a few texels.
+    assert np.abs(unshaded[:, 0] - (xy[:, 0] + radius_m) / (2 * radius_m)).max() < 2 / 255
+    assert np.abs(unshaded[:, 1] - (radius_m - xy[:, 1]) / (2 * radius_m)).max() < 2 / 255
+
+
 def test_latitude_prefilter_matches_ground_detail_east_west_to_north_south() -> None:
     rows, columns = 90, 360
     stripes = np.zeros((rows, columns, 3), dtype=np.uint8)
@@ -342,7 +408,7 @@ def test_projection_settings_are_validated() -> None:
         {"kind": "north-polar", "limit_deg": 85.0},
         {"kind": "globe", "lon_deg": float("nan")},
         {"kind": "globe", "zoom": 0.5},
-        {"kind": "globe", "zoom": MAX_GLOBE_ZOOM * 2},
+        {"kind": "globe", "zoom": float("inf")},
         {"kind": "north-polar", "zoom": 2.0},
     ):
         with pytest.raises(ValueError):

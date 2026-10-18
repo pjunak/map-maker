@@ -207,6 +207,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0101-interactive-globe-views.md](adr/0101-interactive-globe-views.md) | Globe and polar views drawn by compiled per-pixel kernels from a latitude-prefiltered, mip-mapped world-frame image; zoom to 16x, north-up dragging that keeps the grabbed ground under the cursor, analytic hover and overlays. |
 | [docs/adr/0102-globe-models-in-gltf.md](adr/0102-globe-models-in-gltf.md) | Planet maps saved as glTF binary (`.glb`) desk globes: the map unchanged on a 60° N-60° S band, azimuthal polar cap images so viewers draw no polar streaks, `world globe` and the app's Explore step. |
 | [docs/adr/0103-regional-detail-on-the-globe.md](adr/0103-regional-detail-on-the-globe.md) | Opened regional maps draped over globe and polar views where pixels are finer than a world texel: azimuthal equidistant sampling with their own mip levels, a 4% smoothstep seam, the deepest level on top. |
+| [docs/adr/0104-zoom-the-globe-into-regional-maps.md](adr/0104-zoom-the-globe-into-regional-maps.md) | The globe zooms past 16x towards ground inside an opened regional map, until the finest one there shows a texel per screen pixel; zooming out and turning are unrestricted; `world view` stays at 16x. |
 
 ## Dated research reports (99)
 

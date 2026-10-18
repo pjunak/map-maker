@@ -271,6 +271,8 @@ def test_planet_build_publishes_verified_world_aligned_products(
         export_view(target, view, "relief", MapProjection("globe"), 128)
     with pytest.raises(ValueError, match="Unknown view"):
         export_view(target, tmp_path / "x.png", "political", MapProjection("globe"), 128)
+    with pytest.raises(ValueError, match="zoom"):  # the world map alone zooms to 16x
+        export_view(target, tmp_path / "x.png", "relief", MapProjection("globe", zoom=17.0), 128)
     # A saved theme becomes a 3D globe model with the build's image inside, unchanged.
     from test_globe_model import read_glb
 

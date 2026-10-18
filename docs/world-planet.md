@@ -81,8 +81,9 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
    On a flat map, drag to pan, use the wheel to zoom and press F to fit. On a globe:
    - drag to turn it: the ground you grab follows the cursor, with north kept up;
    - flick it to set it spinning; it slows to a stop, and a click stops it;
-   - use the wheel to zoom towards the cursor, up to 16 times, or + and - to zoom
-     about the centre;
+   - use the wheel to zoom towards the cursor, up to 16 times, or further over an
+     opened regional map ([below](#zoom-into-regional-province-and-local-detail)),
+     or + and - to zoom about the centre;
    - use the arrow keys to turn it;
    - press F to see the whole globe again.
 
@@ -139,6 +140,12 @@ thickens with their discharge, whatever else the map shows.
   ([ADR-0103](adr/0103-regional-detail-on-the-globe.md)). A region drawn in
   another map adds nothing until you show this map in it. Saved globe images
   include regional maps; globe models do not.
+- Over an opened regional map the globe zooms past 16x, until the deepest map
+  under the cursor shows one of its pixels per screen pixel: in a 1,000-pixel-tall
+  view of a 6,000 km world, about 37x for a 150 km province and 190x for a 30 km
+  local window. Beside the maps it stops at 16x. A view turned away from a map
+  keeps its zoom until you zoom out
+  ([ADR-0104](adr/0104-zoom-the-globe-into-regional-maps.md)).
 - Choose **Planet atlas**, **Planet relief**, **Planet topographic** or **Planet
   parchment**. Each renders in the background and is kept. The topographic view
   stretches its tints over the window's own height range and draws contours at
@@ -193,9 +200,10 @@ map-maker world view my-planet --theme koppen --projection north-polar --limit 3
 fifth bold, and isobaths). A polar view's `--lon` is the
 meridian below (north) or above (south) the pole, and `--limit` is the latitude
 at its edge (0 = the equator). A globe's `--zoom` enlarges it from 1 (the whole
-globe) to 16. `--pixels` sets the height and `--width` the width, for example
-`--pixels 1080 --width 1920` for a wallpaper; globe and polar views fit the
-shorter side. Views are deterministic and never overwrite a file
+globe) to 16; views show the planet map alone, without regional maps. `--pixels`
+sets the height and `--width` the width, for example `--pixels 1080 --width 1920`
+for a wallpaper; globe and polar views fit the shorter side. Views are
+deterministic and never overwrite a file
 ([ADR-0087](adr/0087-map-themes-and-projections.md),
 [ADR-0101](adr/0101-interactive-globe-views.md)).
 

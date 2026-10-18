@@ -6,7 +6,12 @@ from pathlib import Path
 from PIL import Image
 
 from map_maker.terrain.adapters.globe_model import globe_model
-from map_maker.terrain.adapters.map_projection import MapProjection, MapTexture, render
+from map_maker.terrain.adapters.map_projection import (
+    MAX_GLOBE_ZOOM,
+    MapProjection,
+    MapTexture,
+    render,
+)
 from map_maker.terrain.adapters.map_views import THEME_BY_ID, THEMES, MapTheme, theme_file
 from map_maker.terrain.adapters.planet_load import verified_build
 from map_maker.terrain.domain.world import WorldFrame
@@ -27,8 +32,11 @@ def render_view(
     """The build's ``theme_id`` image shown in ``projection``, ``pixels`` high.
 
     ``width`` defaults to a square globe or polar view and to a flat world twice as
-    wide as high. A globe or polar view fits its shorter side.
+    wide as high. A globe or polar view fits its shorter side. The view shows the
+    world map alone, so a globe zooms at most ``MAX_GLOBE_ZOOM`` times.
     """
+    if projection.zoom > MAX_GLOBE_ZOOM:
+        raise ValueError(f"World views zoom a globe from 1 to {MAX_GLOBE_ZOOM:g} times.")
     theme = _theme(theme_id)
     width = width or (2 * pixels if projection.kind == "equirectangular" else pixels)
     for size in (pixels, width):
