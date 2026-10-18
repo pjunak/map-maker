@@ -96,7 +96,8 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
      temperature, rainfall, Köppen zone and any volcano.
 5. **Save image…** above the map (or **Save the shown map as an image…** in
    Explore) writes what is shown as a PNG: a flat planet map at its full width, or
-   the middle square of the current globe or polar view at 2,048 px, zoom included.
+   the current globe or polar view as the window frames it, its shorter side
+   2,048 px.
 6. **Save the shown map as a 3D globe…** in Explore writes the whole-planet map
    you are looking at as a globe model (`.glb`) that 3D viewers, Blender and game
    engines can turn. See [Globe models](#globe-models).
@@ -176,7 +177,9 @@ map-maker world view my-planet --theme koppen --projection north-polar --limit 3
 fifth bold, and isobaths). A polar view's `--lon` is the
 meridian below (north) or above (south) the pole, and `--limit` is the latitude
 at its edge (0 = the equator). A globe's `--zoom` enlarges it from 1 (the whole
-globe) to 16. Views are deterministic and never overwrite a file
+globe) to 16. `--pixels` sets the height and `--width` the width, for example
+`--pixels 1080 --width 1920` for a wallpaper; globe and polar views fit the
+shorter side. Views are deterministic and never overwrite a file
 ([ADR-0087](adr/0087-map-themes-and-projections.md),
 [ADR-0101](adr/0101-interactive-globe-views.md)).
 

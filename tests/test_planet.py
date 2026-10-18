@@ -260,6 +260,13 @@ def test_planet_build_publishes_verified_world_aligned_products(
     )
     with Image.open(view) as image:
         assert image.size == (128, 128)
+    wide = export_view(target, tmp_path / "wide.png", "relief", MapProjection("globe"), 64,
+                       width=112)
+    with Image.open(wide) as image:
+        assert image.size == (112, 64)
+    with pytest.raises(ValueError, match="View sizes"):
+        export_view(target, tmp_path / "thin.png", "relief", MapProjection("globe"), 64,
+                    width=8)
     with pytest.raises(FileExistsError):
         export_view(target, view, "relief", MapProjection("globe"), 128)
     with pytest.raises(ValueError, match="Unknown view"):

@@ -127,6 +127,9 @@ def test_globe_canvas_renders_off_the_tk_thread_and_follows_the_cursor(root: tk.
     assert canvas.zoom > 1 and np.allclose(canvas.to_lonlat(*end) or (0, 0), held, atol=1e-6)
     canvas.fit()
     assert canvas.projection().zoom == 1.0
+    # Saving keeps the canvas's framing, its shorter side at the size asked for.
+    saved = canvas.snapshot(240)()
+    assert saved.height == 240 and abs(saved.width / 240 - width / height) < 0.01
     canvas.turn(20, 0)
     canvas.set_kind("north-polar")
     assert canvas.projection().kind == "north-polar"

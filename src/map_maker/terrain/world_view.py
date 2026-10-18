@@ -926,7 +926,7 @@ class WorldMapView(ttk.Frame):
             return image.copy
         if self._uses_globe():
             globe = self.globe
-            return None if globe.image is None else lambda: globe.render(SAVE_PIXELS)
+            return None if globe.image is None else globe.snapshot(SAVE_PIXELS)
         run, layer = self.planet_run, self.display_layer.get()
         if self.group.get() == PLANET and run is not None and layer in run.maps.labels:
             maps = run.maps

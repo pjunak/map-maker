@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 from map_maker.terrain.adapters.globe_model import globe_model
-from map_maker.terrain.adapters.map_projection import MapProjection, reproject
+from map_maker.terrain.adapters.map_projection import MapProjection, MapTexture, render
 from map_maker.terrain.adapters.map_views import THEME_BY_ID, THEMES, MapTheme, theme_file
 from map_maker.terrain.adapters.planet_load import verified_build
 from map_maker.terrain.domain.world import WorldFrame
@@ -21,20 +21,26 @@ def render_view(
     projection: MapProjection,
     pixels: int,
     *,
+    width: int | None = None,
     graticule: bool = False,
 ) -> Image.Image:
-    """The build's ``theme_id`` image shown in ``projection`` (``pixels`` high)."""
+    """The build's ``theme_id`` image shown in ``projection``, ``pixels`` high.
+
+    ``width`` defaults to a square globe or polar view and to a flat world twice as
+    wide as high. A globe or polar view fits its shorter side.
+    """
     theme = _theme(theme_id)
-    if not MIN_VIEW_PIXELS <= pixels <= MAX_VIEW_PIXELS:
-        raise ValueError(f"View size must be {MIN_VIEW_PIXELS}-{MAX_VIEW_PIXELS} pixels.")
+    width = width or (2 * pixels if projection.kind == "equirectangular" else pixels)
+    for size in (pixels, width):
+        if not MIN_VIEW_PIXELS <= size <= MAX_VIEW_PIXELS:
+            raise ValueError(f"View sizes must be {MIN_VIEW_PIXELS}-{MAX_VIEW_PIXELS} pixels.")
     name = theme_file(theme)
     folder, manifest = verified_build(build, (name,))
     with Image.open(folder / name) as image:
-        return reproject(
-            image, projection, pixels,
-            central_meridian_deg=float(manifest["world_frame"]["central_meridian_deg"]),
-            graticule=graticule,
+        texture = MapTexture.from_image(
+            image, float(manifest["world_frame"]["central_meridian_deg"])
         )
+    return render(texture, projection, (width, pixels), graticule=graticule)
 
 
 def export_view(
@@ -44,6 +50,7 @@ def export_view(
     projection: MapProjection,
     pixels: int,
     *,
+    width: int | None = None,
     graticule: bool = False,
 ) -> Path:
     """Write a view as a new PNG; existing files are never replaced."""
@@ -51,7 +58,7 @@ def export_view(
         raise FileExistsError(f"View destination already exists: {destination}")
     if destination.suffix.lower() != ".png":
         raise ValueError("Views are written as .png images.")
-    image = render_view(build, theme_id, projection, pixels, graticule=graticule)
+    image = render_view(build, theme_id, projection, pixels, width=width, graticule=graticule)
     with destination.open("xb") as stream:
         image.save(stream, format="PNG")
     return destination

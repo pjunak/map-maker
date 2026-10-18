@@ -472,14 +472,25 @@ class GlobeCanvas(tk.Canvas):
 
         self._worker.submit(work, self._present)
 
-    def render(self, pixels: int) -> Image.Image:
-        """The middle square of the current view, ``pixels`` square (for saving).
+    def snapshot(self, pixels: int) -> Callable[[], Image.Image]:
+        """The view as the canvas frames it now, to draw with its shorter side ``pixels``.
 
-        Runs on the calling thread.
+        Call it on the Tk thread; the drawing function it returns may run on any
+        thread (saving runs it as a background job).
         """
-        assert self.image is not None
-        texture = self._texture_of(self.image, self.central_meridian_deg)
-        return render(texture, self.projection(), (pixels, pixels), graticule=self.graticule)
+        image = self.image
+        assert image is not None
+        projection, meridian = self.projection(), self.central_meridian_deg
+        graticule = self.graticule
+        width, height = self.size()
+        scale = pixels / min(width, height)
+        size = (max(1, round(width * scale)), max(1, round(height * scale)))
+
+        def draw() -> Image.Image:
+            texture = self._texture_of(image, meridian)
+            return render(texture, projection, size, graticule=graticule)
+
+        return draw
 
     def _texture_of(self, image: Image.Image, meridian: float) -> MapTexture:
         cached = self._texture

@@ -218,6 +218,9 @@ def create_parser() -> argparse.ArgumentParser:
     view.add_argument("--limit", type=float, default=0.0,
                       help="Latitude at the edge of a polar view (0 = the equator).")
     view.add_argument("--pixels", type=int, default=1600, help="View height in pixels.")
+    view.add_argument("--width", type=int, default=None,
+                      help="View width in pixels (default: square, or twice the height "
+                           "for a flat world). Globe and polar views fit the shorter side.")
     view.add_argument("--graticule", action="store_true", help="Draw a 30-degree grid.")
     view.add_argument("--output", type=Path, required=True, help="New .png file.")
     view.set_defaults(_handler=_run_world_view)
@@ -341,7 +344,7 @@ def _run_world_view(arguments: argparse.Namespace) -> int:
         )
         path = export_view(
             arguments.planet, arguments.output, arguments.theme, projection,
-            arguments.pixels, graticule=arguments.graticule,
+            arguments.pixels, width=arguments.width, graticule=arguments.graticule,
         )
     except (OSError, ValueError) as error:
         print(f"View failed: {error}", file=sys.stderr)
