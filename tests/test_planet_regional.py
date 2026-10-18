@@ -308,6 +308,37 @@ def test_regional_parent_reports_lake_cover_and_level(parent: PlanetResult) -> N
     assert np.mean(fine != coarse) < np.mean(coarse != exact)
 
 
+def test_world_maps_draw_lakes_with_the_refined_outlines(parent: PlanetResult) -> None:
+    from map_maker.terrain.adapters.planet_render import (
+        LAKE_REACH_SPACINGS,
+        FrameRaster,
+        lake_raster,
+    )
+    from map_maker.terrain.pipeline.planet_lakes import refined_lake_cover
+
+    raster = FrameRaster.build(parent.mesh, parent.world.project.frame, 1024)
+    land = np.ones(raster.shape, dtype=bool)
+    ids = lake_raster(parent, raster, land)
+    straight = raster.interpolate(parent.mesh, (parent.lakes.lake >= 0).astype(np.float64)) > 0.5
+    on_lake = ids >= 0
+    # The outlines leave the straight triangle contours only near shores...
+    changed = on_lake != straight
+    assert 0 < changed.sum() < 0.5 * straight.sum()
+    nodes = parent.mesh.xyz[parent.lakes.lake >= 0]
+    distance = np.min(
+        np.linalg.norm(raster.queries[changed.ravel()][:, None] - nodes[None], axis=2), axis=1
+    )
+    assert np.all(distance < LAKE_REACH_SPACINGS * parent.mesh.spacing_m / parent.mesh.radius_m)
+    # ...and are the regional outline at the map's own detail, so zooming refines it.
+    detail_m = 2 * 2 * np.pi * parent.mesh.radius_m / raster.shape[1]
+    cover, _ = refined_lake_cover(
+        parent.mesh, parent.lakes.lake, parent.settings.seed, raster.queries, detail_m
+    )
+    near = on_lake | changed
+    assert np.array_equal(on_lake[near], (cover.reshape(raster.shape) > 0.5)[near])
+    assert np.array_equal(lake_raster(parent, raster, land), ids)
+
+
 def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
     from map_maker.terrain.adapters.planet_natural import meander
 

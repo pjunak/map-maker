@@ -21,6 +21,9 @@ Water then fills each depression from its catchment runoff, as in Fill-Spill-Mer
 
 Dry-land flow is then routed on the water surface. Every receiver on land
 strictly descends, and rivers end at the sea or at a closed lake.
+
+Lake membership is linear inside each mesh triangle, so maps draw lake outlines
+refined below the mesh spacing, as coasts are (``refined_lake_cover``).
 """
 
 from dataclasses import dataclass
@@ -29,7 +32,10 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
+from scipy.spatial import KDTree
 
+from map_maker.terrain.domain.seeds import stage_seed
+from map_maker.terrain.pipeline.planet_coast import displace, noise_octaves
 from map_maker.terrain.pipeline.planet_evolution import FILL_EPS_M, FlowState
 from map_maker.terrain.pipeline.planet_forcing import GeologyRegions, smooth_over_land
 from map_maker.terrain.pipeline.planet_kernels import (
@@ -37,7 +43,7 @@ from map_maker.terrain.pipeline.planet_kernels import (
     priority_flood,
     steepest_receivers,
 )
-from map_maker.terrain.pipeline.planet_mesh import SphereMesh
+from map_maker.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from map_maker.terrain.pipeline.planet_noise import fbm3
 
 type F64 = NDArray[np.float64]
@@ -53,6 +59,35 @@ MIN_LAKE_NODES = 2
 LAKE_ITERATIONS = 6
 DEFAULT_RUNOFF_MM = 250.0
 DEFAULT_LAKE_EVAPORATION_MM = 1000.0
+# Lake outlines are refined below the lake mesh spacing like coasts (ADR-0090):
+# noise octaves from LAKE_TOP_SPACINGS spacings down to a map's finest scale,
+# LAKE_AMPLITUDE_SPACINGS spacings at the top.
+LAKE_OUTLINE_STAGE = "planet.lake-outline"
+LAKE_TOP_SPACINGS = 4.0
+LAKE_AMPLITUDE_SPACINGS = 0.25
+
+
+def refined_lake_cover(
+    mesh: SphereMesh, lake: I64, master_seed: int, xyz: F64, detail_m: float
+) -> tuple[F64, I64]:
+    """Lake cover (0..1) and the nearest lake node's lake at unit vectors ``xyz``.
+
+    The cover is linear inside each mesh triangle, so its contours are straight.
+    It is sampled at points displaced by noise down to ``detail_m``, which refines
+    lake outlines below the mesh spacing as coasts are. Every map samples the same
+    octaves down to its own detail, so finer maps only add detail. ``lake`` must
+    hold at least one lake node.
+    """
+    spacing = mesh.spacing_m
+    moved = displace(
+        xyz, mesh.radius_m,
+        noise_octaves(LAKE_TOP_SPACINGS * spacing, LAKE_AMPLITUDE_SPACINGS * spacing, detail_m),
+        stage_seed(master_seed, LAKE_OUTLINE_STAGE),
+    )
+    cover = sample_field(mesh, moved, (lake >= 0).astype(np.float64))
+    nodes = np.flatnonzero(lake >= 0)
+    nearest = np.asarray(KDTree(mesh.xyz[nodes]).query(moved, workers=-1)[1])
+    return cover, lake[nodes[nearest]]
 
 
 def _smoothstep(x: F64, a: float, b: float) -> F64:

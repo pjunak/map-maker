@@ -141,8 +141,9 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
   only in the lowest part.
 - Planet lakes fill the zoomed relief up to their level, so shores follow its
   hills and valleys, including a crater's sharp trough. Their outlines also gain
-  detail below the planet's mesh spacing, as coasts do, so a lake can sit a few
-  kilometres from where the world map shows it. Rivers and closed hollows in a
+  detail below the planet's mesh spacing, as coasts do. The world map draws the
+  same outlines down to its own pixel size, so zooming in only adds smaller bays
+  and points, though a shore can move a few kilometres. Rivers and closed hollows in a
   lake's basin drain into it, so no ring of playa or ponds lines its shore, and
   an open lake drains out over its basin's lowest pass
   ([ADR-0092](adr/0092-regional-lakes-fill-the-regional-relief.md)).
@@ -318,7 +319,7 @@ still follows pixel centres.
 | `basins.png`, `geology.png` | Drainage basins with divides; geological provinces. |
 | `elevation.tif` | Float32 elevation in metres (land, and an ocean floor with mid-ocean ridges, sea-floor ageing and trenches), on a geographic CRS for your world's sphere radius. |
 | `rivers.geojson` | River polylines in world longitude/latitude, with discharge, contributing area and mouth (sea or lake). |
-| `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). |
+| `lakes.geojson` | Lake polygons with surface level, area and whether the lake is closed (endorheic). Outlines are the map's, refined below the mesh spacing. |
 | `volcanoes.geojson` | Volcano points with kind (stratovolcano, shield, caldera, seamount), setting (arc, hotspot, rift, intraplate), activity, age, summit height and size. |
 | `planet.npz` | The authoritative mesh: nodes, triangles, land, elevation, receivers, drainage area, forcing and climate fields, and ice thickness and mass balance. With wonders, also the surface, routing, lakes and volcanic relief of the planet without them, which regional tiles start from. |
 | `input.world.json`, `input.geology.json`, `input.wonders.json` | Snapshots of the inputs used. |

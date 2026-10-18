@@ -29,6 +29,7 @@ from map_maker.terrain.domain.world import WorldFrame
 from map_maker.terrain.pipeline.planet import PlanetResult
 from map_maker.terrain.pipeline.planet_kernels import interpolate_to_lonlat
 from map_maker.terrain.pipeline.planet_koppen import KOPPEN_COLOURS
+from map_maker.terrain.pipeline.planet_lakes import refined_lake_cover
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, vertex_triangles
 from map_maker.terrain.pipeline.planet_volcanism import edifice_height
 from map_maker.terrain.pipeline.planet_wonders import wonder_relief, wonder_zones
@@ -38,6 +39,8 @@ type F64 = NDArray[np.float64]
 type B = NDArray[np.bool_]
 
 SECONDS_PER_YEAR = 365.25 * 86400
+# Refined lake outlines stay within this many mesh spacings of a lake node.
+LAKE_REACH_SPACINGS = 2.0
 
 
 def raster_shape(frame: WorldFrame, width: int) -> tuple[int, int]:
@@ -169,11 +172,29 @@ def elevation_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> F
 
 
 def lake_raster(result: PlanetResult, raster: FrameRaster, land_px: B) -> NDArray[np.int64]:
-    """Lake id per pixel (-1 none), from triangle-interpolated lake membership."""
+    """Lake id per pixel (-1 none), with outlines refined below the mesh spacing.
+
+    Lake membership is linear inside each mesh triangle, so its outlines would be
+    straight. As regional maps do, it is sampled at noise-displaced points with
+    detail down to two pixels (``refined_lake_cover``).
+    """
     lakes = result.lakes
-    on_lake = raster.interpolate(result.mesh, (lakes.lake >= 0).astype(np.float64)) > 0.5
-    nearest = lakes.lake[raster.nearest.reshape(raster.shape)]
-    ids = np.where(on_lake & land_px & (nearest >= 0), nearest, -1)
+    mesh = result.mesh
+    ids = np.full(raster.shape, -1, dtype=np.int64)
+    nodes = np.flatnonzero(lakes.lake >= 0)
+    if len(nodes):
+        candidates = np.flatnonzero(land_px.ravel())
+        # Only pixels near a lake node can lie inside a refined outline.
+        found = KDTree(mesh.xyz[nodes]).query(
+            raster.queries[candidates], distance_upper_bound=LAKE_REACH_SPACINGS
+            * mesh.spacing_m / mesh.radius_m, workers=-1,
+        )
+        near = candidates[np.isfinite(np.asarray(found[0]))]
+        detail_m = 2 * 2 * np.pi * mesh.radius_m / raster.shape[1]
+        cover, nearest = refined_lake_cover(
+            mesh, lakes.lake, result.settings.seed, raster.queries[near], detail_m
+        )
+        ids.ravel()[near] = np.where(cover > 0.5, nearest, -1)
     wonders = result.wonders
     if not len(wonders):
         return ids

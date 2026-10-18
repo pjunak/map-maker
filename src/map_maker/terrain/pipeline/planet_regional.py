@@ -25,15 +25,9 @@ from scipy.interpolate import CloughTocher2DInterpolator
 from scipy.spatial import Delaunay, KDTree
 
 from map_maker.terrain.domain.planet import PlanetSettings
-from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken, check_cancelled
 from map_maker.terrain.pipeline.planet import PlanetResult
-from map_maker.terrain.pipeline.planet_coast import (
-    coastline,
-    displace,
-    level_finest_m,
-    noise_octaves,
-)
+from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m
 from map_maker.terrain.pipeline.planet_evolution import EvolutionRun, evolve
 from map_maker.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
 from map_maker.terrain.pipeline.planet_ice import (
@@ -42,6 +36,7 @@ from map_maker.terrain.pipeline.planet_ice import (
     margin_distance,
     sample_ice,
 )
+from map_maker.terrain.pipeline.planet_lakes import refined_lake_cover
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from map_maker.terrain.pipeline.planet_noise import fbm3
 from map_maker.terrain.pipeline.planet_patch import Region, forward_aeqd, inverse_aeqd
@@ -56,12 +51,6 @@ type B = NDArray[np.bool_]
 FINE_TEXTURE = 0.5
 BASIN_FULL_M = 200.0  # basin depth at which a node counts as fully depositional
 LAKE_CORE_COVER = 0.5  # parent lake cover above which regional ground is lake water
-# Lake outlines are refined below the lake mesh spacing like coasts (ADR-0090):
-# noise octaves from LAKE_TOP_SPACINGS spacings down to a level's finest scale,
-# LAKE_AMPLITUDE_SPACINGS spacings at the top.
-LAKE_OUTLINE_STAGE = "planet.lake-outline"
-LAKE_TOP_SPACINGS = 4.0
-LAKE_AMPLITUDE_SPACINGS = 0.25
 # Rock texture at every level: its wavelength follows the mesh spacing (40 km at
 # 5 km). A fixed wavelength left fine tiles uniform, so water cut straight,
 # parallel gullies down every slope instead of branching networks.
@@ -170,16 +159,7 @@ class RegionalParent:
             n = len(xyz)
             return np.zeros(n), np.full(n, -np.inf), np.zeros(n, dtype=bool)
         mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
-        spacing = mesh.spacing_m
-        moved = displace(
-            xyz, mesh.radius_m,
-            noise_octaves(LAKE_TOP_SPACINGS * spacing, LAKE_AMPLITUDE_SPACINGS * spacing, detail_m),
-            stage_seed(self.settings.seed, LAKE_OUTLINE_STAGE),
-        )
-        cover = sample_field(mesh, moved, (self.lake >= 0).astype(np.float64))
-        nodes = np.flatnonzero(self.lake >= 0)
-        nearest = np.asarray(KDTree(mesh.xyz[nodes]).query(moved, workers=-1)[1])
-        ids = self.lake[nodes[nearest]]
+        cover, ids = refined_lake_cover(mesh, self.lake, self.settings.seed, xyz, detail_m)
         closed = (
             np.zeros(len(xyz), dtype=bool)
             if self.lake_endorheic is None
