@@ -36,7 +36,7 @@ from shapely.ops import unary_union
 
 from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.planet_forcing import source_xy
-from map_maker.terrain.pipeline.planet_noise import value_noise3
+from map_maker.terrain.pipeline.planet_noise import noise_flow, value_noise3
 from map_maker.terrain.pipeline.world import WorldMap
 
 type F64 = NDArray[np.float64]
@@ -120,6 +120,36 @@ def displace(
     offset -= np.sum(offset * xyz, axis=1, keepdims=True) * xyz
     moved = xyz + offset / radius_m
     return moved / np.linalg.norm(moved, axis=1, keepdims=True)
+
+
+def swirl(
+    xyz: F64,
+    radius_m: float,
+    octaves: list[tuple[float, float]],
+    seed: int,
+    first: int = 0,
+    steps: int = 8,
+) -> F64:
+    """Unit vectors carried by an area-preserving flow of rotated noise ``octaves``.
+
+    Each octave adds a stream function, its amplitude times its wavelength times
+    value noise, and points follow the curl of the sum, tangent to the sphere,
+    for unit time in ``steps`` midpoint steps. Unlike ``displace``, a flow never
+    folds and keeps areas at any amplitude: a field sampled at the moved points
+    keeps its values and the area at each value, and gains no new extremes. Each
+    octave moves points by about its amplitude. ``first`` is as in ``displace``.
+    """
+    if not octaves:
+        return np.array(xyz, dtype=np.float64)
+    ks = range(first, first + len(octaves))
+    return noise_flow(
+        xyz,
+        np.stack([_rotation(seed + k) for k in ks]),
+        np.array([radius_m / wavelength for wavelength, _ in octaves]),
+        np.array([amplitude / radius_m for _, amplitude in octaves]),
+        [seed + 97 * k for k in ks],
+        steps,
+    )
 
 
 @dataclass(frozen=True, eq=False)

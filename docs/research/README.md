@@ -41,6 +41,8 @@ in the current status or a new dated report.
 - [Straight display lines — 2026-10-12](2026-10-12-straight-display-lines.md) traces straight
   hillshade lines on regional plains to display carving across filled depressions and to
   stepped ridged detail; depressions now drain along their thalweg and the detail is continuous.
+  Its 2026-10-18 section traces straight level-1 rivers to straight valleys between tile
+  nodes and winds them by sampling the relief along an area-preserving flow (ADR-0106).
 
 - [Regional coast detail — 2026-10-11](2026-10-11-regional-coast-detail.md) smooths the
   traced coast at its drawing precision and adds nested fractal detail at regional levels,

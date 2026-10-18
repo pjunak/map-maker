@@ -6,10 +6,13 @@ Independently generated windows disagree where they overlap (erosion is
 non-local). Tiles centred on a fixed Fibonacci lattice are each enriched once
 from the parent, and any point blends the tiles around it with normalised
 Wendland weights. Every request over a place therefore sees the same values.
+Each level samples its blend at points moved by a shared flow (``ReliefWarp``),
+so valleys wind below the tile mesh spacing.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from math import pi, sqrt
+from math import inf, pi, sqrt
 
 import numpy as np
 from numpy.typing import NDArray
@@ -18,6 +21,7 @@ from scipy.spatial import KDTree
 from map_maker.terrain.domain.planet import RegionalSettings, tile_stage_prefix
 from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken
+from map_maker.terrain.pipeline.planet_coast import level_finest_m, swirl
 from map_maker.terrain.pipeline.planet_kernels import interpolate_to_lonlat
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, fibonacci_nodes, vertex_triangles
 from map_maker.terrain.pipeline.planet_patch import regional_mesh
@@ -29,6 +33,10 @@ from map_maker.terrain.pipeline.planet_regional import (
 
 type F64 = NDArray[np.float64]
 type I64 = NDArray[np.int64]
+
+RELIEF_WARP_STAGE = "planet.relief-warp"
+RELIEF_WARP_TOP_SPACINGS = 2.0
+RELIEF_WARP_STEEPNESS = 0.15
 
 
 @dataclass(frozen=True)
@@ -128,6 +136,81 @@ class TileSurface:
             np.ascontiguousarray(self.elevation_m), mesh.xyz, mesh.triangles, vt_ptr, vt_idx,
             mesh.ptr, mesh.nbr, nearest, np.ascontiguousarray(points),
         )
+
+
+@dataclass(frozen=True)
+class ReliefWarp:
+    """Where a level's blended relief is sampled: valley courses below its mesh spacing.
+
+    A tile interpolates linearly between its nodes, so a valley there is a
+    straight crease, and a planet river segment the tiles inherit a straight
+    trough; routed pixel by pixel, rivers ran down them in straight lines.
+    Like coasts, lake shores and basin fronts, relief is refined below the mesh
+    by moving the points it is sampled at, here along an area-preserving flow
+    (``swirl``): valleys and ridges bend, while heights, the area at each height
+    and closed depressions are kept.
+
+    All levels share one sequence of octaves, from RELIEF_WARP_TOP_SPACINGS
+    level-1 spacings down, each RELIEF_WARP_STEEPNESS of its wavelength. A
+    level takes the octaves its tiles cannot carry, those shorter than twice
+    the coarser level's spacing (what the coarser mesh resolves, which reaches
+    the level through its parent), down to ``finest_m``.
+    """
+
+    top_m: float
+    coarsest_m: float  # only octaves shorter than this; inf at level 1
+    finest_m: float
+    seed: int
+
+    @classmethod
+    def of_level(
+        cls, levels: Sequence[RegionalSettings], level: int, master_seed: int, finest_m: float
+    ) -> ReliefWarp:
+        """The warp of level ``level``'s relief, down to octaves of ``finest_m``."""
+        return cls(
+            RELIEF_WARP_TOP_SPACINGS * levels[0].spacing_km * 1e3,
+            inf if level == 1 else level_finest_m(levels[level - 2].spacing_km * 1e3),
+            finest_m,
+            stage_seed(master_seed, RELIEF_WARP_STAGE),
+        )
+
+    @classmethod
+    def for_window(
+        cls, levels: Sequence[RegionalSettings], level: int, master_seed: int
+    ) -> ReliefWarp:
+        """A level-``level`` window's warp: down to the level's own spacing."""
+        return cls.of_level(levels, level, master_seed, levels[level - 1].spacing_km * 1e3)
+
+    @classmethod
+    def for_parent(
+        cls, levels: Sequence[RegionalSettings], level: int, master_seed: int
+    ) -> ReliefWarp:
+        """The warp of the coarser relief a level-``level`` parent samples.
+
+        It stops where the parent's mesh stops resolving (twice its spacing);
+        level ``level`` itself takes the finer octaves.
+        """
+        coarse = levels[level - 2].spacing_km * 1e3
+        return cls.of_level(levels, level - 1, master_seed, level_finest_m(coarse))
+
+    def octaves(self) -> tuple[int, list[tuple[float, float]]]:
+        """The index of this warp's first octave in the shared sequence, and its octaves."""
+        sequence: list[tuple[float, float]] = []
+        wavelength = self.top_m
+        while wavelength >= self.finest_m:
+            sequence.append((wavelength, RELIEF_WARP_STEEPNESS * wavelength))
+            wavelength /= 2
+        first = sum(1 for w, _ in sequence if w >= self.coarsest_m)
+        return first, sequence[first:]
+
+    @property
+    def reach_m(self) -> float:
+        """No point moves further than this (value noise slopes stay below 6.5)."""
+        return 6.5 * sum(amplitude for _, amplitude in self.octaves()[1])
+
+    def __call__(self, xyz: F64, radius_m: float) -> F64:
+        first, octaves = self.octaves()
+        return swirl(xyz, radius_m, octaves, self.seed, first)
 
 
 def blend(grid: TileGrid, tiles: dict[int, TileSurface], points: F64) -> F64:

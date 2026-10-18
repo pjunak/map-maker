@@ -1,6 +1,6 @@
 # Terrain method decisions and failed experiments
 
-Updated 2026-10-13 through T19 ice-sheet extent as a fixed point.
+Updated 2026-10-18 through T20 straight regional rivers.
 This is the living record of
 material generation approaches that were rejected, constrained or retained only
 as references. A failed method does not remove its desired feature from the plan.
@@ -517,6 +517,41 @@ their balance, which unsupports the next ring.
 ([ADR-0093](../adr/0093-ice-sheets-from-mass-balance-and-shallow-ice-flow.md),
 [report](2026-10-13-ice-sheets.md)). Revisit only for a steady-state solver with a
 continuous margin (for example a level set) that is cheaper than time stepping.
+
+## T20 - Straighten regional rivers in routing, over display detail or by a plain warp
+
+**Hypothesis.** Level-1 windows drew big rivers as long straight runs with
+right-angle junctions because of how they are routed, so routing changes or
+routing over the display relief would bend them.
+
+**Control and inputs.** Aethelara `planet-3200k-v30`, 56.869° E 30.703° N, a 250 km
+level-1 window of 1,024 pixels (488 m) and a 20 km level-3 window; every
+`grid_flow` input captured from the unchanged window. Measure: the share of the
+cells of rivers over 2,000 km² in runs of ten or more identical D8 steps.
+
+**Outcome.**
+- Flat resolution (Barnes et al. 2014: towards the outlet, away from the shore)
+  across filled depressions: 0.15 to 0.19 at level 1, 0.07 to 0.20 at level 3,
+  with 45° and 0° lines and parallel channels across flats. Fill cells with an
+  exactly level neighbour were 21 river cells at level 1 and none at level 3.
+- Routing over the display relief before carving: 0.15 to 0.08, but filled
+  ground rose from 1 % to 11 % of the land, small rivers changed course and a
+  deep tile valley kept a straight 40-pixel tributary.
+- A plain domain warp of the tile relief (`displace`, rotated octaves from 20 km):
+  0.156 to 0.128 at steepness 0.08; at 0.15 (0.102) its Jacobian fell to zero,
+  so it folds the relief.
+
+**Diagnosed cause.** Fill depth along the straight runs is 0. Rivers follow valleys
+of the triangle-linear tile relief, straight between nodes and along straight
+12-30 km planet river segments the tiles inherit; 72 % of the run cells lie on
+creases and 23 % on planar facets. Routing reproduces them faithfully.
+
+**Disposition.** Relief is sampled along an area-preserving curl-noise flow, which
+bends valleys without folding, filling or moving heights
+([ADR-0106](../adr/0106-wind-regional-valleys-below-the-tile-mesh.md),
+[report](2026-10-12-straight-display-lines.md#straight-regional-rivers--2026-10-18)).
+Revisit routing only with relief that resolves valley floors below the window
+pixel, and display-relief routing only with a lake and pond policy for its hollows.
 
 ## What the failures change
 

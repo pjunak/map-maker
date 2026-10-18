@@ -166,3 +166,65 @@ own relief, not only in display detail.
 One local window failed once with `[Errno 22] Invalid argument` while starting
 tile worker processes and succeeded when repeated.
 
+## Straight regional rivers — 2026-10-18
+
+A level-1 window of Aethelara (`planet-3200k-v30`, 56.869° E 30.703° N, radius
+250 km, 1,024 pixels of 488 m, tiles `planet-blended-tiles-v11`) drew big rivers as
+straight runs up to 15 km long meeting at right angles. Meander rendering no longer
+hides the routed path where bends are too small to draw.
+
+- **Not the routing.** Every `grid_flow` input was captured from the window. Fill
+  depth along the straight runs is 0, and 95 % of the straight cells of rivers over
+  2,000 km² lie on unfilled ground. Flat resolution (Barnes et al. 2014) made rivers
+  straighter, and too few fill cells have an exactly level neighbour for a
+  tie-break to matter (T20 in the
+  [method register](terrain-method-decisions.md#t20---straighten-regional-rivers-in-routing-over-display-detail-or-by-a-plain-warp)).
+- **Cause: straight tile valleys.** The blended relief is triangle-linear on the
+  5 km tile mesh. A valley is a crease along mesh edges, straight where they are
+  nearly collinear or where it follows a straight 12–30 km planet river segment.
+  Of the cells of rivers over 200 km² starting ten identical D8 steps, 72 % lie on
+  creases and 23 % on planar facets, 77 % along the grid axes.
+- **Trials.** Routing over the display relief halved straight runs but filled 11 %
+  of the land instead of 1 %. A plain domain warp (`displace`) removed a fifth of
+  them at a steepness of 0.08 and folds by 0.15. A curl-noise flow does not fold
+  and keeps areas. With
+  octaves from 20 km it moved rivers 3 km on average for no gain; below the level
+  spacing (2.5 km) it straightened more but wiggled at pixel scale. The chosen
+  flow: octaves from 10 km to 5 km, each 0.15 of its wavelength.
+- **Fix.** Windows and level parents sample the tile blend along that flow, nested
+  across levels ([ADR-0106](../adr/0106-wind-regional-valleys-below-the-tile-mesh.md),
+  `planet-blended-tiles-v12`).
+
+Measured on the window's final routing inside its circle (rivers over 2,000 km²
+unless stated):
+
+| Measure | v11 | v12 |
+|---|---:|---:|
+| Cells in runs of 10+ identical D8 steps | 0.156 | 0.058 |
+| — rivers over 20,000 km² | 0.063 | 0.028 |
+| — rivers over 200 km² | 0.256 | 0.165 |
+| Cells whose next 20 steps stay within 0.75 px of their chord (any angle) | 0.038 | 0.004 |
+| — rivers over 200 km² | 0.087 | 0.019 |
+| Longest run (pixels) | 24 | 16 |
+| Confluences of two straight 10-step arms at 75–105° (rivers over 200 km²) | 22 of 223 | 5 of 262 |
+| — rivers over 2,000 km² | 5 of 27 | 1 of 26 |
+| Median confluence angle, rivers over 200 km² | 65° | 68° |
+| Path length over chord, 40 steps (median) | 1.15 | 1.26 |
+| Filled share of the land | 0.6 % | 0.7 % |
+| Drainage out over drainage in (with 203,172 km² inherited) | 1.000000 | 1.000000 |
+
+The flow moves points 1.5 km on average and at most 5.7 km at level 1, 0.8 km at
+level 2 and 0.2 km at level 3 (plus what each level's tiles carry). Single-pixel
+hollows deeper than 10 m, where pixel centres sample a winding V-crease off its
+floor, rose from 12 to 45 in the window (0.01 % of its pixels); they hold
+one-pixel ponds. Agreement of overlapping windows on the 20,000-node test planet,
+over six pairs 120 km apart: 0.905 near the edges and 0.880 inside before, 0.888
+and 0.919 after.
+
+**Level 3** (radius 20 km, 39 m pixels; level-2 and level-3 tiles regenerated from
+moved parents): on v11 tiles the 160,000 km² river ended in a closed hollow (see the
+basin-front work), so no river over 2,000 km² crossed the window. On v12 it crosses
+it, entering through a playa. Rivers over 200 km² in runs of 10+ steps: 0.076 to
+0.046 (rivers over 2,000 km²: 0.052, against 0.07 on v10 tiles); filled land 6.3 %
+to 1.7 %. The longest run, 45 pixels (1.8 km) on the basin plain, lies under the
+river's drawn meanders.

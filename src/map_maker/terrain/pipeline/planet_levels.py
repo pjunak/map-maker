@@ -4,7 +4,8 @@
 
 Level-n tiles are enriched like level-1 tiles, but their parent is a patch mesh
 at level n-1 spacing (ADR-0088). The patch carries:
-- the blended level n-1 relief;
+- the blended level n-1 relief, with the valley courses that level's mesh
+  resolves (``ReliefWarp``);
 - planet forcing sampled smoothly onto the patch, as level 1 takes it, and
   climate and young landforms sampled onto it;
 - the planet's lakes and sediment basins, which every level refines itself;
@@ -30,7 +31,7 @@ from map_maker.terrain.pipeline.planet_regional import (
     RegionalParent,
     parent_inflows,
 )
-from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend
+from map_maker.terrain.pipeline.planet_tiles import ReliefWarp, TileGrid, TileSurface, blend
 
 type F64 = NDArray[np.float64]
 
@@ -61,8 +62,13 @@ def level_parent(
     radius_m: float,
     spacing_km: float,
     seed: int,
+    relief: ReliefWarp,
 ) -> RegionalParent:
-    """A parent for detail within ``radius_m`` of ``centre``, built from coarser tiles."""
+    """A parent for detail within ``radius_m`` of ``centre``, built from coarser tiles.
+
+    ``relief`` is where the coarser tiles' blend is sampled
+    (``ReliefWarp.for_parent``).
+    """
     region = regional_mesh(
         centre[0], centre[1], level_parent_radius(planet, radius_m, spacing_km) / 1e3,
         spacing_km, planet.mesh.radius_m, seed,
@@ -72,7 +78,8 @@ def level_parent(
     land = coastline(planet.world).contains(
         xyz, level_finest_m(region.spacing_m), planet.settings.seed
     )
-    relief = np.where(land, np.maximum(blend(grid, tiles, xyz), 1.0), 0.0)
+    surface = blend(grid, tiles, relief(xyz, planet.mesh.radius_m))
+    relief_m = np.where(land, np.maximum(surface, 1.0), 0.0)
 
     def sample(values: F64 | None) -> F64 | None:
         return None if values is None else planet.sample(xyz, values)
@@ -91,7 +98,7 @@ def level_parent(
         float(planet.erodibility.max()),
     )
     flow = route(
-        mesh, relief, ~land | region.boundary, runoff, parent_inflows(planet, region)
+        mesh, relief_m, ~land | region.boundary, runoff, parent_inflows(planet, region)
     )
     nearest = np.asarray(KDTree(planet.mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
     patch = RegionalParent(
@@ -99,7 +106,7 @@ def level_parent(
         settings=planet.settings,
         mesh=mesh,
         land=land,
-        surface_m=relief,
+        surface_m=relief_m,
         steady_uplift=np.maximum(smoothly(planet.steady_uplift), 0.0),
         pulse_uplift=np.maximum(smoothly(planet.pulse_uplift), 0.0),
         erodibility=erodibility,
@@ -134,4 +141,4 @@ def level_parent(
     # Coarser tiles leave out volcanoes and wonders, which windows redraw sharply
     # from the planet's lists. The patch carries them as young relief on top of
     # that surface, as the planet does, so its lake levels match its surface.
-    return replace(patch, surface_m=relief + patch.young_m())
+    return replace(patch, surface_m=relief_m + patch.young_m())

@@ -32,7 +32,12 @@ from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken, ProgressCallback, check_cancelled
 from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
 from map_maker.terrain.pipeline.planet_regional import RegionalParent
-from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface, generate_tile
+from map_maker.terrain.pipeline.planet_tiles import (
+    ReliefWarp,
+    TileGrid,
+    TileSurface,
+    generate_tile,
+)
 
 DEFAULT_REGION_PIXELS = 1024
 DEFAULT_REGION_RIVER_KM2 = 2_000.0
@@ -61,6 +66,7 @@ class _LevelJob:
     coarse_grid: TileGrid | None  # the level above (None at level 1)
     coarse_settings: RegionalSettings | None
     coarse_store: TileStore | None
+    coarse_relief: ReliefWarp | None  # where tile parents sample the level above
 
     def generate(self, tile: int, cancellation: CancellationToken | None = None) -> None:
         self.store.save(
@@ -72,19 +78,26 @@ class _LevelJob:
         )
 
     def tile_parent(self, tile: int) -> RegionalParent:
-        if self.coarse_grid is None or self.coarse_store is None or self.coarse_settings is None:
+        if (
+            self.coarse_grid is None
+            or self.coarse_store is None
+            or self.coarse_settings is None
+            or self.coarse_relief is None
+        ):
             return self.planet
         centre = self.grid.lonlat(tile)
         reach = self.grid.support_m + self.grid.halo_m
         needed = self.coarse_grid.tiles_near(
-            centre, level_parent_radius(self.planet, reach, self.coarse_settings.spacing_km)
+            centre,
+            level_parent_radius(self.planet, reach, self.coarse_settings.spacing_km)
+            + self.coarse_relief.reach_m,
         )
         radius_m = self.planet.mesh.radius_m
         coarse = {t: self.coarse_store.load(t, radius_m) for t in needed}
         seed = stage_seed(self.planet.settings.seed, f"planet.level-parent.l{self.level}.{tile}")
         return level_parent(
             self.planet, self.coarse_grid, coarse, centre, reach,
-            self.coarse_settings.spacing_km, seed,
+            self.coarse_settings.spacing_km, seed, self.coarse_relief,
         )
 
 
@@ -170,14 +183,15 @@ def ensure_level_tiles(
     grid = TileGrid.for_planet(radius_m, settings)
     store = TileStore(cache, parent_sha256, settings, level)
     missing = [tile for tile in tiles if not store.has(tile)]
-    coarse_grid = coarse_settings = coarse_store = None
+    coarse_grid = coarse_settings = coarse_store = coarse_relief = None
     if missing and level > 1:
         coarse_settings = levels[level - 2]
         coarse_grid = TileGrid.for_planet(radius_m, coarse_settings)
         coarse_store = TileStore(cache, parent_sha256, coarse_settings, level - 1)
+        coarse_relief = ReliefWarp.for_parent(levels, level, planet.settings.seed)
         reach = level_parent_radius(
             planet, grid.support_m + grid.halo_m, coarse_settings.spacing_km
-        )
+        ) + coarse_relief.reach_m
         coarse_needed = sorted({
             t for tile in missing for t in coarse_grid.tiles_near(grid.lonlat(tile), reach)
         })
@@ -186,7 +200,8 @@ def ensure_level_tiles(
             workers=workers, progress=progress, cancellation=cancellation,
         )
     job = _LevelJob(
-        planet, level, grid, settings, store, coarse_grid, coarse_settings, coarse_store
+        planet, level, grid, settings, store, coarse_grid, coarse_settings, coarse_store,
+        coarse_relief,
     )
 
     def report(done: int, total: int) -> None:
@@ -214,7 +229,7 @@ def ensure_tiles(
     cancellation: CancellationToken | None = None,
 ) -> dict[int, TileSurface]:
     """Level-1 tiles of ``parent`` in ``store`` (generated when missing)."""
-    job = _LevelJob(parent, 1, grid, settings, store, None, None, None)
+    job = _LevelJob(parent, 1, grid, settings, store, None, None, None, None)
     missing = [tile for tile in tiles if not store.has(tile)]
     if progress is not None:
         progress(len(tiles) - len(missing), len(tiles))
@@ -282,7 +297,8 @@ def region_window(
     grid = TileGrid.for_planet(planet_m, levels[level - 1])
     # Windows are composed over a padded area so rivers do not depend on the window.
     reach_m = radius_km * 1e3 * ROUTE_PAD
-    needed = grid.tiles_near(centre, reach_m)
+    relief = ReliefWarp.for_window(levels, level, tiles_parent.settings.seed)
+    needed = grid.tiles_near(centre, reach_m + relief.reach_m)
 
     def tile_progress(at: int, done: int, total: int) -> None:
         if progress is not None:
@@ -297,8 +313,11 @@ def region_window(
     if level > 1:
         coarse_settings = levels[level - 2]
         coarse_grid = TileGrid.for_planet(planet_m, coarse_settings)
+        coarse_relief = ReliefWarp.for_parent(levels, level, tiles_parent.settings.seed)
         coarse_needed = coarse_grid.tiles_near(
-            centre, level_parent_radius(parent, reach_m, coarse_settings.spacing_km)
+            centre,
+            level_parent_radius(parent, reach_m, coarse_settings.spacing_km)
+            + coarse_relief.reach_m,
         )
         _, coarse = ensure_level_tiles(
             tiles_parent, tiles_sha256, cache, level - 1, coarse_needed, levels,
@@ -310,11 +329,12 @@ def region_window(
             parent, coarse_grid, coarse, centre, reach_m,
             coarse_settings.spacing_km,
             stage_seed(parent.settings.seed, f"planet.level-window.l{level}"),
+            coarse_relief,
         )
     if progress is not None:
         progress(0.92, "Blending tiles")
     window = compose_window(
-        window_parent, grid, tiles, centre, radius_km, pixels, river_km2,
+        window_parent, grid, tiles, centre, radius_km, pixels, river_km2, relief=relief,
         spacing_m=levels[level - 1].spacing_km * 1e3,
     )
     check_cancelled(cancellation)

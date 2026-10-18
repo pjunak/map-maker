@@ -15,7 +15,13 @@ from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
 from map_maker.terrain.pipeline.planet_metrics import non_descending_receivers
 from map_maker.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
 from map_maker.terrain.pipeline.planet_regional import RegionalParent, enrich
-from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface, blend, generate_tile
+from map_maker.terrain.pipeline.planet_tiles import (
+    ReliefWarp,
+    TileGrid,
+    TileSurface,
+    blend,
+    generate_tile,
+)
 
 
 @pytest.fixture(scope="module")
@@ -618,7 +624,10 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
     planet = RegionalParent.from_result(parent)
     centre = _land_centre(parent)
     grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
-    needed = grid.tiles_near(centre, level_parent_radius(planet, 300e3, 30.0))
+    relief = ReliefWarp.for_parent(TINY_LEVELS, 2, parent.settings.seed)
+    needed = grid.tiles_near(
+        centre, level_parent_radius(planet, 300e3, 30.0) + relief.reach_m
+    )
     grid, tiles = ensure_level_tiles(
         planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
     )
@@ -628,10 +637,10 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
 
     # A smooth uplift field, to see how planet forcing reaches the patch.
     forced = replace(planet, steady_uplift=uplift(parent.mesh.xyz))
-    patch = level_parent(forced, grid, tiles, centre, 300e3, 30.0, 11)
+    patch = level_parent(forced, grid, tiles, centre, 300e3, 30.0, 11, relief)
     land = patch.land
     assert land.any()
-    coarse = blend(grid, tiles, patch.mesh.xyz)
+    coarse = blend(grid, tiles, relief(patch.mesh.xyz, parent.mesh.radius_m))
     # Tiles leave out young landforms; the patch carries them on top, as the planet
     # does, so its relief without them is the coarser level's.
     young = np.where(land, planet.sample(patch.mesh.xyz, planet.young_m()), 0.0)
@@ -681,11 +690,14 @@ def test_level_parents_bring_planet_rivers_in_across_the_area_they_serve(
     centre = _lonlat(parent.mesh.xyz[parent.flow.receiver[node]])
     radius_m = 75e3
     grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
-    needed = grid.tiles_near(centre, level_parent_radius(planet, radius_m, 30.0))
+    relief = ReliefWarp.for_parent(TINY_LEVELS, 2, parent.settings.seed)
+    needed = grid.tiles_near(
+        centre, level_parent_radius(planet, radius_m, 30.0) + relief.reach_m
+    )
     grid, tiles = ensure_level_tiles(
         planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
     )
-    patch = level_parent(planet, grid, tiles, centre, radius_m, 30.0, 11)
+    patch = level_parent(planet, grid, tiles, centre, radius_m, 30.0, 11, relief)
     mesh, receiver, area = patch.mesh, patch.receiver, patch.area_m2
     middle = parent.mesh.xyz[parent.flow.receiver[node]]
     served = mesh.radius_m * np.arccos(np.clip(mesh.xyz @ middle, -1, 1)) <= radius_m
@@ -835,13 +847,15 @@ def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path
     # Where they overlap near either window's edge, where routing used to start:
     # unpadded routing agrees on about 92 % of river pixels here, padded about 94 %.
     # One pair varies with the relief (82-100 % over six pairs, pooled 91 % with
-    # tiles v10 and v11 alike).
+    # tiles v10 and v11 alike). With valleys winding below the mesh (v12) this
+    # pair agrees on 91.4 %; six pairs pool 89 % near the edges and 92 % inside
+    # (v11: 90 % and 88 %).
     ra, rb = np.hypot(x, y) / a.radius_m, np.hypot(xb, yb) / b.radius_m
     edge = (ra < 0.98) & (rb < 0.98) & ((ra > 0.75) | (rb > 0.75))
     check = rivers_b.ravel() & edge
     assert check.sum() > 20
     near_a = binary_dilation(a.rivers > 0.5, iterations=2)
-    assert near_a[row[check], column[check]].mean() > 0.93
+    assert near_a[row[check], column[check]].mean() > 0.9
 
 
 def test_inherited_rivers_cross_small_windows(parent: PlanetResult, tmp_path: Path) -> None:
@@ -1074,6 +1088,88 @@ def test_windows_draw_ice_sheets_over_the_relief_without_rivers_or_lakes(
     assert np.allclose(relief[cover & window.land], np.fmax(relief, window.ice_surface_m)[
         cover & window.land
     ])
+
+
+def test_relief_warp_winds_straight_tile_valleys_and_keeps_their_drainage() -> None:
+    """A valley between collinear tile nodes routes as a straight line unless warped.
+
+    Tiles interpolate linearly, so a valley along their mesh edges is a straight
+    crease, and pixel routing drew it as one straight run. Sampled where the
+    relief warp moves each pixel, the valley winds; the warp is an
+    area-preserving flow, so heights, the area at each height and the absence
+    of closed hollows are kept, and the river stays near its valley.
+    """
+    from scipy.spatial import Delaunay
+
+    from map_maker.terrain.domain.planet import REGION_LEVELS
+    from map_maker.terrain.pipeline.planet_detail import grid_flow
+    from map_maker.terrain.pipeline.planet_mesh import mesh_from_triangles
+
+    radius_m, lon, lat, spacing = 6.0e6, 20.0, 10.0, 5e3
+    # A regular tile lattice with a row of nodes on the valley axis (y = 0).
+    j, i = np.mgrid[-14:15, -16:17]
+    x = ((i + 0.5 * (j % 2)) * spacing).ravel().astype(np.float64)
+    y = (j * spacing * np.sqrt(3) / 2).ravel().astype(np.float64)
+    triangles = Delaunay(np.c_[x, y]).simplices.astype(np.int64)
+    mesh = mesh_from_triangles(inverse_aeqd(x, y, lon, lat, radius_m), triangles, radius_m)
+    # Planar valley sides falling 3 % to the axis, which falls 0.2 % to the west.
+    tile = TileSurface(mesh, 500.0 + 0.03 * np.abs(y) + 0.002 * x)
+    pixels, pixel_m = 200, 400.0
+    centres = (np.arange(pixels) + 0.5 - pixels / 2) * pixel_m
+    gx, gy = np.meshgrid(centres, -centres)
+    points = inverse_aeqd(
+        gx.ravel().astype(np.float64), gy.ravel().astype(np.float64), lon, lat, radius_m
+    )
+    outlet = np.zeros((pixels, pixels), dtype=bool)
+    outlet[:, 0] = True
+    warp = ReliefWarp.for_window(REGION_LEVELS, 1, 7)
+
+    def route(at: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        z = tile.sample(at).reshape(pixels, pixels)
+        receiver, area, filled = grid_flow(z, outlet, pixel_m, np.zeros_like(z))
+        return z, receiver, area, filled
+
+    straight, moved = route(points), route(warp(points, radius_m))
+    river_m2 = 4000 * pixel_m**2  # the main river, not its side streams
+    assert _straight_channel_share(straight[1], straight[2], river_m2) > 0.9
+    assert _straight_channel_share(moved[1], moved[2], river_m2) < 0.3
+    z, _, area, filled = moved
+    # No new hollows. Pixels sample a winding V-crease off its floor, as at any
+    # crease the grid does not follow, which leaves a few hollows no deeper than
+    # the side slope across a pixel; a fold in the warp would dig deeper ones.
+    depth = (filled - z)[~outlet]
+    assert np.mean(depth > 0.01) < 0.01
+    assert depth.max() < 0.03 * pixel_m * np.sqrt(2)
+    # Heights and the area at each height are kept away from the edges.
+    inner = (np.abs(gx) < 25e3) & (np.abs(gy) < 25e3)
+    quantiles = np.linspace(0.05, 0.95, 19)
+    shift = np.quantile(z[inner], quantiles) - np.quantile(straight[0][inner], quantiles)
+    assert np.abs(shift).max() < 0.03 * np.ptp(straight[0][inner])
+    # The river stays in its valley.
+    river = (area >= river_m2).reshape(pixels, pixels) & ~outlet
+    assert river[:, pixels // 2].sum() >= 1
+    assert np.abs(gy[river]).max() < warp.reach_m
+    assert np.median(np.abs(gy[river])) < 0.5 * spacing
+
+
+def test_relief_warp_octaves_nest_across_levels() -> None:
+    """Every level takes the octaves its tiles cannot carry, once, from one sequence."""
+    from map_maker.terrain.domain.planet import REGION_LEVELS
+
+    def octaves(warp: ReliefWarp) -> list[int]:
+        first, found = warp.octaves()
+        return list(range(first, first + len(found)))
+
+    one = octaves(ReliefWarp.for_window(REGION_LEVELS, 1, 7))
+    assert one[0] == 0 and len(one) >= 2
+    carried: list[int] = []  # octaves that reach a level through its tiles
+    for level in (2, 3):
+        carried += octaves(ReliefWarp.for_parent(REGION_LEVELS, level, 7))
+        shown = carried + octaves(ReliefWarp.for_window(REGION_LEVELS, level, 7))
+        # Each octave once and none left out, and every level bends rivers
+        # where level 1 does.
+        assert shown == list(range(len(shown)))
+        assert set(one) <= set(shown)
 
 
 def test_smooth_parent_sampling_has_no_creases_at_parent_triangle_edges(

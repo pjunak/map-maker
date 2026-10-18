@@ -134,3 +134,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0103: Show opened regional maps on the globe where it is zoomed in on them](0103-regional-detail-on-the-globe.md)
 - [ADR-0104: Zoom the globe past 16x into opened regional maps, until their pixels fill the screen's](0104-zoom-the-globe-into-regional-maps.md)
 - [ADR-0105: Colour and shade every regional level by slopes scaled to level 1](0105-regional-levels-see-level-1-slopes.md)
+- [ADR-0106: Wind regional valleys below the tile mesh along an area-preserving flow](0106-wind-regional-valleys-below-the-tile-mesh.md)

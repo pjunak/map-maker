@@ -64,7 +64,7 @@ from map_maker.terrain.pipeline.planet_regional import (
     RegionalParent,
     RegionalResult,
 )
-from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface
+from map_maker.terrain.pipeline.planet_tiles import ReliefWarp, TileGrid, TileSurface
 from map_maker.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
 from map_maker.terrain.pipeline.planet_wonders import (
     WonderCover,
@@ -215,6 +215,7 @@ def compose_window(
     pixels: int,
     river_km2: float,
     *,
+    relief: ReliefWarp,
     spacing_m: float = 5000.0,
     pad: float = ROUTE_PAD,
 ) -> RegionWindow:
@@ -223,13 +224,14 @@ def compose_window(
     River routing has to start somewhere, and where it starts depends on the
     window. Routing over ``pad`` times the radius keeps that start outside the
     visible map: rivers inside follow the tile surface, which does not depend
-    on the window, so overlapping windows draw the same rivers.
+    on the window, so overlapping windows draw the same rivers. The tiles'
+    blend is sampled where ``relief`` moves each pixel (``ReliefWarp.for_window``).
     """
     extra = round(pixels * (pad - 1) / 2)
     size = pixels + 2 * extra
     padded = _compose(
         parent, grid, tiles, centre, radius_km * 1e3 * size / pixels, size, river_km2,
-        spacing_m,
+        spacing_m, relief,
     )
     return crop_window(padded, extra, pixels)
 
@@ -295,6 +297,7 @@ def _compose(
     pixels: int,
     river_km2: float,
     spacing_m: float,
+    relief: ReliefWarp,
 ) -> RegionWindow:
     planet_m = parent.mesh.radius_m
     points, inside = window_points(*centre, radius_m, pixels, planet_m)
@@ -310,7 +313,7 @@ def _compose(
         floor = np.where(parent.land, 0.0, -2000.0)
     sea = parent.sample(points, floor).reshape(pixels, pixels)
     elevation = np.zeros(pixels * pixels)
-    elevation[inside.ravel()] = blend(grid, surfaces, points[inside.ravel()])
+    elevation[inside.ravel()] = blend(grid, surfaces, relief(points[inside.ravel()], planet_m))
     elevation = elevation.reshape(pixels, pixels)
     volcanic = np.zeros((pixels, pixels))
     if parent.volcanoes is not None and parent.volcanic_m is not None:

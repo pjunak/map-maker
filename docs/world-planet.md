@@ -178,6 +178,12 @@ rivers meander along their valley, with bends about eleven channel widths apart.
   plain runs up valleys and spurs of the range reach out into it. Each deeper
   level only adds smaller bends, so the front keeps its course, usually within
   3 km of where the planet puts it and rarely more than 8 km.
+- Valleys and rivers wind below the detail mesh. Each level's relief bends in
+  an area-preserving flow, so a valley that the mesh holds as a straight line
+  between its points winds instead, and rivers follow it. Heights and basins stay
+  as the tiles made them. Each deeper level only adds smaller bends, so rivers
+  keep their course: they move about 1.5 km on average and rarely more than 6 km
+  ([ADR-0106](adr/0106-wind-regional-valleys-below-the-tile-mesh.md)).
 - A scale bar shows distance. Hovering shows the place, the offset from the centre
   and the height.
 - **Export region…** writes a local-projection GeoTIFF, previews and a manifest.
@@ -326,7 +332,8 @@ Options:
 - `--cache` puts the tile cache elsewhere.
 - `--workers` sets how many tile processes run (0 = automatic).
 
-A region writes `elevation.tif` (the blended tile relief), `relief.png` and
+A region writes `elevation.tif` (the blended tile relief, with its winding
+valleys), `relief.png` and
 `topographic.png`. With climate it also writes the natural-colour `atlas.png` and
 the hand-drawn `parchment.png`.
 

@@ -38,6 +38,10 @@ backlog, and [status](../research/status.md) records what works now.
    - Wide rivers on fine maps meander about their valley line, the routed path
      smoothed over half a bend, instead of about each pixel step, where their
      bends crossed into tangles.
+   - Valleys wind below the tile mesh: every level samples its tile blend along
+     an area-preserving flow of nested noise octaves, so region maps no longer
+     draw big rivers as straight runs between mesh nodes meeting at right angles
+     (ADR-0106, `planet-blended-tiles-v12`).
    - Rock texture now follows each level's spacing, so fine tiles branch rather
      than cutting parallel gullies.
    - Regional coasts are refined below the drawing's precision, so local maps
