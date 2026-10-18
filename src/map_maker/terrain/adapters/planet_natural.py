@@ -53,6 +53,7 @@ DETAIL_WAVELENGTH_M = 110e3
 DETAIL_OCTAVES = 8
 SEA_TEXTURE_M = 180.0
 EXAGGERATION = 13.0
+EDIFICE_SHADE = 0.5  # share of volcano height that hillshade sees (see display_fields)
 CARVE_ERODIBILITY = 0.3  # K * dt for display valley carving (m^0)
 CARVE_STEPS = 4
 # (radius m, weight, height scale m) of the multi-scale openness term.
@@ -240,6 +241,8 @@ def display_fields(
     base_sea = np.where(
         land_px, base_sea, np.minimum(sea_floor + sharp, np.maximum(sea_floor, GUYOT_DEPTH_M))
     )
+    # Edifice relief drawn at pixel scale, on land and on the sea floor.
+    edifice = np.where(land_px, sharp, base_sea - sea_floor)
     # Fresh lava and ash show near summits; lower flanks weather like their surroundings.
     volcanic = np.where(land_px, _smooth(sharp, 300.0, 2500.0), 0.0)
     ridged = _smooth(base_land, 500, 2200).ravel()
@@ -297,7 +300,16 @@ def display_fields(
     z = np.where(land_px, land, np.minimum(sea, -1.0))
     gy = np.gradient(z, axis=0) / dy
     gx = (np.roll(z, -1, 1) - np.roll(z, 1, 1)) / (2 * dx)
-    slope, light = shading(gx, gy, EXAGGERATION)
+    slope = np.hypot(gx, gy)
+    # The exaggeration brings out relief the mesh smooths away. Volcanoes are
+    # drawn at pixel scale with their slopes resolved, so at full exaggeration
+    # they shade as glossy marbles: they are lit with EDIFICE_SHADE of their
+    # height (none where an ice sheet buries them).
+    lit = z - (1 - EDIFICE_SHADE) * np.where(covered, 0.0, edifice)
+    _, light = shading(
+        (np.roll(lit, -1, 1) - np.roll(lit, 1, 1)) / (2 * dx), np.gradient(lit, axis=0) / dy,
+        EXAGGERATION,
+    )
     position = openness(z, dy, dx[:, 0])
     light = light * (1 + OPENNESS_GAIN * position)
     # The surface the climate fields refer to: mesh land without its volcanoes

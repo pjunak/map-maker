@@ -302,7 +302,9 @@ rivers, lakes or climate. See the [rendering report](research/2026-10-07-natural
 Atlas and relief images also anti-alias coasts: each coast pixel mixes land and sea
 by the share of it on land, so coasts do not step along the pixel grid. Lake shores
 are softened the same way. The land mask in `elevation.tif` and the other outputs
-still follows pixel centres.
+still follows pixel centres. World-map hillshade exaggerates slopes, because the
+mesh smooths them; volcanoes are drawn at pixel scale with their slopes intact, so
+they are lit with half their height and do not shade as glossy domes.
 
 ## Outputs
 

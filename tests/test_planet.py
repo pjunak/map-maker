@@ -1573,6 +1573,41 @@ def test_placed_wonders_replace_random_ones_and_keep_their_own_shapes(world_path
     assert forks.discharge_m3_s[0] == pytest.approx(0.4 * plain.lakes.discharge_m3_s[split])
 
 
+def test_volcanoes_drawn_at_pixel_scale_are_not_shaded_as_marbles(
+    world_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scipy.ndimage import binary_dilation
+
+    import map_maker.terrain.adapters.planet_natural as natural
+    from map_maker.terrain.adapters.planet_render import planet_rasters
+    from map_maker.terrain.pipeline.planet_volcanism import edifice_height
+
+    result = generate_planet(open_world(world_path), FAST)
+    rasters = planet_rasters(result, 1024)
+    raster, land, z = rasters.raster, rasters.land_px, rasters.elevation_m
+
+    def fields(share: float) -> natural.DisplayFields:
+        monkeypatch.setattr(natural, "EDIFICE_SHADE", share)
+        return natural.display_fields(
+            result, raster, land, np.where(land, z, 0.0), np.where(land, 0.0, z),
+            rasters.islands_px,
+        )
+
+    sharp = edifice_height(raster.queries, result.mesh.radius_m, result.volcanoes)
+    sharp = sharp.reshape(raster.shape)
+    cones = land & (sharp > 300)
+    assert cones.sum() > 20
+    lit, glossy = fields(natural.EDIFICE_SHADE), fields(1.0)
+    # Cones are lit less harshly than full exaggeration would light them...
+    assert np.std(lit.light[cones]) < 0.8 * np.std(glossy.light[cones])
+    # ...while the rest of the map and every slope (rock, snow) stay as they were.
+    # Gradients wrap east-west, so the neighbourhood does too.
+    tiled = np.asarray(binary_dilation(np.tile(sharp > 0, 3), iterations=2), dtype=bool)
+    away = ~tiled[:, sharp.shape[1] : 2 * sharp.shape[1]]
+    assert np.allclose(lit.light[away], glossy.light[away])
+    assert np.allclose(lit.slope, glossy.slope)
+
+
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands
