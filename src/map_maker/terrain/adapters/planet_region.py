@@ -17,12 +17,12 @@ from numpy.typing import NDArray
 from PIL import Image
 from rasterio.crs import CRS
 from scipy.ndimage import (
-    binary_erosion,
     distance_transform_edt,
     gaussian_filter,
     label,
     map_coordinates,
     maximum,
+    maximum_filter,
     minimum_position,
 )
 
@@ -58,7 +58,7 @@ from map_maker.terrain.pipeline.planet_climate import potential_evapotranspirati
 from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m, window_finest_m
 from map_maker.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
 from map_maker.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
-from map_maker.terrain.pipeline.planet_patch import inverse_aeqd
+from map_maker.terrain.pipeline.planet_patch import forward_aeqd, inverse_aeqd
 from map_maker.terrain.pipeline.planet_regional import (
     LAKE_CORE_COVER,
     RegionalParent,
@@ -346,7 +346,7 @@ def _compose(
     # The share of land in each pixel, so coasts are drawn anti-aliased.
     land_cover = edge_coverage(drawn | islands, on_land)
     ice_surface, ice_balance = window_ice(parent, points, elevation, land, pixel_m, spacing_m)
-    flow = window_flow(parent, points, elevation, land, inside, pixel_m)
+    flow = window_flow(parent, centre, points, elevation, land, inside, pixel_m)
     # Lakes fill the regional relief up to the parent lake level, so shores
     # follow the fine terrain (and a crater's sharp trough) instead of the
     # coarse parent mesh.
@@ -512,20 +512,39 @@ class WindowFlow:
 
 
 def window_flow(
-    parent: RegionalParent, points: F64, elevation: F64, land: B, inside: B, pixel_m: float
+    parent: RegionalParent,
+    centre: tuple[float, float],
+    points: F64,
+    elevation: F64,
+    land: B,
+    inside: B,
+    pixel_m: float,
 ) -> WindowFlow:
     """One drainage network over the whole window, with no seams between tiles.
 
-    Rivers entering from outside the window carry the parent's upstream area,
-    spread over the rim pixels the parent river crosses.
+    Parent rivers that cross into the window bring their upstream area in near
+    where they cross (``crossing_inflows``, ``entry_pixels``). Beyond the window
+    circle the ground is a wall at the highest neighbouring height inside, so a
+    rim pixel drains along the window's relief: water leaves only where a valley
+    reaches the rim, and a river entering on the rim flows in. Ground at the sea
+    floor or at zero beyond the rim drained every rim pixel straight out,
+    inherited rivers included.
     """
     pixels = elevation.shape[0]
-    z = np.where(inside, np.nan_to_num(elevation, nan=0.0), 0.0)
+    ground = np.where(inside, np.nan_to_num(elevation, nan=0.0), -np.inf)
+    wall = np.asarray(maximum_filter(ground, size=3), dtype=np.float64)
+    z = np.where(inside, ground, np.where(np.isfinite(wall), wall, 0.0))
     outlet = ~inside | ~land
-    # Parent drainage area at the rim: rivers entering from beyond the window.
-    rim = inside & ~np.asarray(binary_erosion(inside), dtype=bool)
-    upstream = parent.sample(points, parent.area_m2).reshape(pixels, pixels)
-    inflow = np.where(rim & land, upstream * pixel_m / parent.mesh.spacing_m, 0.0)
+    inflow = np.zeros(pixels * pixels)
+    rows, columns, area = crossing_inflows(parent, centre, pixel_m * pixels / 2, pixel_m)
+    if len(area):
+        dry = WindowFlow.route(z, outlet, pixel_m, np.zeros((pixels, pixels)))
+        reach = downstream_steps(dry.receiver).reshape(pixels, pixels)
+        spread = max(parent.mesh.spacing_m / pixel_m, 2.0)
+        target = entry_pixels(rows, columns, reach, inside & land, spread)
+        entered = target >= 0
+        np.add.at(inflow, target[entered], area[entered])
+    inflow = inflow.reshape(pixels, pixels)
     # A splitting river's branch starts with its share of the river's water.
     links: list[tuple[int, int]] = []
     forks = None if parent.wonders is None else parent.wonders.forks
@@ -537,6 +556,92 @@ def window_flow(
                 inflow.ravel()[ends[1]] += carried
                 links.append((ends[0], ends[1]))
     return WindowFlow.route(z, outlet, pixel_m, inflow, tuple(links))
+
+
+def crossing_inflows(
+    parent: RegionalParent, centre: tuple[float, float], radius_m: float, pixel_m: float
+) -> tuple[F64, F64, F64]:
+    """Where parent rivers cross into a window's routing circle, and their area.
+
+    Every parent river step that crosses into the circle of ``radius_m`` about
+    ``centre`` gives its crossing (pixel row and column, fractional) and its
+    upstream area, so each inherited river enters once and nothing enters where
+    rivers leave.
+    """
+    mesh = parent.mesh
+    planet_m = mesh.radius_m
+    middle = inverse_aeqd(np.zeros(1), np.zeros(1), *centre, planet_m)[0]
+    distance = planet_m * np.arccos(np.clip(mesh.xyz @ middle, -1, 1))
+    step_m = float(mesh.length_m.max())
+    nodes = np.flatnonzero(
+        parent.land
+        & (parent.receiver >= 0)
+        & (distance > radius_m)
+        & (distance < radius_m + step_m)
+    )
+    start = forward_aeqd(mesh.xyz[nodes], *centre, planet_m)
+    step = forward_aeqd(mesh.xyz[parent.receiver[nodes]], *centre, planet_m) - start
+    # The first point of each step on the circle: |start + t step| = radius_m.
+    a = np.einsum("ij,ij->i", step, step)
+    b = np.einsum("ij,ij->i", start, step)
+    c = np.einsum("ij,ij->i", start, start) - radius_m**2
+    root = b**2 - a * c
+    t = (-b - np.sqrt(np.maximum(root, 0.0))) / np.maximum(a, 1e-9)
+    enters = (root >= 0) & (t >= 0) & (t <= 1)
+    crossing = start[enters] + t[enters, None] * step[enters]
+    row = (radius_m - crossing[:, 1]) / pixel_m
+    column = (crossing[:, 0] + radius_m) / pixel_m
+    return row, column, parent.area_m2[nodes[enters]]
+
+
+def downstream_steps(receiver: NDArray[np.int64]) -> NDArray[np.int64]:
+    """How many steps water takes from each cell to an outlet (0 at outlets)."""
+    jump = np.where(receiver >= 0, receiver, np.arange(len(receiver)))
+    steps = (receiver >= 0).astype(np.int64)
+    # Pointer doubling: each pass doubles the stretch of path each cell has counted.
+    while not np.array_equal(jump[jump], jump):
+        steps = steps + steps[jump]
+        jump = jump[jump]
+    return steps
+
+
+def entry_pixels(
+    rows: F64, columns: F64, reach: NDArray[np.int64], ground: B, spread_px: float
+) -> NDArray[np.intp]:
+    """Flat pixels where inherited rivers enter a window (-1: they reach its sea).
+
+    A parent places its rivers only to within its spacing (``spread_px``), and
+    the window's finer relief can put the valley a little to one side. A river
+    enters at its crossing if the window's water runs inward from there for at
+    least ``spread_px`` steps (``reach``). Otherwise it enters at the nearest
+    ``ground`` pixel within ``spread_px`` where the water does, or failing that
+    where it runs furthest, so it joins the window's own valley instead of
+    leaving down a side valley at once. With no ground that near, the river has
+    reached the sea.
+    """
+    size = ground.shape[0]
+    radius = int(np.ceil(spread_px))
+    targets = np.full(len(rows), -1, dtype=np.intp)
+    for k, (row, column) in enumerate(zip(rows, columns, strict=True)):
+        r0, c0 = int(np.floor(row)), int(np.floor(column))
+        top, left = max(r0 - radius, 0), max(c0 - radius, 0)
+        bottom, right = min(r0 + radius + 1, size), min(c0 + radius + 1, size)
+        if top >= bottom or left >= right:
+            continue
+        r, c = np.mgrid[top:bottom, left:right]
+        gap = (r + 0.5 - row) ** 2 + (c + 0.5 - column) ** 2
+        near = ground[top:bottom, left:right] & (gap <= spread_px**2)
+        if not near.any():
+            continue
+        runs = reach[top:bottom, left:right]
+        inward = near & (runs >= spread_px)
+        best = (
+            np.argmin(np.where(inward, gap, np.inf))
+            if inward.any()
+            else np.argmax(np.where(near, runs, -1))
+        )
+        targets[k] = int(r.ravel()[best]) * size + int(c.ravel()[best])
+    return targets
 
 
 def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:

@@ -1,6 +1,6 @@
 # Ordered terrain implementation plan
 
-Updated 2026-10-17. **Active milestone: M6, nested deterministic regional and local
+Updated 2026-10-18. **Active milestone: M6, nested deterministic regional and local
 maps.** Map views run alongside it. The plan is world-first: one whole-planet
 relief, made by uplift and erosion on a sphere mesh, feeds climate, map views and
 regional zoom ([decision D00a](../research/decision-catalog.md)).
@@ -29,6 +29,12 @@ backlog, and [status](../research/status.md) records what works now.
    - Display detail is now world-anchored and scaled per level.
    - Rivers are routed over a padded window, so overlapping windows draw the
      same rivers (about 96 % agreement near the edges).
+   - Rivers entering a map keep the drainage of the level above. A window's
+     routing rim is a wall, so water leaves only down valleys; each parent river
+     enters where it crosses, or in the window's own valley within one parent
+     spacing. Level parents reach a planet step beyond the area they serve, so
+     planet rivers cross into it, and tiles weight inherited drainage once
+     (`planet-blended-tiles-v10`).
    - Rock texture now follows each level's spacing, so fine tiles branch rather
      than cutting parallel gullies.
    - Regional coasts are refined below the drawing's precision, so local maps

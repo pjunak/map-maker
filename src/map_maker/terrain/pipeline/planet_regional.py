@@ -310,9 +310,9 @@ def enrich(
         None if parent.runoff_weight is None
         else np.maximum(smoothly(parent.runoff_weight), MIN_RUNOFF_WEIGHT)
     )
+    # Parent drainage area is already weighted by the runoff upstream, where it
+    # fell; the region's runoff where a river enters does not change it.
     inflow = parent_inflows(parent, region)
-    if runoff is not None:
-        inflow = inflow * runoff
     settings = parent.settings
     rng = np.random.default_rng(seed)
     initial = np.maximum(target, 1.0) + 5 * rng.random(mesh.size)

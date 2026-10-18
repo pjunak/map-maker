@@ -537,12 +537,12 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
     parent: PlanetResult, tmp_path: Path
 ) -> None:
     from map_maker.terrain.application.planet_region import ensure_level_tiles
-    from map_maker.terrain.pipeline.planet_levels import level_parent
+    from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
 
     planet = RegionalParent.from_result(parent)
     centre = _land_centre(parent)
     grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
-    needed = grid.tiles_near(centre, 500e3)
+    needed = grid.tiles_near(centre, level_parent_radius(planet, 300e3, 30.0))
     grid, tiles = ensure_level_tiles(
         planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
     )
@@ -559,6 +559,47 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
     descending = patch.receiver[land] >= 0
     assert descending.mean() > 0.75
     assert np.all(patch.area_m2[land & (patch.receiver >= 0)] > 0)
+
+def _river_step(parent: PlanetResult) -> int:
+    """The planet node with the largest drainage whose step runs between inland land."""
+    receiver = parent.flow.receiver
+    inland = parent.land & (parent.coast_m > 300e3) & (parent.lakes.lake < 0)
+    steps = inland & (receiver >= 0) & inland[np.maximum(receiver, 0)]
+    return int(np.argmax(np.where(steps, parent.flow.area_m2, 0.0)))
+
+
+def _lonlat(xyz: np.ndarray) -> tuple[float, float]:
+    unit = xyz / np.linalg.norm(xyz)
+    return float(np.degrees(np.arctan2(unit[1], unit[0]))), float(np.degrees(np.arcsin(unit[2])))
+
+
+def test_level_parents_bring_planet_rivers_in_across_the_area_they_serve(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from map_maker.terrain.application.planet_region import ensure_level_tiles
+    from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
+
+    planet = RegionalParent.from_result(parent)
+    # A small area served, centred where a big planet river step ends: one planet
+    # step is longer than a quarter of the radius, so a patch reaching only that
+    # far started the river at its receiver, inside the area served.
+    node = _river_step(parent)
+    centre = _lonlat(parent.mesh.xyz[parent.flow.receiver[node]])
+    radius_m = 75e3
+    grid = TileGrid.for_planet(parent.mesh.radius_m, TINY_LEVELS[0])
+    needed = grid.tiles_near(centre, level_parent_radius(planet, radius_m, 30.0))
+    grid, tiles = ensure_level_tiles(
+        planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
+    )
+    patch = level_parent(planet, grid, tiles, centre, radius_m, 30.0, 11)
+    mesh, receiver, area = patch.mesh, patch.receiver, patch.area_m2
+    middle = parent.mesh.xyz[parent.flow.receiver[node]]
+    served = mesh.radius_m * np.arccos(np.clip(mesh.xyz @ middle, -1, 1)) <= radius_m
+    # Water in the area served fell there or crossed its rim.
+    entering = ~served & (receiver >= 0) & served[np.maximum(receiver, 0)]
+    runoff = 1.0 if patch.runoff_weight is None else patch.runoff_weight
+    fell = float(np.sum((mesh.area_m2 * runoff)[served & patch.land]))
+    assert area[served].max() <= 1.001 * (area[entering].sum() + fell)
 
 
 def test_level_two_windows_repeat_exactly_and_agree_with_level_one(
@@ -656,6 +697,30 @@ def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path
     assert check.sum() > 20
     near_a = binary_dilation(a.rivers > 0.5, iterations=2)
     assert near_a[row[check], column[check]].mean() > 0.94
+
+
+def test_inherited_rivers_cross_small_windows(parent: PlanetResult, tmp_path: Path) -> None:
+    from map_maker.terrain.application.planet_region import region_window
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+
+    # A window centred on a big planet river step, far smaller than the step.
+    node = _river_step(parent)
+    xyz = parent.mesh.xyz
+    centre = _lonlat(xyz[node] + xyz[parent.flow.receiver[node]])
+    radius_km = 60.0
+    inherited_km2 = parent.flow.area_m2[node] / 1e6
+    # The river can only come from the parent: the routed window holds far less.
+    assert inherited_km2 > 10 * np.pi * (1.25 * radius_km) ** 2
+    window = region_window(
+        RegionalParent.from_result(parent), "p" * 64, tmp_path, centre, radius_km,
+        levels=TINY_LEVELS, pixels=128, workers=1, river_km2=0.7 * inherited_km2,
+    ).window
+    # Most of the parent's river crosses the map. Windows drained their rim
+    # straight out, inherited rivers included, so none was drawn.
+    drawn = window.rivers.ravel() > 0.05
+    assert drawn.sum() > 50
+    x, y = forward_aeqd(window.points[drawn], *window.centre, window.planet_m).T
+    assert np.ptp(x) ** 2 + np.ptp(y) ** 2 > (1.2 * window.radius_m) ** 2
 
 
 def _shore(lakes: np.ndarray, dry: np.ndarray) -> np.ndarray:

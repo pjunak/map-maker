@@ -33,6 +33,20 @@ type F64 = NDArray[np.float64]
 LEVEL_PARENT_MARGIN = 1.25
 
 
+def level_parent_radius(planet: RegionalParent, radius_m: float, spacing_km: float) -> float:
+    """How far the level parent serving ``radius_m`` about its centre reaches.
+
+    A planet river enters a patch at the patch node nearest its first planet
+    node inside, up to the longest planet step (and a patch spacing) in from the
+    rim. The patch reaches far enough for that node to lie outside the area
+    served, so every inherited river crosses into that area instead of starting
+    inside it. Small deep windows need this: 25 % of a 25 km local window is
+    less than one 12 km step of a 3.2M-node planet.
+    """
+    step_m = float(planet.mesh.length_m.max())
+    return max(LEVEL_PARENT_MARGIN * radius_m, radius_m + step_m + 2 * spacing_km * 1e3)
+
+
 def level_parent(
     planet: RegionalParent,
     grid: TileGrid,
@@ -44,8 +58,8 @@ def level_parent(
 ) -> RegionalParent:
     """A parent for detail within ``radius_m`` of ``centre``, built from coarser tiles."""
     region = regional_mesh(
-        centre[0], centre[1], LEVEL_PARENT_MARGIN * radius_m / 1e3, spacing_km,
-        planet.mesh.radius_m, seed,
+        centre[0], centre[1], level_parent_radius(planet, radius_m, spacing_km) / 1e3,
+        spacing_km, planet.mesh.radius_m, seed,
     )
     mesh = region.mesh
     xyz = mesh.xyz

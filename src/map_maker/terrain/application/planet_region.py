@@ -30,7 +30,7 @@ from map_maker.terrain.domain.planet import (
 )
 from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken, ProgressCallback, check_cancelled
-from map_maker.terrain.pipeline.planet_levels import level_parent
+from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
 from map_maker.terrain.pipeline.planet_regional import RegionalParent
 from map_maker.terrain.pipeline.planet_tiles import TileGrid, TileSurface, generate_tile
 
@@ -76,7 +76,9 @@ class _LevelJob:
             return self.planet
         centre = self.grid.lonlat(tile)
         reach = self.grid.support_m + self.grid.halo_m
-        needed = self.coarse_grid.tiles_near(centre, reach * 1.3)
+        needed = self.coarse_grid.tiles_near(
+            centre, level_parent_radius(self.planet, reach, self.coarse_settings.spacing_km)
+        )
         radius_m = self.planet.mesh.radius_m
         coarse = {t: self.coarse_store.load(t, radius_m) for t in needed}
         seed = stage_seed(self.planet.settings.seed, f"planet.level-parent.l{self.level}.{tile}")
@@ -173,7 +175,9 @@ def ensure_level_tiles(
         coarse_settings = levels[level - 2]
         coarse_grid = TileGrid.for_planet(radius_m, coarse_settings)
         coarse_store = TileStore(cache, parent_sha256, coarse_settings, level - 1)
-        reach = (grid.support_m + grid.halo_m) * 1.3
+        reach = level_parent_radius(
+            planet, grid.support_m + grid.halo_m, coarse_settings.spacing_km
+        )
         coarse_needed = sorted({
             t for tile in missing for t in coarse_grid.tiles_near(grid.lonlat(tile), reach)
         })
@@ -293,7 +297,9 @@ def region_window(
     if level > 1:
         coarse_settings = levels[level - 2]
         coarse_grid = TileGrid.for_planet(planet_m, coarse_settings)
-        coarse_needed = coarse_grid.tiles_near(centre, reach_m * 1.3)
+        coarse_needed = coarse_grid.tiles_near(
+            centre, level_parent_radius(parent, reach_m, coarse_settings.spacing_km)
+        )
         _, coarse = ensure_level_tiles(
             tiles_parent, tiles_sha256, cache, level - 1, coarse_needed, levels,
             workers=workers, cancellation=cancellation,
