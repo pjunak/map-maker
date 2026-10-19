@@ -79,7 +79,17 @@ SWELL_UPLIFT = 8e-5
 # edges (the African plateau, the Colorado Plateau), instead of dissecting into
 # badlands at continental scale.
 SHIELD_ERODIBILITY = 0.25
+# Fold-and-thrust belts (fold_train): anticlines about FOLD_WAVELENGTH_M apart,
+# varying by FOLD_SPREAD, stepping sideways by up to FOLD_STEP wavelengths between
+# en echelon segments, each plunging out along strike over segments of about
+# 200 km (FOLD_SEGMENT_FREQUENCY, cycles per planet radius).
 FOLD_WAVELENGTH_M = 45e3
+FOLD_SPREAD = 0.25
+FOLD_STEP = 0.5
+FOLD_SEGMENT_FREQUENCY = 30.0
+FOLD_FLOOR = 0.3  # share of an anticline's height left where it plunges out
+FOLD_GAIN = 1.49  # 1 / mean plunge envelope (measured): belts keep their uplift
+FOLD_MEAN = 0.375  # mean of a fold train across a belt, as of even cos^2 folds
 FORELAND_DEPTH_M = 1500.0
 INTERMONTANE_DEPTH_M = 800.0
 ALLUVIAL_RELIEF = 0.04
@@ -243,6 +253,28 @@ def orogen_profile(across_m: F64, half_width_m: F64, p: F64, seed: int) -> F64:
     return uplift
 
 
+def fold_train(p: F64, across_m: F64, seed: int, spacing_m: float) -> F64:
+    """Uplift share (mean FOLD_MEAN) of the anticlines in a fold-and-thrust belt.
+
+    Folds run parallel to the belt about ``across_m`` from its axis, but not as
+    rails: their spacing varies, they step sideways between en echelon
+    segments, and each anticline rises into culminations and plunges out
+    along strike over its own stretch of noise, as in the Zagros or the
+    Valley and Ridge. Each crest index samples noise at its own offset, so
+    neighbouring folds end in different places; the jump between indices lies
+    in the synclines, where the fold is low. Where the mesh cannot resolve the
+    wavelength, the train fades to its mean instead of aliasing into noise.
+    """
+    wavelength = FOLD_WAVELENGTH_M * (1 + FOLD_SPREAD * fbm3(p, seed + 263, 2, 20.0))
+    phase = across_m / wavelength + FOLD_STEP * np.tanh(2.5 * fbm3(p, seed + 264, 2, 40.0))
+    crest = (0.5 + 0.5 * np.cos(2 * np.pi * phase)) ** 2
+    shifted = p + np.round(phase)[:, None] * np.array([0.61, -0.37, 0.43])
+    plunge = _smoothstep(fbm3(shifted, seed + 265, 3, FOLD_SEGMENT_FREQUENCY), -0.3, 0.25)
+    folds = FOLD_GAIN * crest * (FOLD_FLOOR + (1 - FOLD_FLOOR) * plunge)
+    resolved = _smoothstep(wavelength / spacing_m, 2.2, 3.2)
+    return FOLD_MEAN + resolved * (folds - FOLD_MEAN)
+
+
 def flood_basalts(mesh: SphereMesh, land: B, coast_m: F64, plates: Tectonics) -> F64:
     """0..1 cover of flood-basalt plateaus where old plume heads reached land.
 
@@ -349,9 +381,9 @@ def procedural_forcing(mesh: SphereMesh, land: B, coast_m: F64, seed: int) -> Pr
     minor_field = fbm3(p + 0.12 * fine_warp, seed + 111, 4, 4.5)
     minor_half = 20e3 + 40e3 * _smoothstep(fbm3(p, seed + 161, 3, 8.0), -0.4, 0.4)
     minor_across = signed_crest_distance(mesh, minor_field)
-    # Some minor belts are fold-and-thrust belts: parallel ridges ~45 km apart
-    # (Valley and Ridge, Zagros at a coarser scale) rather than a single ridge.
-    folds = (0.5 + 0.5 * np.cos(2 * np.pi * minor_across / FOLD_WAVELENGTH_M)) ** 2
+    # Some minor belts are fold-and-thrust belts: en echelon anticlines ~45 km
+    # apart (Valley and Ridge, Zagros at a coarser scale) rather than a single ridge.
+    folds = fold_train(p, minor_across, seed, mesh.spacing_m)
     folded = _smoothstep(fbm3(p, seed + 262, 3, 3.0), 0.0, 0.3)
     minor = (
         ridge_profile(np.abs(minor_across), 1.6 * minor_half * (1 + folded))

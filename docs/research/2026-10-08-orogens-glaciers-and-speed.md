@@ -50,6 +50,9 @@ and rejected (see below). Items 2 and 8 remain open.
   - **Plateaus.** Orogenic plateaus sit on the hinterland side.
   - **Fold belts.** Some minor belts are fold belts with parallel ridges
     45 km apart.
+  - **2026-10-19:** those ridges ran as identical parallel rails along whole
+    belts, a stamped washboard on the world map. Folds are now en echelon
+    anticlines that wander, step sideways and plunge out (decision D23).
 - **Strike-aligned lithology.** A hard core (0.55× erodibility) is flanked by
   weak and strong bands (±30 %) parallel to strike, with a noisy phase.
   - **Effect.** Rivers run along strike between ranges before breaking through.

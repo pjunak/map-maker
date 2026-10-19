@@ -110,6 +110,9 @@ backlog, and [status](../research/status.md) records what works now.
    - Sediment-basin plains fall towards where they drain at an alluvial gradient
      of 1e-4 instead of lying level at their spill height, so a river crossing a
      plain has a direction at every zoom level (`sphere-mesh-stream-power-v31`).
+   - Fold belts are trains of en echelon anticlines that wander, step sideways and
+     plunge out, instead of parallel rails along a whole belt, which read as a
+     stamped washboard on the world map (`sphere-mesh-stream-power-v32`).
 2. **Wonder layer** ([wonder guide](../wonders.md)). Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a
    splitting river are done; wonders age on their own patches (ADR-0091) and

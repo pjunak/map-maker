@@ -5,7 +5,7 @@ from math import isfinite
 
 from map_maker.terrain.domain.seeds import validate_master_seed
 
-PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v31"
+PLANET_RELIEF_ALGORITHM = "sphere-mesh-stream-power-v32"
 PLANET_CLIMATE_ALGORITHM = "planet-climate-v7"
 PLANET_MESH_STAGE_ID = "planet.mesh"
 PLANET_FORCING_STAGE_ID = "planet.forcing"

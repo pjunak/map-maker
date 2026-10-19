@@ -714,6 +714,31 @@ def test_mountain_belts_vary_along_strike() -> None:
     assert (heights < MASSIF_FLOOR).mean() > 0.1
 
 
+def test_fold_belts_are_en_echelon_anticlines_not_rails() -> None:
+    from scipy.ndimage import find_objects, label
+
+    from map_maker.terrain.pipeline.planet_forcing import FOLD_MEAN, fold_train
+
+    # A straight fold belt along the equator, sampled every 3 km for 3,000 km.
+    step = 3e3
+    along, across = np.meshgrid(np.arange(0, 3000e3, step), np.arange(-150e3, 150e3, step))
+    lon, lat = along / RADIUS, across / RADIUS
+    p = np.stack(
+        (np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)), axis=-1
+    ).reshape(-1, 3)
+    folds = fold_train(p, across.ravel(), 7, 12e3).reshape(across.shape)
+    # The belt keeps the uplift of even folds...
+    assert abs(folds.mean() - FOLD_MEAN) < 0.06
+    # ...but its anticlines are not rails along the whole belt: they wander, step
+    # sideways and plunge out, so each is a few hundred kilometres long.
+    assert folds.std(axis=1).mean() > 0.2
+    labels, count = label(folds > 0.6)
+    lengths = [(s[1].stop - s[1].start) * step for s in find_objects(labels)]
+    assert count > 30 and max(lengths) < 1500e3 and np.median(lengths) < 400e3
+    # A mesh too coarse for the wavelength gets the belt's mean, not aliased folds.
+    assert np.allclose(fold_train(p, across.ravel(), 7, 30e3), FOLD_MEAN)
+
+
 def test_koppen_classes_follow_the_standard_rules() -> None:
     from map_maker.terrain.pipeline.planet_koppen import KOPPEN, classify_koppen
 
