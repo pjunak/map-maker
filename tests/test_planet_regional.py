@@ -653,6 +653,34 @@ def test_wide_regional_rivers_draw_one_channel_as_wide_as_itself() -> None:
     assert 1.15 < float(cover.sum()) / (width * valley) < 2.5
 
 
+def test_dunes_run_with_the_wind_and_belong_to_the_place() -> None:
+    from map_maker.terrain.adapters.planet_region import DUNE_LENGTH_M, dune_crests, window_points
+
+    planet_m = 6.0e6
+
+    def field(pixels: int, pixel_m: float = 500.0) -> np.ndarray:
+        points, _ = window_points(20.0, 15.0, pixel_m * pixels / 2, pixels, planet_m)
+        wind = np.zeros((pixels, pixels, 2))
+        wind[..., 0] = 7.0  # an east wind everywhere
+        return dune_crests(points, planet_m, wind, pixel_m, np.ones((pixels, pixels), dtype=bool))
+
+    small = field(200)
+    assert small.max() > 0.5
+    # Crests run along the wind: they change far more across it than along it.
+    assert np.abs(np.diff(small, axis=0)).mean() > 3 * np.abs(np.diff(small, axis=1)).mean()
+    # A larger window about the same centre has these pixels 30 further in. Away
+    # from the small window's edges, where its streaks are cut short, the dunes
+    # are the same: they belong to the place, not to the window's origin.
+    big = field(260)
+    reach = int(np.ceil(0.5 * DUNE_LENGTH_M / 500.0))
+    inner = slice(reach + 1, 200 - reach - 1)
+    np.testing.assert_allclose(
+        small[:, inner], big[30:230, 30 + reach + 1 : 230 - reach - 1], atol=1e-9
+    )
+    # Maps too coarse to resolve the dune spacing draw none.
+    assert not field(64, 2_000.0).any()
+
+
 def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
     from map_maker.terrain.adapters.planet_natural import meander
 

@@ -97,6 +97,9 @@ ergs, Taklamakan). Most other desert is stony plain (reg, hamada) or rock.
   - **Shape.** The phase is warped so ridges merge in Y-junctions, and noise at
     12 km breaks them up along their length.
   - **Wind.** The planet archive's wind fields now reach regional windows.
+  - **2026-10-19:** the warped phase drew rings and whorls wherever the wind or
+    spacing varied, and depended on the window's origin. Crests now follow the
+    zero contours of world-anchored noise averaged along the wind (decision D28).
 
 ## Köppen–Geiger classes
 

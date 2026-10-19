@@ -90,6 +90,10 @@ CHANNEL_WIDTH_PER_ROOT_Q = 4.8  # bankfull width (m) per sqrt(discharge in m^3/s
 RIVER_DISPLAY_Q_M3_S = 10_000.0  # discharge drawn at full display width
 DUNE_SPACING_M = 2500.0
 DUNE_HEIGHT_M = 45.0
+DUNE_LENGTH_M = 30e3  # linear dunes run tens of kilometres along the wind
+DUNE_SEED = 71
+DUNE_STREAK_STD = 0.12  # spread of dune noise averaged along the wind (measured: 0.11-0.14)
+DUNE_CREST_WIDTH = 0.45  # crest half-width, in streak spreads about a zero contour
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
 ROUTE_PAD = 1.25  # rivers are routed over this multiple of a window's radius
 ENTRY_WALL_M = 1e4  # beyond the rim where parent rivers enter: above any spill
@@ -1018,21 +1022,10 @@ def display_relief(window: RegionWindow) -> F64:
             0.0,
         )
         if erg.max() > 0.05:
-            wind = gaussian_filter(window.wind, (6, 6, 0))
-            speed = np.maximum(np.hypot(wind[..., 0], wind[..., 1]), 1e-6)
-            rows, columns = np.mgrid[0 : z.shape[0], 0 : z.shape[1]] * window.pixel_m
-            # Distance across the wind: east is +column, north is -row.
-            across = (columns * -wind[..., 1] + (-rows) * wind[..., 0]) / speed
-            # Spacing and phase wander, so ridges merge in Y-junctions and fan out.
-            warp = 0.6 * DUNE_SPACING_M * eroded_fbm(
-                window.points, np.zeros(len(window.points)), 71, 4,
-                window.planet_m / 25e3, 0.55, 0.0,
-            ).reshape(z.shape)
-            spacing = DUNE_SPACING_M * (1 + 0.3 * eroded_fbm(
-                window.points, np.zeros(len(window.points)), 72, 3,
-                window.planet_m / 60e3, 0.5, 0.0,
-            ).reshape(z.shape))
-            crest = (0.5 + 0.5 * np.cos(2 * np.pi * (across + warp) / spacing)) ** 1.5
+            crest = dune_crests(
+                window.points, window.planet_m, gaussian_filter(window.wind, (6, 6, 0)),
+                window.pixel_m, erg > 0.05,
+            )
             breakup = _smooth_step(
                 eroded_fbm(
                     window.points, np.zeros(len(window.points)), 73, 3,
@@ -1052,6 +1045,46 @@ def display_relief(window: RegionWindow) -> F64:
         # Ice fills the relief up to its surface; nunataks rise through it.
         relief = np.fmax(relief, window.ice_surface_m)
     return np.where(land, np.maximum(relief, 1.0), z)
+
+
+def dune_crests(points: F64, planet_m: float, wind: F64, pixel_m: float, where: B) -> F64:
+    """Linear (seif) dune crests (0..1) that run along the resultant ``wind``.
+
+    Noise at the dune spacing, anchored to the world, is averaged along the wind
+    over DUNE_LENGTH_M (line integral convolution, Cabral and Leedom 1993), and
+    crests stand along the zero contours of the result. They run with the wind
+    wherever it turns, join in Y-junctions and leave flat corridors between them,
+    and a place has the same dunes in every window. A phase measured across the
+    wind from the window's corner had drawn rings and whorls wherever the wind or
+    the spacing varied. Dunes fade out on maps too coarse to resolve their
+    spacing. Only ``where`` pixels are computed.
+    """
+    out = np.zeros(where.shape)
+    resolved = float(_smooth_step(np.array(DUNE_SPACING_M / pixel_m), 2.0, 4.0))
+    if not where.any() or resolved <= 0:
+        return out
+    noise = eroded_fbm(
+        points, np.zeros(len(points)), DUNE_SEED, 2, planet_m / DUNE_SPACING_M, 0.5, 0.0
+    ).reshape(where.shape)
+    rows, columns = (v.astype(np.float64) for v in np.nonzero(where))
+    east = wind[..., 0][where]
+    north = wind[..., 1][where]
+    speed = np.maximum(np.hypot(east, north), 1e-9)
+    half = 0.5 * DUNE_LENGTH_M / pixel_m
+    step = max(1.0, half / 16)
+    # East is +column, north is -row.
+    dc, dr = east / speed * step, -north / speed * step
+    count = max(1, int(half / step))
+    total, weights = np.zeros(len(rows)), 0.0
+    for k in range(-count, count + 1):
+        weight = np.cos(0.5 * np.pi * k / (count + 1)) ** 2
+        total += weight * map_coordinates(
+            noise, (rows + k * dr, columns + k * dc), order=1, mode="nearest"
+        )
+        weights += weight
+    streak = total / weights / DUNE_STREAK_STD
+    out[where] = resolved * (1 - _smooth_step(np.abs(streak), 0.0, DUNE_CREST_WIDTH)) ** 2
+    return out
 
 
 def window_ice_cover(window: RegionWindow, relief: F64) -> F64:
