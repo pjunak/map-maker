@@ -101,6 +101,54 @@ def graded_flood(
     return filled
 
 
+@njit(cache=True)
+def priority_breach(h: F64, water: B, ptr: I64, nbr: I64, eps: float) -> F64:
+    """Lower land sills so that every land node descends to a fixed node.
+
+    The dual of ``priority_flood``: flooding from fixed nodes in the same order, a
+    node no higher than the node it is reached from lies in a depression, and
+    instead of raising it, its flood path back over the lowest pass is lowered to
+    just below it (each step down by at least ``eps``). Where that path would have
+    to cut a fixed node, the depression fills up to that node instead; elsewhere
+    the result is nowhere above ``h``.
+    """
+    n = h.size
+    out = h.copy()
+    parent = np.full(n, -1, np.int64)
+    closed = water.copy()
+    heap = [(0.0, np.int64(0))]
+    heap.pop()
+    for i in range(n):
+        if water[i]:
+            for k in range(ptr[i], ptr[i + 1]):
+                if not water[nbr[k]]:
+                    heapq.heappush(heap, (h[i], np.int64(i)))
+                    break
+    while heap:
+        _, c = heapq.heappop(heap)
+        for k in range(ptr[c], ptr[c + 1]):
+            j = nbr[k]
+            if closed[j]:
+                continue
+            closed[j] = True
+            parent[j] = c
+            if out[j] <= out[c]:
+                # Walk towards the outlet until the path is already low enough.
+                bottom = out[j]
+                node, steps = c, 1
+                while not water[node] and out[node] > bottom - steps * eps:
+                    node, steps = parent[node], steps + 1
+                if water[node] and out[node] > bottom - steps * eps:
+                    bottom = out[node] + steps * eps
+                    out[j] = bottom
+                node, steps = c, 1
+                while not water[node] and out[node] > bottom - steps * eps:
+                    out[node] = bottom - steps * eps
+                    node, steps = parent[node], steps + 1
+            heapq.heappush(heap, (out[j], j))
+    return out
+
+
 @njit(cache=True, parallel=True)
 def steepest_receivers(
     z: F64, water: B, ptr: I64, nbr: I64, length: F64, parent: I64
@@ -489,15 +537,20 @@ def erosion_step(
     glacial: tuple[float, float, float],
     base: F64,
     floor: float,
+    deposit: F64,
 ) -> F64:
     """One fused implicit stream-power step (Braun and Willett 2013, n = 1).
 
     Drainage area includes the process area; erodibility rises above the
     ``snowline`` (empty to disable) as 1 + boost * (z - ELA) / scale, capped.
-    Fixed (water) nodes take ``base``; land stays at least ``floor``.
+    Fixed (water) nodes take ``base``; land stays at least ``floor``. Land never
+    erodes below ``deposit`` (empty to disable), a plain that sediment keeps at
+    its level; it holds inside the sweep, so each node grades to its receiver's
+    held height.
     """
     boost, scale, cap = glacial
     glaciers = snowline.size > 0
+    held = deposit.size > 0
     out = h.copy()
     for idx in range(order.size):
         i = order[idx]
@@ -512,6 +565,8 @@ def erosion_step(
                 k *= min(1.0 + boost * above, cap)
         f = dt * k * (area[i] + process_area) ** m / distance[i]
         out[i] = (h[i] + dt * uplift[i] + f * out[r]) / (1 + f)
+        if held and out[i] < deposit[i]:
+            out[i] = deposit[i]
     for i in range(h.size):
         if water[i]:
             out[i] = base[i]

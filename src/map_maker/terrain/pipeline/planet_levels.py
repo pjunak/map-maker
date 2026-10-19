@@ -30,6 +30,7 @@ from map_maker.terrain.pipeline.planet_patch import regional_mesh
 from map_maker.terrain.pipeline.planet_regional import (
     MIN_RUNOFF_WEIGHT,
     RegionalParent,
+    entry_walls,
     parent_inflows,
 )
 from map_maker.terrain.pipeline.planet_tiles import ReliefWarp, TileGrid, TileSurface, blend
@@ -94,8 +95,13 @@ def level_parent(
         else np.maximum(smoothly(planet.runoff_weight), MIN_RUNOFF_WEIGHT)
     )
     erodibility = smoothly(planet.erodibility)
+    # Planet rivers enter as inflows; the boundary lets no water out where they
+    # do, rivers the patch resolves (its spacing squared, 24 times, as tiles'
+    # process areas are).
+    walls = entry_walls(planet, region, 24 * region.spacing_m**2)
     flow = route(
-        mesh, relief_m, ~land | region.boundary, runoff, parent_inflows(planet, region)
+        mesh, relief_m, ~land | (region.boundary & ~walls), runoff,
+        parent_inflows(planet, region),
     )
     nearest = np.asarray(KDTree(planet.mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
     # A parent's temperatures hold at its own surface, so the planet's are
@@ -138,6 +144,7 @@ def level_parent(
         planet_mesh=planet.mesh if planet.planet_mesh is None else planet.planet_mesh,
         ice=planet.ice,
         ice_margin=planet.ice_margin_m,
+        plain_m=planet.surface_m - planet.young_m() if planet.plain_m is None else planet.plain_m,
     )
     # Coarser tiles leave out volcanoes and wonders, which windows redraw sharply
     # from the planet's lists. The patch carries them as young relief on top of

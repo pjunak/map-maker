@@ -183,6 +183,10 @@ rivers meander along their valley, with bends about eleven channel widths apart.
   plain runs up valleys and spurs of the range reach out into it. Each deeper
   level only adds smaller bends, so the front keeps its course, usually within
   3 km of where the planet puts it and rarely more than 8 km.
+- Sediment plains keep the planet's height at every level, with the gentle fall
+  towards their outlet that the planet gives them. Big rivers cross them in
+  channels about as deep as their banks are high (about 5 m for a river draining
+  160,000 km²), instead of cutting valleys into them.
 - Valleys and rivers wind below the detail mesh. Each level's relief bends in
   an area-preserving flow, so a valley that the mesh holds as a straight line
   between its points winds instead, and rivers follow it. Heights and basins stay

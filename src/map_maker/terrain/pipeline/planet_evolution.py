@@ -102,6 +102,7 @@ def evolve(
     fixed_level: F64 | None = None,
     inflow_m2: F64 | None = None,
     snowline_m: F64 | None = None,
+    floor_m: F64 | None = None,
     cancellation: CancellationToken | None = None,
     on_step: StepCallback | None = None,
 ) -> EvolutionRun:
@@ -109,9 +110,11 @@ def evolve(
 
     ``inflow_m2`` adds drainage area entering from outside the domain (regional
     boundaries), at the nodes where those rivers enter. ``snowline_m`` enables
-    glacial erosion above the equilibrium-line altitude.
+    glacial erosion above the equilibrium-line altitude. Land never erodes below
+    ``floor_m`` (-inf where it may), a plain that sediment keeps at its level.
     """
     base = np.zeros(mesh.size) if fixed_level is None else fixed_level
+    deposit = np.zeros(0) if floor_m is None else np.ascontiguousarray(floor_m)
     h = np.where(water, base, np.maximum(initial, LAND_FLOOR_M))
     pulse_from = round(steps * (1 - PLATEAU_PULSE_FRACTION))
     pulsed = forcing.steady_uplift + forcing.pulse_uplift
@@ -126,6 +129,7 @@ def evolve(
             before, state.order, state.receiver, state.distance_m, water, state.area_m2,
             process_area_m2, forcing.erodibility, area_exponent, uplift, step_yr,
             glaciers, (GLACIAL_BOOST, GLACIAL_SCALE_M, GLACIAL_CAP), base, LAND_FLOOR_M,
+            deposit,
         )
         if step == steps - 1:
             change = float(np.mean(np.abs(h[~water] - before[~water]))) / step_yr

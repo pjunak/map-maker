@@ -14,7 +14,7 @@ from map_maker.terrain.domain.planet import PlanetSettings, RegionalSettings
 from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
 from map_maker.terrain.pipeline.planet_metrics import non_descending_receivers
 from map_maker.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
-from map_maker.terrain.pipeline.planet_regional import RegionalParent, enrich
+from map_maker.terrain.pipeline.planet_regional import RegionalParent, enrich, parent_channels
 from map_maker.terrain.pipeline.planet_tiles import (
     ReliefWarp,
     TileGrid,
@@ -62,9 +62,12 @@ def test_regional_relief_matches_its_parent_at_parent_scale(parent: PlanetResult
     assert last["rms_vs_parent_m"] < 0.4 * first["rms_vs_parent_m"]
     fixed = ~result.land | region.boundary
     assert non_descending_receivers(result.elevation_m, result.run.flow.receiver, fixed) == 0
-    # Boundary land stays at the parent's surface.
+    # Boundary land stays at the parent's surface, less the channels of the
+    # parent rivers crossing it.
     edge = region.boundary & result.land
-    assert np.allclose(result.elevation_m[edge], np.maximum(result.target_m[edge], 1.0))
+    channels = parent_channels(source, region, 2_000e6)
+    assert channels[edge].max() > 0
+    assert np.allclose(result.elevation_m[edge], result.target_m[edge] - channels[edge])
     # Below the parent spacing the relief has more detail than its parent.
     from map_maker.terrain.pipeline.planet_forcing import smooth_over_land
 
@@ -1491,3 +1494,76 @@ def test_basin_fronts_are_dissected_alike_at_every_level(parent: PlanetResult) -
     # self-similar, about 3-5 % of the parent spacing.
     assert min(roughness) > 0.02
     assert max(roughness) < 1.6 * min(roughness)
+
+
+def test_tiles_hold_a_basin_plain_that_a_big_inherited_river_crosses(
+    parent: PlanetResult,
+) -> None:
+    from map_maker.terrain.pipeline.planet_coast import level_finest_m
+    from map_maker.terrain.pipeline.planet_regional import (
+        BASIN_FULL_M,
+        LAKE_CORE_COVER,
+        parent_inflows,
+    )
+
+    planet = RegionalParent.from_result(parent)
+    mesh = parent.mesh
+    depth = parent.forcing.basin_depth_m
+    assert depth is not None
+    # The planet fills its sediment basins to their spill level after erosion.
+    # A tile centred on the biggest river crossing such a plain inland:
+    cover = planet.lakes_at(mesh.xyz, mesh.spacing_m)[0]
+    plain = parent.land & (depth >= BASIN_FULL_M) & (cover == 0) & (planet.surface_m > 100)
+    node = int(np.flatnonzero(plain)[np.argmax(planet.area_m2[plain])])
+    x, y, z = mesh.xyz[node]
+    lon, lat = float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arcsin(z)))
+    region = regional_mesh(lon, lat, 400, 20, mesh.radius_m, 1)
+    result = enrich(planet, region, process_area_km2=2_000, iterations=1, seed=1)
+    detail = level_finest_m(region.spacing_m)
+    lake = planet.lakes_at(region.mesh.xyz, detail)[0] > LAKE_CORE_COVER
+    basin = planet.basin_at(region.mesh.xyz, detail)
+    assert basin is not None
+    held = result.land & ~region.boundary & ~lake & (basin >= BASIN_FULL_M)
+    rise = result.elevation_m - result.target_m
+    channels = parent_channels(planet, region, 2_000e6)
+    # Away from the parent's rivers the plain stays at the parent's level;
+    # eroded, half of it had lain more than a metre below.
+    plain = held & (channels == 0)
+    assert plain.sum() > 300
+    assert np.mean(rise[plain] < -1.0) < 0.02 and abs(rise[plain].mean()) < 1.0
+    # The river enters with 780,000 km2 and crosses the plain in its channel,
+    # about 10 m deep, breaching only the sills that sampling leaves between
+    # parent nodes; eroding the plain, it had cut a valley 72 m below the parent's.
+    crossing = held & (result.run.flow.area_m2 > 0.5 * parent_inflows(planet, region).max())
+    assert crossing.sum() >= 5 and (rise + channels)[crossing].min() > -20.0
+    fixed = ~result.land | region.boundary
+    assert non_descending_receivers(result.elevation_m, result.run.flow.receiver, fixed) == 0
+
+
+def test_parent_rivers_keep_connected_channels_that_leave_where_they_leave(
+    parent: PlanetResult,
+) -> None:
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    from map_maker.terrain.pipeline.planet_regional import channel_depth_m, parent_inflows
+
+    planet = RegionalParent.from_result(parent)
+    lon, lat = _land_centre(parent)
+    region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
+    mesh = region.mesh
+    inflow = parent_inflows(planet, region)
+    entry = int(np.argmax(inflow))
+    channels = parent_channels(planet, region, 2_000e6)
+    # The biggest river entering is cut its bankfull depth along a connected
+    # path from where it enters to the boundary where it leaves.
+    deep = channels >= 0.99 * channel_depth_m(inflow[entry : entry + 1])[0]
+    rows = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    both = deep[rows] & deep[mesh.nbr]
+    graph = coo_matrix((np.ones(both.sum()), (rows[both], mesh.nbr[both])), (mesh.size, mesh.size))
+    _, label = connected_components(graph, directed=False)
+    river = deep & (label == label[entry])
+    assert deep[entry] and np.any(river & region.boundary)
+    # The boundary is cut only where rivers leave, never beside where one enters.
+    near_entry = np.isin(np.arange(mesh.size), mesh.nbr[mesh.ptr[entry] : mesh.ptr[entry + 1]])
+    assert not np.any(channels[region.boundary & near_entry] > 0)

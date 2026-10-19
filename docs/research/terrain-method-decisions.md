@@ -1,6 +1,6 @@
 # Terrain method decisions and failed experiments
 
-Updated 2026-10-18 through T20 straight regional rivers.
+Updated 2026-10-19 through T21 regional basin plains.
 This is the living record of
 material generation approaches that were rejected, constrained or retained only
 as references. A failed method does not remove its desired feature from the plan.
@@ -552,6 +552,70 @@ bends valleys without folding, filling or moving heights
 [report](2026-10-12-straight-display-lines.md#straight-regional-rivers--2026-10-18)).
 Revisit routing only with relief that resolves valley floors below the window
 pixel, and display-relief routing only with a lake and pond policy for its hollows.
+
+## T21 - Hold regional basin plains at the sampled parent surface, or refill them
+
+**Hypothesis.** Regional tiles eroded sediment-basin plains far below the planet's,
+which fills its basins after erosion. Holding basin land at the parent surface
+while tiles erode, or filling it back up afterwards, would keep the plain, and the
+big rivers crossing it would carry through every level.
+
+**Control and inputs.** Aethelara `planet-3200k`, a 36 km box at 56.869° E
+30.703° N whose planet surface is a basin plain (1,187 of 1,369 points in full
+basins), and 20 km province and local windows there; tiles of levels 1-3
+regenerated in scratch caches for each variant, first on the level plains of
+`sphere-mesh-stream-power-v30` (681 m), then on the graded plains of `-v31`. On
+the test planet, the four largest inland rivers crossing full basins, in 400 km
+tiles of 20 km spacing.
+
+**Outcome.**
+- A floor at the smooth parent surface held the plains, but 49, 56 and 59 m above
+  the planet's at levels 1-3. Where the plain's river leaves between two planet
+  nodes, the tile samples a 60-80 m sill from a higher third corner. The floor
+  held it, and the two level-1 tiles filled the plain to their own sills at 741 m
+  and 760 m.
+- Breaching those sills in the floor alone left the level-1 plain 18 m high
+  (median 19 m above the parent). Tiles started from the unbreached surface, so
+  the plain first filled like a lake, and at 3 % of the erodibility it kept most
+  of the fill.
+- Breached floor and start held the plains within a few metres at every level,
+  but on v30's level plains nothing marked a river's course. In the province
+  window's parent the 160,000 km² river entered 53 km from the centre and left
+  through the boundary 14 km away, five nodes later, and the province window
+  drew no big river. Each level routed the flat plain in its own flood order.
+- Channels as deep as a narrow channel lowers a coarse cell on average (0.2 m at
+  level 1 for that river) were lost among the plain's centimetre differences once
+  the next level resampled them; channels cut through nodes merely near a link
+  had gaps that let the water out sideways. Full bankfull channels traced along
+  connected paths, walls at level parents' entries and floodplain corridors kept
+  the river in the province and local parents, but on v30 the windows still lost
+  it: their relief put the channel's crossing of the rim 2.5 km from where the
+  parent's river enters, beyond the entry walls.
+- On v31's graded plains the same design carried the river across the province
+  and local windows (161,000 and 155,000 km² entering, one exit each). Cutting the
+  channels along the planet's links at every level instead lost it again 146
+  pixels (6 km) after the province window's entry.
+- Filling basins back to the parent's plain after erosion, on the test planet,
+  dammed valleys just outside basins that had graded to the eroded plain: up to
+  5 nodes per tile filled flat by 8-29 m on two of four tiles. The margin stayed
+  lower than with a floor during erosion (-41 m against -29 m mean).
+
+**Diagnosed cause.** A sampled parent surface does not drain on a finer mesh, and
+a plain that barely erodes keeps every metre it is started or filled above its
+outlet. A plain held level carries no river course to the level below; HEAD's
+tiles carried it by incising the plain hundreds of metres. A fill to a tile's own
+spill level, as the planet fills, was not run: the spill would be set by each
+tile's ring, the disagreement being removed.
+
+**Disposition.** The planet grades its basin plains (D06,
+`sphere-mesh-stream-power-v31`). Tiles start from the breached parent surface
+with the parent rivers' bankfull channels cut in, basin land never erodes below
+the planet's plain (less a margin ramp), basins start without random roughness,
+and level parents wall their boundary where planet rivers enter
+([ADR-0086 revision](../adr/0086-regional-planet-detail-from-blended-tiles.md#revision-2026-10-19-sediment-basin-plains)).
+Open: at levels 2-3 the river takes another branch at a junction than level 1
+and the planet. Revisit with tile boundary exchange, or when tiles' level parents
+share one routing of the coarser level.
 
 ## What the failures change
 

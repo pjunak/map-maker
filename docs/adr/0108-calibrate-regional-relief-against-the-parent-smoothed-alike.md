@@ -126,12 +126,16 @@ Calibration errors in v13 are measured against the unsmoothed parent.
   region (0.044 before) and 0.057 in the province (0.080). Each finer level still
   adds relief below the coarser spacing. Spread about the 2.5 km mean is 53 m in
   the region, 130 m in the province and 148 m in the local map.
-- Where basins border mountains, the province still stands up to 110 m above
-  the region (2–3 km high ground here) until basin land holds the parent's plain.
+- Where basins border mountains, the province stood up to 110 m above the region
+  (2–3 km high ground here). With basin land held at the planet's plain
+  ([ADR-0086](0086-regional-planet-detail-from-blended-tiles.md#revision-2026-10-19-sediment-basin-plains),
+  `planet-blended-tiles-v15`) it lies 7 m above there, 21 m below the region
+  overall and 24 m below on the steepest 30 %.
 - Basin plains erode differently in each tile, and blended windows close
   hollows that their lakes fill. Here the province's closed hollows grew from
   5 % to 15 % of its land, and its lakes from 3 % to 13 %. With basin land held
-  at the plain, they fall to 1–2 % and 0.6 %.
+  at the planet's plain, closed hollows cover 2.0 % of the province and lakes
+  0.1 %, in its mountains (1,760 m on average).
 - Mountain calibration stays noisy. Drainage couples the correction, so mountain
   tiles keep 100–300 m RMS against the smoothed parent, and where a few massifs
   decide a height class, the region can stand 100 m or more off the planet

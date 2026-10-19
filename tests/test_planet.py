@@ -85,6 +85,26 @@ def test_flooded_routing_drains_every_land_node_to_water(mesh: SphereMesh) -> No
     assert total[outlets].sum() == pytest.approx(mesh.area_m2[~water].sum(), rel=1e-12)
 
 
+def test_breaching_lowers_sills_until_every_land_node_drains(mesh: SphereMesh) -> None:
+    from map_maker.terrain.pipeline.planet_kernels import priority_breach, steepest_receivers
+
+    rng = np.random.default_rng(1)
+    water = mesh.xyz[:, 2] < -0.2
+    h = np.where(water, 0.0, 100 * rng.random(mesh.size))
+    unset = np.full(mesh.size, -1, np.int64)
+    for sea in (0.0, 50.0):
+        level = np.where(water, sea, h)
+        breached = priority_breach(level, water, mesh.ptr, mesh.nbr, 1e-3)
+        receiver, _ = steepest_receivers(breached, water, mesh.ptr, mesh.nbr, mesh.length_m, unset)
+        assert np.all(receiver[~water] >= 0)  # every land node drains
+        assert np.array_equal(breached[water], level[water])
+        # Sills are lowered instead of depressions raised; only ground below a
+        # fixed outlet fills up to it.
+        above = ~water & (h > sea + 1)
+        assert np.all(breached[above] <= h[above]) and np.any(breached[above] < h[above])
+        assert np.all(breached[~water] > sea)
+
+
 def test_planet_keeps_the_coast_and_builds_descending_unbiased_rivers(world_path: Path) -> None:
     world = open_world(world_path)
     settings = PlanetSettings(nodes=20_000, duration_myr=5.0, step_kyr=250.0, climate_passes=0)

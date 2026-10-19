@@ -11,7 +11,8 @@ A circular region is regenerated with finer, physically eroded detail:
   that cross into the region enter as drainage-area sources.
 * **Forcing.** Parent uplift, erodibility and runoff are interpolated, with finer
   rock texture and a smaller process area, so smaller valleys resolve. Sediment
-  basins keep their plain; their margins are refined down to the spacing.
+  basins keep their plain, which erosion cannot lower below the parent's; their
+  margins are refined down to the spacing.
 * **Consistency.** A per-node uplift correction (ratio, then secant) makes the
   regional relief, smoothed over the parent spacing, match the parent surface
   smoothed alike (ADR-0108).
@@ -36,7 +37,7 @@ from map_maker.terrain.pipeline.planet_coast import (
     level_finest_m,
     noise_octaves,
 )
-from map_maker.terrain.pipeline.planet_evolution import EvolutionRun, evolve
+from map_maker.terrain.pipeline.planet_evolution import FILL_EPS_M, EvolutionRun, evolve
 from map_maker.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
 from map_maker.terrain.pipeline.planet_ice import (
     IceSheets,
@@ -44,6 +45,7 @@ from map_maker.terrain.pipeline.planet_ice import (
     margin_distance,
     sample_ice,
 )
+from map_maker.terrain.pipeline.planet_kernels import priority_breach
 from map_maker.terrain.pipeline.planet_lakes import refined_lake_cover
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from map_maker.terrain.pipeline.planet_noise import fbm3
@@ -74,6 +76,11 @@ LAKE_CORE_COVER = 0.5  # parent lake cover above which regional ground is lake w
 # parallel gullies down every slope instead of branching networks.
 FINE_TEXTURE_SPACINGS = 8.0
 MIN_RUNOFF_WEIGHT = 0.05
+# Bankfull channel depth 0.27 Q^0.39 m for discharge Q in m^3/s (Moody and
+# Troutman 2002), with Q from CHANNEL_RUNOFF_M_YR of runoff over the drainage area.
+CHANNEL_DEPTH_COEFFICIENT = 0.27
+CHANNEL_DEPTH_EXPONENT = 0.39
+CHANNEL_RUNOFF_M_YR = 0.3
 
 
 @dataclass(frozen=True)
@@ -113,6 +120,7 @@ class RegionalParent:
     planet_mesh: SphereMesh | None = None  # the mesh lakes, basins and ice are on, if not `mesh`
     ice: IceSheets | None = None  # on the planet mesh
     ice_margin: F64 | None = None  # signed margin distance on the planet mesh; computed if None
+    plain_m: F64 | None = None  # planet surface without young landforms, on the planet mesh
 
     def young_m(self) -> F64:
         """Height that volcanoes and wonders added on land after erosion and climate."""
@@ -247,6 +255,18 @@ class RegionalParent:
         )
         return np.maximum(smooth_sampler(mesh, moved)(self.basin_depth_m), 0.0)
 
+    def plain_at(self, xyz: F64) -> F64 | None:
+        """The planet's surface without young landforms at unit vectors ``xyz``.
+
+        Basins hold the planet's plain at every level. A level parent's own
+        surface is the coarser level's relief, so the plain stays on the planet
+        mesh. None for the planet itself, whose surface it is.
+        """
+        if self.plain_m is None:
+            return None
+        assert self.planet_mesh is not None
+        return np.maximum(smooth_sampler(self.planet_mesh, xyz)(self.plain_m), 0.0)
+
     def sample(self, xyz: F64, values: F64) -> F64:
         """Triangle-linear interpolation of a parent node field at unit vectors."""
         return sample_field(self.mesh, xyz, values)
@@ -321,6 +341,102 @@ def parent_inflows(parent: RegionalParent, region: Region) -> F64:
     return inflow
 
 
+def channel_depth_m(area_m2: F64) -> F64:
+    """Bankfull depth of the channel of a river draining ``area_m2`` (runoff-weighted)."""
+    discharge = area_m2 * CHANNEL_RUNOFF_M_YR / 3.156e7
+    return CHANNEL_DEPTH_COEFFICIENT * discharge**CHANNEL_DEPTH_EXPONENT
+
+
+def parent_channels(parent: RegionalParent, region: Region, process_area_m2: float) -> F64:
+    """Depth of the parent rivers' channels at each region node, 0 off them.
+
+    Each parent river link draining at least the process area is traced over the
+    region mesh, a neighbour at a time towards its receiver, and its bankfull
+    depth is cut along that connected path: through gaps between nodes merely
+    near a link, water left the channel sideways on a flat plain. Channels a
+    fraction of their depth deep, as much as a narrow channel lowers a coarse
+    cell on average, were lost among the plain's centimetre differences once
+    the next level resampled them. The boundary is cut only where a river
+    leaves; cut where it enters too, a channel on a flat plain drained back out
+    there.
+    """
+    pm, mesh = parent.mesh, region.mesh
+    lon0, lat0 = region.centre
+    centre = inverse_aeqd(np.zeros(1), np.zeros(1), lon0, lat0, pm.radius_m)[0]
+    reach = (region.radius_m + 2 * pm.spacing_m) / pm.radius_m
+    rivers = np.flatnonzero(
+        parent.land & (parent.receiver >= 0) & (parent.area_m2 >= process_area_m2)
+        & (pm.xyz @ centre >= np.cos(min(reach, np.pi)))
+    )
+    depth = np.zeros(mesh.size)
+    if not len(rivers):
+        return depth
+    receivers = parent.receiver[rivers]
+    tree = KDTree(mesh.xyz)
+    starts = np.asarray(tree.query(pm.xyz[rivers], workers=-1)[1])
+    ends = np.asarray(tree.query(pm.xyz[receivers], workers=-1)[1])
+    leaves = pm.xyz[receivers] @ centre < np.cos(region.radius_m / pm.radius_m)
+    cuts = channel_depth_m(parent.area_m2[rivers])
+    for node, end, leaving, cut in zip(starts, ends, leaves, cuts, strict=True):
+        goal = mesh.xyz[end]
+        while True:
+            if leaving or not region.boundary[node]:
+                depth[node] = max(depth[node], cut)
+            if node == end:
+                break
+            around = mesh.nbr[mesh.ptr[node] : mesh.ptr[node + 1]]
+            step = around[np.argmax(mesh.xyz[around] @ goal)]
+            if mesh.xyz[step] @ goal <= mesh.xyz[node] @ goal:
+                break  # no neighbour nearer: the receiver lies beyond the mesh
+            node = step
+    return depth
+
+
+def entry_walls(parent: RegionalParent, region: Region, process_area_m2: float) -> B:
+    """Boundary nodes near where parent rivers flow in, which let no water out.
+
+    Beyond the boundary there lies such a river's valley upstream. On a held
+    flat basin plain a boundary node there was as low as the river's way on,
+    and a province parent drained a 160,000 km2 river straight back out beside
+    where it entered. As on window rims, boundary nodes near where a river
+    draining at least the process area crosses in, and nearer there than to
+    where any leaves, are walls: within the longest parent step, since a river
+    enters at its first parent node inside, up to a step in.
+    """
+    pm = parent.mesh
+    lon0, lat0 = region.centre
+    centre = inverse_aeqd(np.zeros(1), np.zeros(1), lon0, lat0, pm.radius_m)[0]
+    distance = pm.radius_m * np.arccos(np.clip(pm.xyz @ centre, -1, 1))
+    step_m = float(pm.length_m.max())
+    rivers = np.flatnonzero(
+        parent.land & (parent.receiver >= 0) & (parent.area_m2 >= process_area_m2)
+        & (distance < region.radius_m + step_m)
+    )
+    inside = distance <= region.radius_m
+    start = forward_aeqd(pm.xyz[rivers], lon0, lat0, pm.radius_m)
+    step = forward_aeqd(pm.xyz[parent.receiver[rivers]], lon0, lat0, pm.radius_m) - start
+    # Where each step meets the circle |start + t step| = radius.
+    a = np.maximum(np.einsum("ij,ij->i", step, step), 1e-9)
+    b = np.einsum("ij,ij->i", start, step)
+    c = np.einsum("ij,ij->i", start, start) - region.radius_m**2
+    root = np.sqrt(np.maximum(b**2 - a * c, 0.0))
+    entering = ~inside[rivers] & inside[parent.receiver[rivers]]
+    leaving = inside[rivers] & ~inside[parent.receiver[rivers]]
+    walls = np.zeros(region.mesh.size, dtype=bool)
+    if not entering.any():
+        return walls
+    entries = start + ((-b - root) / a)[:, None] * step
+    exits = start + ((-b + root) / a)[:, None] * step
+    boundary = np.flatnonzero(region.boundary)
+    near_entry = np.asarray(KDTree(entries[entering]).query(region.plane_m[boundary])[0])
+    near_exit = (
+        np.asarray(KDTree(exits[leaving]).query(region.plane_m[boundary])[0])
+        if leaving.any() else np.full(len(boundary), np.inf)
+    )
+    walls[boundary] = (near_entry <= step_m) & (near_entry < near_exit)
+    return walls
+
+
 @dataclass(frozen=True)
 class RegionalResult:
     region: Region
@@ -360,9 +476,21 @@ def enrich(
     lake_cover, lake_level, _ = parent.lakes_at(mesh.xyz, level_finest_m(region.spacing_m))
     lake = land & (lake_cover > LAKE_CORE_COVER)
     fixed = water | (region.boundary & land) | lake
+    # Parent rivers keep their bankfull channels below the parent surface. On a
+    # held basin plain the channel is all that tells a tile, and the level below,
+    # where a river runs: on the flat plain, rivers that entered by the ring left
+    # again beside where they came in, and finer levels lost them.
+    channels = np.where(land & ~lake, parent_channels(parent, region, process_area_km2 * 1e6), 0)
     level = np.where(
-        water, 0.0, np.where(lake, lake_level - parent.sample(mesh.xyz, young), target)
+        water, 0.0,
+        np.where(lake, lake_level - parent.sample(mesh.xyz, young), target - channels),
     )
+    # Sampled between parent nodes, the parent surface has sills where a river
+    # runs between two nodes and a higher third corner weighs in. Tiles start
+    # from it with those sills breached, as the parent drains: behind a sill the
+    # ground would first fill like a lake, and on a basin plain, which erodes at
+    # 3 % of the rate, the fill would stay.
+    drained = priority_breach(level, fixed, mesh.ptr, mesh.nbr, FILL_EPS_M)
     steady = np.maximum(smoothly(parent.steady_uplift), 0.0)
     pulse = np.maximum(smoothly(parent.pulse_uplift), 0.0)
     erodibility = smoothly(parent.erodibility) * np.exp(
@@ -370,12 +498,38 @@ def enrich(
         * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / (FINE_TEXTURE_SPACINGS * mesh.spacing_m))
     )
     basin_depth = parent.basin_at(mesh.xyz, level_finest_m(region.spacing_m))
+    floor, rough = None, 1.0
     if basin_depth is not None:
+        # A river's floodplain is a deposit too: the refined margin's spurs stop
+        # at the banks of a parent river crossing the planet's plain. Spurs that
+        # rose across its channel turned the river aside differently in each
+        # tile, and finer levels lost it.
+        unrefined = parent.basin_at(mesh.xyz, np.inf)
+        assert unrefined is not None
+        basin_depth = np.where(channels > 0, np.maximum(basin_depth, unrefined), basin_depth)
         # Sediment-filled basins are deposition zones: the parent plain is kept
         # (no uplift, almost no erosion) instead of being re-dissected into hills.
         basin = np.clip(basin_depth / BASIN_FULL_M, 0, 1)
         steady, pulse = steady * (1 - basin), pulse * (1 - basin)
         erodibility = erodibility * (1 - 0.97 * basin)
+        # The planet fills its basins to their spill level after erosion, which
+        # a tile cannot see: eroding the plain, big inherited rivers cut it down
+        # to whichever ring node is lowest, differently in each tile. Sediment
+        # holds it at the planet's plain instead, drained and with the channels
+        # cut, less (1 - basin) * BASIN_FULL_M toward the margin, so rivers cross
+        # it on the plain and fronts grade to it. Every level holds the planet's
+        # plain rather than the level above, so a coarse level's broad channel
+        # fills back up around a finer level's narrower one instead of the two
+        # adding up. It starts without the random roughness that breaks ties
+        # elsewhere: a plain eroding at 3 % of the rate keeps it, and each level
+        # stacked its own few metres on the plain of the level above.
+        planet_plain = parent.plain_at(mesh.xyz)
+        held = drained if planet_plain is None else priority_breach(
+            np.where(fixed, level, planet_plain - channels), fixed, mesh.ptr, mesh.nbr,
+            FILL_EPS_M,
+        )
+        floor = np.where(basin_depth > 0, held - (1 - basin) * BASIN_FULL_M, -np.inf)
+        rough = 1 - basin
     runoff = (
         None if parent.runoff_weight is None
         else np.maximum(smoothly(parent.runoff_weight), MIN_RUNOFF_WEIGHT)
@@ -385,7 +539,7 @@ def enrich(
     inflow = parent_inflows(parent, region)
     settings = parent.settings
     rng = np.random.default_rng(seed)
-    initial = np.maximum(target, 1.0) + 5 * rng.random(mesh.size)
+    initial = np.maximum(drained, 1.0) + 5 * rough * rng.random(mesh.size)
     smoothing = parent.mesh.spacing_m
     # The relief keeps the parent's height at the parent spacing, so both are
     # smoothed alike before they are compared. Matching the parent itself would
@@ -402,7 +556,8 @@ def enrich(
         run = evolve(
             mesh, fixed, forcing, initial, steps=settings.steps, step_yr=settings.step_kyr * 1e3,
             area_exponent=settings.area_exponent, process_area_m2=process_area_km2 * 1e6,
-            runoff=runoff, fixed_level=level, inflow_m2=inflow, cancellation=cancellation,
+            runoff=runoff, fixed_level=level, inflow_m2=inflow, floor_m=floor,
+            cancellation=cancellation,
         )
         smooth = smooth_over_land(mesh, np.where(land, run.elevation, 0.0), land, smoothing)
         interior = land & ~fixed

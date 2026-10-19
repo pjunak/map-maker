@@ -95,6 +95,73 @@ within the values at the corners of its triangle, as a linear sample does.
 Clamping erodibility to the parent's range is no longer needed. The regional
 tile algorithm becomes `planet-blended-tiles-v13`.
 
+## Revision (2026-10-19): sediment-basin plains
+
+The planet sinks its sediment basins and fills them from their spill level after
+erosion, so a basin plain is a deposit, not an eroded surface. Tiles only stopped
+uplift and cut erodibility by 97 % where basin depth reached 200 m. Big inherited
+rivers still cut the plain down, each tile to whatever outlet its own ring
+offered. Over a 36 km box of the basin plain on Aethelara (56.87° E, 30.70° N),
+levels 1–3 lay 335, 407 and 433 m below the planet's plain on average, and
+overlapping region tiles there differed by 200 m.
+
+Tiles now keep the planet's plain at every level:
+
+- **Floor.** Land in a basin never erodes below the planet's surface, less
+  (1 − basin) × 200 m towards the margin, the ramp uplift and erodibility already
+  follow. Every level holds the planet's plain, which level parents carry on the
+  planet mesh, rather than the surface of the level above. The floor holds inside
+  the implicit erosion sweep, so each node grades to its receiver's held height.
+  Rivers cross the plain on it, and range fronts grade to it.
+- **Breached sills.** Sampled between parent nodes, a parent surface has sills
+  where a river runs between two nodes and a higher third corner weighs in:
+  60–80 m at this plain's outlet. Held there, they dammed each tile's plain at
+  its own sill, 49–59 m above the planet. The floor is therefore that surface
+  with its sills breached, the dual of the planet's fill: the lowest pass out of
+  each hollow is lowered to just below it, unless that would cut a fixed node,
+  and then the hollow fills to that node.
+- **Start.** Tiles start from their parent's surface, breached in the same way.
+  Started behind a sill, ground first fills like a lake, and a plain eroding at
+  3 % of the rate kept the fill. Basins start without the random roughness that
+  breaks ties elsewhere, since each level stacked a few metres of it on the
+  plain of the level above.
+- **Channels.** Parent rivers keep their bankfull channels, 0.27 Q^0.39 m deep
+  (Moody and Troutman 2002, Q from 0.3 m of runoff a year): 4.7 m for a
+  160,000 km² river. A channel is cut along the parent's link, traced over the
+  tile mesh a neighbour at a time so it has no gaps, and through the ring only
+  where the river leaves. Because every level holds the planet's plain, a coarse
+  level's channel, as wide as its cells, fills back up around the finer level's
+  own. Along a parent river the basin margin's spurs stop at its banks, since a
+  floodplain is a deposit too.
+- **Level parents.** Their boundary lets no water out within the longest planet
+  step of where a planet river flows in, and nearer there than to where any
+  leaves, as window rims do. Planet rivers enter at their first node inside, up
+  to a step in.
+
+Held level, the planet's plains had told finer levels nothing about where a river
+runs. Every level routed them in its own flood order, and the province window
+lost the 160,000 km² river. The planet now grades its plains towards their
+outlets (`sphere-mesh-stream-power-v31`), and with it the levels below carry that
+river through. Rejected: filling the plain back up after erosion, which dammed
+valleys just outside basins; a fill to each tile's own spill level, which its ring
+would set differently in each tile; channels as deep as a narrow channel lowers a
+coarse cell on average (0.2 m at level 1), lost among centimetre differences once
+resampled; and channels along the planet's links at every level, with which
+the province window lost the river again within 6 km of its entry
+([T21](../research/terrain-method-decisions.md#t21---hold-regional-basin-plains-at-the-sampled-parent-surface-or-refill-them)).
+
+| Box on the graded planet (plain mean 717.5 m) | level 1 | level 2 | level 3 |
+|---|---:|---:|---:|
+| Plain mean, v14 / v15 (m) | 383 / 717 | 311 / 715 | 285 / 715 |
+| Overlapping tiles' spread on the plain, mean, v14 / v15 (m) | 200 / 4.4 | 32 / 4.2 | 10.5 / 0.6 |
+
+Still open: levels 2 and 3 agree on the big river's course, but at a junction
+13 km east of the window's centre they turn it north, where level 1 and the
+planet run it north-west. The two province tiles' level parents route the river
+north-west too, but on lattices of their own, along lines up to 8 km apart, so
+their blend likely breaks the channel and the window's water takes the next way
+out. The regional tile algorithm becomes `planet-blended-tiles-v15`.
+
 ## Consequences
 
 - Detail is reproducible and independent of the requested window. Tiles are
