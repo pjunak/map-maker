@@ -191,7 +191,7 @@ truth's straight-contour share there (0.014–0.023) is no higher than elsewhere
 so the rule cannot show whether curves erase straight ridges. Linear interpolation
 is further from it (0.22–0.26) than the cubics (0.05–0.07).
 
-The crops (truth, then each variant's hillshade) show the same:
+The crops (truth, then each variant's hillshade; the harness writes them with `--crops`) show the same:
 - On the Alps at 25 km, linear draws triangular facets, the cubics a smooth but
   blobby surface, and the twist crumpled swirls. None shows the Alps' ridge and
   valley grain.

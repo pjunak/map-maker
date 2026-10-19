@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Planet build speed — 2026-10-19](2026-10-19-planet-build-speed.md) times full builds
+  at 200k, 800k and 3.2M nodes and finds the heavy loops already compiled, so a Rust port
+  would give a constant factor and lower memory, not kilometre-scale planets.
+
 - [Curved interpolation — 2026-10-19](2026-10-19-curved-interpolation.md) rebuilds Earth
   (ETOPO 2022) and a fine synthetic build from 50 and 25 km nodes with straight lines,
   Clough-Tocher cubics and a planar twist. Curves remove the mesh's facets but are no

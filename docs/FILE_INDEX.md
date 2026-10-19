@@ -222,6 +222,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
+| [docs/research/2026-10-19-planet-build-speed.md](research/2026-10-19-planet-build-speed.md) | Planet build speed: stage times and peak memory at 200k, 800k and 3.2M nodes, where the time goes, estimates for finer meshes and what a Rust port would change. |
 | [docs/research/2026-10-19-curved-interpolation.md](research/2026-10-19-curved-interpolation.md) | Straight against curved interpolation of planet relief: Clough-Tocher cubics and a planar twist rebuilding Earth (ETOPO 2022) and a synthetic build from coarse nodes; pass rules, results and the rejected trial (T22). |
 | [docs/research/2026-10-13-refined-world-map.md](research/2026-10-13-refined-world-map.md) | The planet's refined land exported as a source map: import, planet comparison with the original drawing, coast detail added twice, and the ice-sheet drawing fix it exposed. |
 | [docs/research/2026-10-13-polar-land.md](research/2026-10-13-polar-land.md) | Polar land in true distance: the pole wedge and traced streaks, smoothing and cap trials, and Aethelara's covered south pole. |

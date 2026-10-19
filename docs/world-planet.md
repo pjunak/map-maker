@@ -306,13 +306,17 @@ leaves no `manifest.json`, so it never looks complete.
 | `--width` | 4,096 | Width of the GeoTIFF and images. Height follows your SVG frame's aspect. |
 | `--river-km2` | 25,000 | River size threshold, as a catchment area at the planet's mean runoff. Rivers are selected by discharge, so dry regions show fewer. |
 
-Typical times on a 16-thread desktop:
+Typical times with geology, the default single climate pass and 4,096 px maps, on
+an 8-core, 16-thread desktop running other jobs
+([measurements](research/2026-10-19-planet-build-speed.md)):
 
-| Run | Time |
-|---|---:|
-| 100k nodes, geology and one climate pass | about 50 s |
-| 800k nodes, two climate passes | about 1.5 min |
-| 3.2M nodes, two climate passes | about 4 min |
+| Run | Time | Peak memory |
+|---|---:|---:|
+| 200k nodes | about 3 min | 5.4 GiB |
+| 800k nodes | about 4.5 min | 5.8 GiB |
+| 3.2M nodes | about 8.5 min | 7.7 GiB |
+
+About 70 s of each is drawing and saving the maps, whatever the mesh size.
 
 Regional detail for an exported planet:
 

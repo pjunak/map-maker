@@ -25,6 +25,9 @@ See the [plan](docs/strategy/README.md) for states and evidence.
 - [ ] **M2 planet relief:**
   - [ ] Conserving sediment deposition with flexure (a per-node G term was rejected).
   - [ ] Analytic steady-state finish or level-set parallel routing (faster fine builds).
+  - [ ] Ice-sheet flow on a coarser mesh or with implicit steps: 119 s of a 508 s
+    3.2M build, growing faster than the node count
+    ([build speed](docs/research/2026-10-19-planet-build-speed.md)).
   - [ ] Use the bathymetry product as the ocean floor, or record why not.
 - [ ] **M3 climate:** monthly outputs, below-sea-level basins and an energy-balance check.
   - [ ] Ice shelves in cold embayments and seasonal sea ice; mountain glaciers
@@ -929,6 +932,9 @@ Priorities remain conditional on the current strategy's prerequisites.
   measured benefit and a tested native-library/Windows packaging path. Explicitly
   choose a temporary Python/Rust bridge or a complete runtime replacement;
   a kernel port does not establish full project, CLI or desktop workflow parity.
+  The [2026-10-19 build profile](docs/research/2026-10-19-planet-build-speed.md)
+  finds the planet's hot loops already compiled: a port is expected to give a
+  constant factor and lower memory, not a much finer planet mesh.
 
 #### Shared channel geometry — 2026-09-24
 
