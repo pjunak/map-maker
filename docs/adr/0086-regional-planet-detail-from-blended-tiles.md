@@ -4,6 +4,8 @@
 - Date: 2026-10-06
 - Implements the first M6 slice of ADR-0048 (zoom-driven enrichment) on the planet
   parent of ADR-0085.
+- Refined by [ADR-0108](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md):
+  tiles are calibrated against the parent surface smoothed alike.
 
 ## Context
 

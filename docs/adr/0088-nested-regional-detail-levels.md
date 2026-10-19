@@ -7,6 +7,8 @@
   is coloured and shaded by its slopes scaled to level 1.
 - Refined by [ADR-0107](0107-regional-temperatures-follow-height-above-the-planet.md): every level
   is as warm as the planet at its height.
+- Refined by [ADR-0108](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md):
+  every level keeps the height of the level above at that level's spacing.
 
 ## Context
 

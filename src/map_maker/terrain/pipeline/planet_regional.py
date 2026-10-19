@@ -13,7 +13,8 @@ A circular region is regenerated with finer, physically eroded detail:
   rock texture and a smaller process area, so smaller valleys resolve. Sediment
   basins keep their plain; their margins are refined down to the spacing.
 * **Consistency.** A per-node uplift correction (ratio, then secant) makes the
-  regional relief, smoothed over the parent spacing, match the parent surface.
+  regional relief, smoothed over the parent spacing, match the parent surface
+  smoothed alike (ADR-0108).
 """
 
 from collections.abc import Callable
@@ -386,6 +387,11 @@ def enrich(
     rng = np.random.default_rng(seed)
     initial = np.maximum(target, 1.0) + 5 * rng.random(mesh.size)
     smoothing = parent.mesh.spacing_m
+    # The relief keeps the parent's height at the parent spacing, so both are
+    # smoothed alike before they are compared. Matching the parent itself would
+    # demand relief standing above it wherever smoothing lowers peaks, a target
+    # the secant chased into overshoots in high mountains.
+    wanted = smooth_over_land(mesh, np.where(land, target, 0.0), land, smoothing)
     correction = np.ones(mesh.size)
     previous: tuple[F64, F64] | None = None
     history: list[dict[str, float]] = []
@@ -400,7 +406,7 @@ def enrich(
         )
         smooth = smooth_over_land(mesh, np.where(land, run.elevation, 0.0), land, smoothing)
         interior = land & ~fixed
-        error = smooth[interior] - target[interior] if interior.any() else np.zeros(1)
+        error = smooth[interior] - wanted[interior] if interior.any() else np.zeros(1)
         history.append({
             "iteration": float(iteration),
             "rms_vs_parent_m": float(np.sqrt(np.mean(error**2))),
@@ -411,12 +417,12 @@ def enrich(
             break
         # Ratio first; then a per-node secant on the correction -> smoothed-relief
         # response, which also accounts for fixed boundary base levels.
-        proposal = correction * np.clip((target + 50.0) / (smooth + 50.0), 1 / 3, 3.0)
+        proposal = correction * np.clip((wanted + 50.0) / (smooth + 50.0), 1 / 3, 3.0)
         if previous is not None:
             dc, ds = correction - previous[0], smooth - previous[1]
             slope = np.divide(ds, dc, out=np.zeros_like(ds), where=np.abs(dc) > 1e-6)
             usable = slope > 1.0
-            secant = correction + (target - smooth) / np.where(usable, slope, 1.0)
+            secant = correction + (wanted - smooth) / np.where(usable, slope, 1.0)
             proposal = np.where(usable, secant, proposal)
         proposal = np.clip(proposal, correction / 3, correction * 3)
         previous = (correction, smooth)

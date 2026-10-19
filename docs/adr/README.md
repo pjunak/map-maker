@@ -136,3 +136,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0105: Colour and shade every regional level by slopes scaled to level 1](0105-regional-levels-see-level-1-slopes.md)
 - [ADR-0106: Wind regional valleys below the tile mesh along an area-preserving flow](0106-wind-regional-valleys-below-the-tile-mesh.md)
 - [ADR-0107: Regional temperatures follow height above the planet surface](0107-regional-temperatures-follow-height-above-the-planet.md)
+- [ADR-0108: Calibrate regional relief against the parent smoothed alike](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md)

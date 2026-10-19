@@ -365,8 +365,10 @@ that colours see only by how far it departs from its own mean over a mesh
 spacing, so snow and treelines follow its ridges and gullies, but carved valleys
 do not warm whole mountains
 ([ADR-0107](adr/0107-regional-temperatures-follow-height-above-the-planet.md)).
-Province tiles still stand several hundred metres above region tiles in high
-mountains, so provinces draw those mountains colder, with more snow.
+Every level keeps the height of the level above at that level's spacing and only
+adds smaller relief, so a province draws the region's mountains about as high and
+as cold as the region does
+([ADR-0108](adr/0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md)).
 
 ## Outputs
 

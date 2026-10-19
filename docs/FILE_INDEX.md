@@ -211,6 +211,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0105-regional-levels-see-level-1-slopes.md](adr/0105-regional-levels-see-level-1-slopes.md) | Every regional level is coloured and shaded by its slopes scaled to the level-1 mesh, and terrain position reads only the window's own ground, so nested windows agree in tone. |
 | [docs/adr/0106-wind-regional-valleys-below-the-tile-mesh.md](adr/0106-wind-regional-valleys-below-the-tile-mesh.md) | Windows and level parents sample the tile blend along an area-preserving curl-noise flow, one octave sequence shared by all levels, so valleys and rivers wind below the tile mesh instead of running straight between its nodes (`planet-blended-tiles-v12`). |
 | [docs/adr/0107-regional-temperatures-follow-height-above-the-planet.md](adr/0107-regional-temperatures-follow-height-above-the-planet.md) | Every regional level is as warm as the planet at its height, and colour lapse-corrects display relief only about its own mean over a mesh spacing. |
+| [docs/adr/0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md](adr/0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md) | Regional tiles are calibrated against the parent surface smoothed as they are, so every level keeps the height of the level above at that level's spacing instead of exaggerating its mountains (`planet-blended-tiles-v14`). |
 
 ## Dated research reports (99)
 

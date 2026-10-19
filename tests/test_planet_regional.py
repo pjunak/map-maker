@@ -53,10 +53,9 @@ def test_regional_relief_matches_its_parent_at_parent_scale(parent: PlanetResult
     region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
     assert region.boundary.sum() > 50 and np.all(np.hypot(*region.plane_m.T) <= 600e3 + 1)
     # Multi-scale parent forcing starts the coarse (20k-node) fixture further from
-    # its parent; it still converges (394 -> 163 -> 102 -> 68 m over 6 iterations).
-    result = enrich(
-        RegionalParent.from_result(parent), region, process_area_km2=2_000, iterations=4, seed=1
-    )
+    # its parent; it still converges (155 -> 120 -> 25 -> 17 -> 11 m).
+    source = RegionalParent.from_result(parent)
+    result = enrich(source, region, process_area_km2=2_000, iterations=4, seed=1)
     first, last = result.history[0], result.history[-1]
     assert last["rms_vs_parent_m"] < first["rms_vs_parent_m"]
     assert abs(last["mean_bias_m"]) < 0.1 * max(last["mean_m"], 1.0)
@@ -66,6 +65,49 @@ def test_regional_relief_matches_its_parent_at_parent_scale(parent: PlanetResult
     # Boundary land stays at the parent's surface.
     edge = region.boundary & result.land
     assert np.allclose(result.elevation_m[edge], np.maximum(result.target_m[edge], 1.0))
+    # Below the parent spacing the relief has more detail than its parent.
+    from map_maker.terrain.pipeline.planet_forcing import smooth_over_land
+
+    land, inside = result.land, result.land & ~region.boundary
+
+    def detail(values: np.ndarray) -> float:
+        values = np.where(land, values, 0.0)
+        smooth = smooth_over_land(region.mesh, values, land, source.mesh.spacing_m)
+        return float(np.std((values - smooth)[inside]))
+
+    assert detail(result.elevation_m) > 1.3 * detail(result.target_m)
+
+
+def test_regional_relief_keeps_the_parent_height_on_its_peaks(parent: PlanetResult) -> None:
+    from dataclasses import replace
+
+    from map_maker.terrain.pipeline.planet_forcing import smooth_over_land
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+
+    lon, lat = _land_centre(parent)
+    source = RegionalParent.from_result(parent)
+    spacing = source.mesh.spacing_m
+    # Peaks four parent spacings apart: smoothing over the parent spacing lowers
+    # their tops by about 300 m.
+    x, y = forward_aeqd(parent.mesh.xyz, lon, lat, parent.mesh.radius_m).T
+    bumps = np.cos(np.pi * x / (2 * spacing)) * np.cos(np.pi * y / (2 * spacing))
+    peaked = replace(source, surface_m=np.where(source.land, 1500 + 1000 * bumps, 0.0))
+    region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
+    result = enrich(peaked, region, process_area_km2=2_000, iterations=3, seed=1)
+    land, target, relief = result.land, result.target_m, result.elevation_m
+
+    def smooth(values: np.ndarray) -> np.ndarray:
+        return smooth_over_land(region.mesh, np.where(land, values, 0.0), land, spacing)
+
+    inside = land & ~region.boundary
+    high = inside & (smooth(target) >= np.quantile(smooth(target)[inside], 0.9))
+    lowered = float(np.mean((target - smooth(target))[high]))
+    assert lowered > 200.0
+    # Seen at the parent spacing, the relief keeps the parent's height on its peaks.
+    # Calibrated against the unsmoothed parent, it stood 119 m above it there, and
+    # 323 m above the parent's own peaks.
+    assert abs(np.mean((smooth(relief) - smooth(target))[high])) < 0.25 * lowered
+    assert abs(np.mean((relief - target)[high])) < 0.25 * lowered
 
 
 def test_tiles_are_window_independent_and_blend_to_a_partition_of_unity(
