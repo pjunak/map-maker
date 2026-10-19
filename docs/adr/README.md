@@ -137,3 +137,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0106: Wind regional valleys below the tile mesh along an area-preserving flow](0106-wind-regional-valleys-below-the-tile-mesh.md)
 - [ADR-0107: Regional temperatures follow height above the planet surface](0107-regional-temperatures-follow-height-above-the-planet.md)
 - [ADR-0108: Calibrate regional relief against the parent smoothed alike](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md)
+- [ADR-0109: Fit regional uplift corrections to the relief uplift builds along the drainage](0109-fit-regional-uplift-corrections-along-the-drainage.md)

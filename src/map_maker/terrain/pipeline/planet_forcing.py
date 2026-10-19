@@ -11,13 +11,14 @@
   later rescales its uplift towards that target.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from math import exp
 
 import numpy as np
 import shapely
 from numpy.typing import NDArray
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, csr_array, diags_array
 from scipy.sparse.csgraph import connected_components
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
@@ -539,6 +540,32 @@ def smooth_over_land(mesh: SphereMesh, values: F64, land: B, length_m: float) ->
         mean = np.divide(total, degree, out=out.copy(), where=degree > 0)
         out = np.where(land, 0.5 * out + 0.5 * mean, out)
     return out
+
+
+def land_smoother(mesh: SphereMesh, land: B, length_m: float) -> Callable[[F64], F64]:
+    """``smooth_over_land`` assembled once, for fields smoothed alike many times.
+
+    Each diffusion step is one sparse product, several times faster than
+    gathering neighbours; results agree with ``smooth_over_land`` to rounding.
+    """
+    steps = min(400, max(0, round((length_m / mesh.spacing_m) ** 2)))
+    src = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
+    valid = land[src] & land[mesh.nbr]
+    degree = np.bincount(src[valid], minlength=mesh.size).astype(np.float64)
+    rows, cols = src[valid], mesh.nbr[valid]
+    mixing = land & (degree > 0)
+    step = csr_array(
+        csr_array((0.5 / degree[rows], (rows, cols)), shape=(mesh.size, mesh.size))
+        + diags_array(np.where(mixing, 0.5, 1.0))
+    )
+
+    def smooth(values: F64) -> F64:
+        out = np.asarray(values, dtype=np.float64)
+        for _ in range(steps):
+            out = step @ out
+        return out
+
+    return smooth
 
 
 @dataclass(frozen=True, slots=True)

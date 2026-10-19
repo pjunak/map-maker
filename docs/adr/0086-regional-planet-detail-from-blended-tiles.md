@@ -6,6 +6,8 @@
   parent of ADR-0085.
 - Refined by [ADR-0108](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md):
   tiles are calibrated against the parent surface smoothed alike.
+- Refined by [ADR-0109](0109-fit-regional-uplift-corrections-along-the-drainage.md):
+  the uplift correction is fitted to the relief uplift builds along the drainage.
 
 ## Context
 

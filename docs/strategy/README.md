@@ -82,12 +82,18 @@ backlog, and [status](../research/status.md) records what works now.
      between parent nodes, and parent rivers keep bankfull channels along their
      links, so big rivers cross plains in their channels and overlapping tiles
      agree there (`planet-blended-tiles-v15`).
+   - Mountain tiles calibrate as well as smooth ones. The uplift correction is
+     fitted to the relief uplift builds along the drainage, from the steady state
+     the starting surface drains to, so a valley's correction no longer lifts the
+     ridges above it unseen. Level 1 ends at 43 m RMS against the smoothed parent,
+     level 2 at 92 m, near the noise of its own erosion (ADR-0109,
+     `planet-blended-tiles-v16`).
    - **Next:** one course for a big river through every level. On the Aethelara
      basin plain the province and local maps turn the 160,000 km² river north at a
      junction where the region and the planet run it north-west: tiles' level
      parents route it along lines kilometres apart, and their blend breaks its
-     channel. Mountain tiles also still calibrate noisily (100–300 m RMS at the
-     parent spacing), because uplift at a node raises everything upstream of it.
+     channel. Blended tiles also still close hollows where they disagree about an
+     outlet (two lakes in the Aethelara region window).
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is

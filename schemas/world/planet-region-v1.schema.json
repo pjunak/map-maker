@@ -13,7 +13,7 @@
     "schema": { "const": "map-maker.planet-region" },
     "version": { "type": "integer", "const": 1 },
     "status": { "const": "experimental" },
-    "algorithm": { "const": "planet-blended-tiles-v15" },
+    "algorithm": { "const": "planet-blended-tiles-v16" },
     "parent_build_sha256": { "$ref": "#/$defs/sha256" },
     "centre_lonlat_deg": {
       "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2

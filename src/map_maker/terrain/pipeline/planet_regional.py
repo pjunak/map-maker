@@ -13,14 +13,16 @@ A circular region is regenerated with finer, physically eroded detail:
   rock texture and a smaller process area, so smaller valleys resolve. Sediment
   basins keep their plain, which erosion cannot lower below the parent's; their
   margins are refined down to the spacing.
-* **Consistency.** A per-node uplift correction (ratio, then secant) makes the
-  regional relief, smoothed over the parent spacing, match the parent surface
-  smoothed alike (ADR-0108).
+* **Consistency.** An uplift correction makes the regional relief, smoothed over
+  the parent spacing, match the parent surface smoothed alike (ADR-0108). It is
+  fitted to the height each node's uplift builds above where it drains, starting
+  from the steady state of the starting surface (ADR-0109).
 """
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
+from math import log, sqrt
 
 import numpy as np
 from numpy.typing import NDArray
@@ -37,15 +39,26 @@ from map_maker.terrain.pipeline.planet_coast import (
     level_finest_m,
     noise_octaves,
 )
-from map_maker.terrain.pipeline.planet_evolution import FILL_EPS_M, EvolutionRun, evolve
-from map_maker.terrain.pipeline.planet_forcing import Forcing, smooth_over_land
+from map_maker.terrain.pipeline.planet_evolution import (
+    FILL_EPS_M,
+    LAND_FLOOR_M,
+    EvolutionRun,
+    FlowState,
+    evolve,
+    route,
+)
+from map_maker.terrain.pipeline.planet_forcing import (
+    PLATEAU_PULSE_FRACTION,
+    Forcing,
+    land_smoother,
+)
 from map_maker.terrain.pipeline.planet_ice import (
     IceSheets,
     ice_sheet_nodes,
     margin_distance,
     sample_ice,
 )
-from map_maker.terrain.pipeline.planet_kernels import priority_breach
+from map_maker.terrain.pipeline.planet_kernels import downstream_sum, priority_breach
 from map_maker.terrain.pipeline.planet_lakes import refined_lake_cover
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from map_maker.terrain.pipeline.planet_noise import fbm3
@@ -81,6 +94,22 @@ MIN_RUNOFF_WEIGHT = 0.05
 CHANNEL_DEPTH_COEFFICIENT = 0.27
 CHANNEL_DEPTH_EXPONENT = 0.39
 CHANNEL_RUNOFF_M_YR = 0.3
+# Uplift calibration (ADR-0109). A correction is fitted over CALIBRATION_VALLEYS
+# valley spacings, the square root of the process area, and never less than half
+# the parent spacing: fitted finer, it chased divides that jump between valleys
+# from one erosion run to the next. Ground standing less than CALIBRATION_RELIEF_M
+# above where it drains barely answers its uplift, so the fit holds back there.
+CALIBRATION_VALLEYS = 2.0
+CALIBRATION_RELIEF_M = 50.0
+CALIBRATION_STEP = 3.0  # largest change of the correction in one iteration (factor)
+CORRECTION_RANGE = (0.02, 10.0)
+# Uplift at a node lifts all ground upstream of it. Where the last prediction of
+# the smoothed relief held to within TRUSTED_MISS of its change, the fit counts
+# that lift along the drainage; from DISTRUSTED_MISS on, divides moved more than
+# the drainage model knows, and the fit stays local.
+TRUSTED_MISS = 0.2
+DISTRUSTED_MISS = 0.7
+COUPLING_PASSES = 2
 
 
 @dataclass(frozen=True)
@@ -437,6 +466,96 @@ def entry_walls(parent: RegionalParent, region: Region, process_area_m2: float) 
     return walls
 
 
+def uplift_steps(
+    flow: FlowState,
+    steady: F64,
+    pulse: F64,
+    *,
+    erodibility: F64,
+    interior: B,
+    area_exponent: float,
+    process_area_m2: float,
+    steps: int,
+    step_yr: float,
+) -> F64:
+    """Each interior node's height above its receiver that its uplift builds.
+
+    Implicit stream power (n = 1) settles a node U dx / (K (A + A0)^m) above its
+    receiver within its response time dx / (K (A + A0)^m). Nodes slower than the
+    run, or than the final pulse for pulse uplift, stand proportionally lower.
+    """
+    rate = erodibility * (flow.area_m2 + process_area_m2) ** area_exponent
+    drains = interior & (flow.receiver >= 0) & (rate > 0)
+    response = np.divide(flow.distance_m, rate, out=np.zeros(rate.size), where=drains)
+    lag = np.maximum(response, 1e-9)
+    # As ``evolve`` times it, the pulse adds to the last steps.
+    pulse_yr = (steps - round(steps * (1 - PLATEAU_PULSE_FRACTION))) * step_yr
+    height = response * (
+        steady * -np.expm1(-steps * step_yr / lag) + pulse * -np.expm1(-pulse_yr / lag)
+    )
+    return np.where(drains, height, 0.0)
+
+
+@dataclass(frozen=True)
+class UpliftCalibration:
+    """Fits a tile's uplift correction to the parent smoothed alike (ADR-0109).
+
+    Eroded to steady state, a node stands the sum of the heights its uplift and
+    that of the nodes below it build down its drainage path, from where the path
+    ends or a deposit holds it. A relative change of the correction raises it by
+    that built height, so the change is fitted by least squares weighted by the
+    height: ground that uplift has raised far decides. Where the drainage model
+    is trusted, the fit also counts the lift from corrections downstream.
+    """
+
+    interior: B
+    level: F64  # heights where drainage paths end (fixed nodes)
+    floor: F64  # deposits erosion holds land at, -inf where none
+    wanted: F64  # the parent surface smoothed over the parent spacing
+    smooth: Callable[[F64], F64]  # over land, across the parent spacing
+    fit: Callable[[F64], F64]  # over land, across the width a correction is fitted on
+
+    def settled(self, flow: FlowState, steps: F64) -> F64:
+        """The steady surface that node ``steps`` above their receivers build."""
+        values = np.where(self.interior, steps, self.level)
+        return downstream_sum(flow.order, flow.receiver, values, self.floor)
+
+    def built(self, flow: FlowState, steps: F64) -> F64:
+        """Smoothed height that ``steps`` build above path ends and deposits."""
+        bare = self.settled(flow, np.zeros_like(steps))
+        return np.where(self.interior, self.smooth(self.settled(flow, steps) - bare), 0.0)
+
+    def rise(self, flow: FlowState, steps: F64, change: F64) -> F64:
+        """Smoothed rise of the steady surface when ``steps`` grow by ``change``."""
+        grown = self.settled(flow, steps * (1 + change)) - self.settled(flow, steps)
+        return np.where(self.interior, self.smooth(grown), 0.0)
+
+    def trust(self, change: F64, predicted: F64) -> F64:
+        """1 where the smoothed relief changed as ``predicted``, 0 where it missed widely."""
+        miss = np.where(self.interior, change - predicted, 0.0)
+        seen = np.where(self.interior, change, 0.0)
+        relative = np.sqrt(self.fit(miss**2) / (self.fit(seen**2) + 1.0e2))
+        span = DISTRUSTED_MISS - TRUSTED_MISS
+        return np.where(self.interior, np.clip((DISTRUSTED_MISS - relative) / span, 0, 1), 0.0)
+
+    def factor(self, error: F64, flow: FlowState, steps: F64, trust: F64 | None) -> F64:
+        """Multiplier of the correction that removes ``error`` (wanted minus relief).
+
+        ``steps`` are what the current correction builds above each receiver.
+        """
+        built = self.built(flow, steps)
+        error = np.where(self.interior, error, 0.0)
+        scale = self.fit(built**2) + CALIBRATION_RELIEF_M**2
+        change = self.fit(built * error) / scale
+        if trust is not None:
+            for _ in range(COUPLING_PASSES):
+                # The fit takes each node to rise with its own correction alone;
+                # the drainage adds the lift from corrections below it.
+                lift = trust * (self.rise(flow, steps, change) - built * change)
+                change = self.fit(built * (error - lift)) / scale
+        return np.exp(np.clip(change, -log(CALIBRATION_STEP), log(CALIBRATION_STEP)))
+
+
 @dataclass(frozen=True)
 class RegionalResult:
     region: Region
@@ -541,13 +660,38 @@ def enrich(
     rng = np.random.default_rng(seed)
     initial = np.maximum(drained, 1.0) + 5 * rough * rng.random(mesh.size)
     smoothing = parent.mesh.spacing_m
+    process_area_m2 = process_area_km2 * 1e6
+    interior = land & ~fixed
+    smooth = land_smoother(mesh, land, smoothing)
     # The relief keeps the parent's height at the parent spacing, so both are
     # smoothed alike before they are compared. Matching the parent itself would
-    # demand relief standing above it wherever smoothing lowers peaks, a target
-    # the secant chased into overshoots in high mountains.
-    wanted = smooth_over_land(mesh, np.where(land, target, 0.0), land, smoothing)
-    correction = np.ones(mesh.size)
-    previous: tuple[F64, F64] | None = None
+    # demand relief standing above it wherever smoothing lowers peaks.
+    calibration = UpliftCalibration(
+        interior, level, np.full(mesh.size, -np.inf) if floor is None else floor,
+        smooth(np.where(land, target, 0.0)), smooth,
+        land_smoother(
+            mesh, land, max(smoothing / 2, CALIBRATION_VALLEYS * sqrt(process_area_m2))
+        ),
+    )
+    steps_of = partial(
+        uplift_steps, erodibility=erodibility, interior=interior,
+        area_exponent=settings.area_exponent, process_area_m2=process_area_m2,
+        steps=settings.steps, step_yr=settings.step_kyr * 1e3,
+    )
+    # The first correction fits the steady state that the starting surface's
+    # drainage settles to, without an erosion run. Level parents carry the
+    # planet's uplift, which builds finer levels two to three times too high.
+    surface = np.where(fixed, level, np.maximum(initial, LAND_FLOOR_M))
+    start = route(mesh, surface, fixed, runoff, inflow)
+    first = steps_of(start, steady, pulse)
+    correction = np.clip(
+        calibration.factor(
+            calibration.wanted - smooth(calibration.settled(start, first)), start, first, None
+        ),
+        *CORRECTION_RANGE,
+    )
+    reference = smooth(np.where(land, surface, 0.0))
+    predicted = smooth(calibration.settled(start, first * correction)) - reference
     history: list[dict[str, float]] = []
     run: EvolutionRun | None = None
     for iteration in range(iterations + 1):
@@ -555,13 +699,12 @@ def enrich(
         forcing = Forcing(steady * correction, pulse * correction, erodibility, water)
         run = evolve(
             mesh, fixed, forcing, initial, steps=settings.steps, step_yr=settings.step_kyr * 1e3,
-            area_exponent=settings.area_exponent, process_area_m2=process_area_km2 * 1e6,
+            area_exponent=settings.area_exponent, process_area_m2=process_area_m2,
             runoff=runoff, fixed_level=level, inflow_m2=inflow, floor_m=floor,
             cancellation=cancellation,
         )
-        smooth = smooth_over_land(mesh, np.where(land, run.elevation, 0.0), land, smoothing)
-        interior = land & ~fixed
-        error = smooth[interior] - wanted[interior] if interior.any() else np.zeros(1)
+        relief = smooth(np.where(land, run.elevation, 0.0))
+        error = (relief - calibration.wanted)[interior] if interior.any() else np.zeros(1)
         history.append({
             "iteration": float(iteration),
             "rms_vs_parent_m": float(np.sqrt(np.mean(error**2))),
@@ -570,20 +713,11 @@ def enrich(
         })
         if iteration == iterations:
             break
-        # Ratio first; then a per-node secant on the correction -> smoothed-relief
-        # response, which also accounts for fixed boundary base levels.
-        proposal = correction * np.clip((wanted + 50.0) / (smooth + 50.0), 1 / 3, 3.0)
-        if previous is not None:
-            dc, ds = correction - previous[0], smooth - previous[1]
-            slope = np.divide(ds, dc, out=np.zeros_like(ds), where=np.abs(dc) > 1e-6)
-            usable = slope > 1.0
-            secant = correction + (wanted - smooth) / np.where(usable, slope, 1.0)
-            proposal = np.where(usable, secant, proposal)
-        proposal = np.clip(proposal, correction / 3, correction * 3)
-        previous = (correction, smooth)
-        correction = np.maximum(
-            smooth_over_land(mesh, np.where(land, proposal, correction), land, smoothing / 2),
-            0.02,
-        )
+        trust = calibration.trust(relief - reference, predicted)
+        steps = steps_of(run.flow, steady * correction, pulse * correction)
+        factor = calibration.factor(calibration.wanted - relief, run.flow, steps, trust)
+        updated = np.clip(correction * factor, *CORRECTION_RANGE)
+        predicted = calibration.rise(run.flow, steps, updated / correction - 1)
+        reference, correction = relief, updated
     assert run is not None
     return RegionalResult(region, land, run.elevation, run, target, correction, tuple(history))

@@ -204,6 +204,26 @@ def accumulate_nonnegative(order: I64, receiver: I64, sink: B, source: F64) -> F
 
 
 @njit(cache=True)
+def downstream_sum(order: I64, receiver: I64, values: F64, floor: F64) -> F64:
+    """Sum ``values`` down each node's drainage path, never below ``floor``.
+
+    ``order`` lists land nodes downstream first. A node outside it (water, or a
+    node draining nowhere) keeps its own value, which ends every path through it.
+    A node in it stands ``values`` above its receiver's total, or at its ``floor``
+    (-inf for none) where that is higher, as erosion holds a deposit.
+    """
+    total = values.copy()
+    for idx in range(order.size):
+        i = order[idx]
+        r = receiver[i]
+        if r >= 0:
+            total[i] += total[r]
+        if total[i] < floor[i]:
+            total[i] = floor[i]
+    return total
+
+
+@njit(cache=True)
 def stream_power_implicit(
     h: F64,
     order: I64,

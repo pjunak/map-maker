@@ -5,6 +5,9 @@
 - Refines [ADR-0086](0086-regional-planet-detail-from-blended-tiles.md) (tile
   calibration) and [ADR-0088](0088-nested-regional-detail-levels.md) (nested
   levels); follows up [ADR-0107](0107-regional-temperatures-follow-height-above-the-planet.md).
+- Decision 2 superseded by
+  [ADR-0109](0109-fit-regional-uplift-corrections-along-the-drainage.md): the
+  correction is fitted to the relief uplift builds along the drainage.
 
 ## Context
 
@@ -139,7 +142,7 @@ Calibration errors in v13 are measured against the unsmoothed parent.
 - Mountain calibration stays noisy. Drainage couples the correction, so mountain
   tiles keep 100–300 m RMS against the smoothed parent, and where a few massifs
   decide a height class, the region can stand 100 m or more off the planet
-  (−148 m where the planet is 3–4 km high here).
+  (−148 m where the planet is 3–4 km high here). ADR-0109 makes them converge.
 - A tile's calibration costs one more smoothing pass, 0.17 s at level 1. Tile
   time is unchanged within its spread: three level-1 tiles took 17.7 s before
   and 17.0 s after, and single tiles vary by up to 20 % with the relief they
