@@ -617,6 +617,56 @@ Open: at levels 2-3 the river takes another branch at a junction than level 1
 and the planet. Revisit with tile boundary exchange, or when tiles' level parents
 share one routing of the coarser level.
 
+## T22 - Draw planet relief between nodes with cubics or along a twist
+
+**Hypothesis.** World maps draw the planet triangle-linear between nodes, so
+Standard builds show triangular facets. Clough-Tocher cubics, with or without the
+regional clip, or ADR-0106's area-preserving twist would rebuild ground closer to
+the truth than straight lines do.
+
+**Control and inputs.** `benchmarks/planet/interpolation.py`: a truth is sampled
+at the nodes of coarse meshes of 200k and 800k nodes (50 and 25 km) and rebuilt
+in 600 km windows at 1/8 of the spacing. The control is linear. There are two
+truths:
+- a 3.2M-node (12.6 km) build of the synthetic test world, eight windows;
+- NOAA ETOPO 2022 at 60″, nine Earth windows, downloaded for the run and deleted
+  afterwards.
+
+The pass rules were set before the runs
+([report](2026-10-19-curved-interpolation.md#pass-rules-set-before-any-run)).
+
+**Outcome.**
+- **On Earth, curves are less accurate and look no closer.**
+  - Height error is 4.7 % and 8.8 % higher for the clipped cubic, 6.4 % and
+    11.1 % for the free one.
+  - Hillshade likeness stays at 0.34 (+0.001 to +0.004), and slope error rises
+    1–2 %.
+  - At 50 km the clipped cubic matches rivers worse (F1 0.408 against 0.435).
+- **On the synthetic planet, cubics are slightly better.** Hillshade likeness
+  rises by 0.026–0.040, river F1 by 0.07–0.13 and height error falls up to 3 %,
+  but slope error drops by at most 1.2 %, short of the 5 % rule.
+- **Mesh lines go in both.** The crease ratio falls from 10,000–29,000 to about
+  2. Straight contours fall from 0.23–0.29 to 0.05–0.09, against the truth's
+  0.014 on Earth.
+- **The twist is the least accurate.** It is the least straight (0.04–0.05), but
+  height error rises 8–21 %, hillshade likeness falls by 0.05–0.16 and river F1
+  by 0.04–0.08. Points move 16 km at 50 km and 8 km at 25 km.
+
+**Diagnosed cause.** Earth's relief between 25–50 km nodes is rough: valleys
+5–15 km apart make node heights nearly independent samples. Cubic gradients
+estimated from neighbours therefore add slope in the wrong places. The generated
+planet is smoother below its spacing (height error 45 m against Earth's 212 m at
+50 km), so it favours cubics a little. Hillshade likeness stays low (0.34 on
+Earth) for every interpolant, because what the eye sees lies below the spacing.
+A twist moves features away from the drawn rivers, which are routed on the
+unwarped mesh.
+
+**Disposition.** Rejected trial for world-map relief (D33). The planet keeps
+triangle-linear relief (ADR-0085), with no planet-level twist. Regional seeding
+(ADR-0086) and the regional twist (ADR-0106) are unaffected. Revisit when nodes
+carry more than heights (erosion's own slopes or receivers for a Hermite surface),
+or to compare a smoother look for Standard builds against display detail.
+
 ## What the failures change
 
 Preserve the feature goals: believable rivers, geological aging, useful zoom detail

@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Curved interpolation — 2026-10-19](2026-10-19-curved-interpolation.md) rebuilds Earth
+  (ETOPO 2022) and a fine synthetic build from 50 and 25 km nodes with straight lines,
+  Clough-Tocher cubics and a planar twist. Curves remove the mesh's facets but are no
+  closer to real ground, so the planet stays triangle-linear (T22).
+
 - [Refined world map — 2026-10-13](2026-10-13-refined-world-map.md) builds Aethelara from
   its planet land traced back into vector form: the same geography with cleaner coasts,
   whose level-1 coast detail regional levels add a second time.

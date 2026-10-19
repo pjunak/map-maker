@@ -16,10 +16,18 @@ development fixtures and measurements used to build and check it.
 
 # Landform scales of a build (range widths, valley spacing, river lengths vs Earth).
 .\.venv\Scripts\python.exe -m benchmarks.planet.scale_metrics my-planet --json scales.json
+
+# Straight against curved interpolation (T22): rebuild a finer build's relief, or an
+# Earth DEM, from coarse mesh nodes with each interpolant and score it against the truth.
+.\.venv\Scripts\python.exe -m benchmarks.planet.interpolation planet truth-build --output interp.json --crops crops
+.\.venv\Scripts\python.exe -m benchmarks.planet.interpolation dem ETOPO_2022_v1_60s_N90W180_surface.tif --output earth.json
 ```
 
 Generated worlds and recipes are development fixtures, not authored canon. Keep
-their outputs under ignored `artifacts/`. The original research harness, with its
-own kernels, is in Git history. Its measurements are in the
+their outputs under ignored `artifacts/`. Reference data such as the Earth DEM
+([source](../../docs/research/2026-10-19-curved-interpolation.md#truths)) is
+downloaded into ignored `artifacts/` for a run and deleted afterwards. The
+original research harness, with its own kernels, is in Git history. Its
+measurements are in the
 [relief](../../docs/research/2026-10-06-whole-planet-erosion-relief.md) and
 [climate](../../docs/research/2026-10-06-planet-climate-v0.md) reports.

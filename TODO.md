@@ -31,7 +31,9 @@ See the [plan](docs/strategy/README.md) for states and evidence.
     below the mesh spacing ([ice report](docs/research/2026-10-13-ice-sheets.md)).
 - [ ] **M4 workflow:** compare and regenerate in the World tab.
 - [ ] **M5 adoption:**
-  - [ ] Reference-world quality gates and an accepted planet parent.
+  - [ ] Reference-world quality gates and an accepted planet parent. The T22
+    harness (`benchmarks/planet/interpolation.py`) already scores relief against
+    Earth windows of ETOPO 2022.
   - [ ] Port the stable kernels to a native core.
   - [ ] Decide what replaces the local composed generator.
 - [ ] **M6 regional and local zoom:**
