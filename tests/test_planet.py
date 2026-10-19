@@ -732,7 +732,9 @@ def test_fold_belts_are_en_echelon_anticlines_not_rails() -> None:
     # ...but its anticlines are not rails along the whole belt: they wander, step
     # sideways and plunge out, so each is a few hundred kilometres long.
     assert folds.std(axis=1).mean() > 0.2
-    labels, count = label(folds > 0.6)
+    labels = np.zeros(folds.shape, dtype=np.int32)
+    label(folds > 0.6, output=labels)
+    count = int(labels.max())
     lengths = [(s[1].stop - s[1].start) * step for s in find_objects(labels)]
     assert count > 30 and max(lengths) < 1500e3 and np.median(lengths) < 400e3
     # A mesh too coarse for the wavelength gets the belt's mean, not aliased folds.
