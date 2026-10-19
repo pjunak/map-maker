@@ -386,6 +386,13 @@ def test_zoom_to_region_drills_down_in_the_map_and_reuses_cached_tiles(
     maps.globe.set_projection(MapProjection("globe", *window.centre, zoom=MAX_GLOBE_ZOOM))
     settle(app, lambda: globe_current(app))
     assert outlines() == 0  # zoomed in, their maps show instead
+    # A 3D globe of the shown map carries the regional maps drawn in it, deepest last.
+    maps.write_globe(tmp_path / "regions.glb", "Planet topographic")
+    wait(app)
+    model = read_glb((tmp_path / "regions.glb").read_bytes())
+    materials = [material["name"] for material in model.document["materials"]]
+    assert materials[3:] == ["regional map 1", "regional map 2"]
+    assert "with 2 regional maps" in view.status.get()
     maps.set_layer("Planet atlas")
     maps.projection.set("equirectangular")
     maps.refresh()

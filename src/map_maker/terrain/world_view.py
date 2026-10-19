@@ -629,7 +629,7 @@ class WorldMapView(ttk.Frame):
             self.globe.show(
                 self.planet_maps.image(self.display_layer.get()),
                 run.result.world.project.frame.central_meridian_deg,
-                self._drapes(),
+                self._drapes(self.display_layer.get()),
             )
         else:
             self.globe.grid_remove()
@@ -647,19 +647,19 @@ class WorldMapView(ttk.Frame):
         if not self._uses_globe():
             self.flat.draw_now()
 
-    def _drape_image(self, level: RegionLevel) -> Image.Image | None:
-        """The level's image of the shown map, if drawn: it lies over the globe."""
-        theme = THEME_BY_LABEL.get(self.display_layer.get())
+    def _drape_image(self, level: RegionLevel, layer: str) -> Image.Image | None:
+        """The level's image of the map ``layer``, if drawn: it lies over the globe."""
+        theme = THEME_BY_LABEL.get(layer)
         pyramid = None if theme is None else level.images.get(theme.id)
         return None if pyramid is None else pyramid.image
 
-    def _drapes(self) -> tuple[Drape, ...]:
-        """Opened regions drawn in the shown map, to show on the globe, deepest last."""
+    def _drapes(self, layer: str) -> tuple[Drape, ...]:
+        """Opened regions drawn in the map ``layer``, to show on the globe, deepest last."""
         return tuple(
             Drape(image, level.run.window.centre,
                   level.run.window.radius_m / level.run.window.planet_m)
             for level in self.levels
-            if (image := self._drape_image(level)) is not None
+            if (image := self._drape_image(level, layer)) is not None
         )
 
     def _flat_content(
@@ -801,9 +801,10 @@ class WorldMapView(ttk.Frame):
             metres_per_px = ground_m / view_radius(projection, frame.size)
             image = canvas.image
             detailed = image is not None and drapes_in_full(projection, frame.size, image.width)
+            layer = self.display_layer.get()
             circles = [(*level.run.window.centre, level.run.window.radius_m / 1000, MAP_TEXT)
                        for level in self.levels
-                       if not (detailed and self._drape_image(level) is not None)]
+                       if not (detailed and self._drape_image(level, layer) is not None)]
             if self.picking.get() and self._pick_at is not None:
                 circles.append((*self._pick_at, self.radius_km(), MAP_HIGHLIGHT))
             for lon, lat, radius_km, colour in circles:
@@ -1001,15 +1002,19 @@ class WorldMapView(ttk.Frame):
             self.write_globe(Path(selected), layer)
 
     def write_globe(self, destination: Path, layer: str) -> None:
+        """Save the planet map ``layer`` as a 3D globe, with the opened regions drawn in it."""
         run = self.planet_run
         assert run is not None
         maps, frame = run.maps, run.result.world.project.frame
+        drapes = self._drapes(layer)
+        regions = f" with {len(drapes)} regional map{'s' * (len(drapes) > 1)}" if drapes else ""
 
         def work(_report: Report, _token: CancellationToken) -> Path:
-            return save_globe(destination, maps.draw(layer), layer, frame)
+            return save_globe(destination, maps.draw(layer), layer, frame, drapes)
 
         self._jobs.start(
-            "Saving the 3D globe…", work, lambda path: self._status(f"Saved {path.name}"),
+            "Saving the 3D globe…", work,
+            lambda path: self._status(f"Saved {path.name}{regions}"),
             cancellable=False,
         )
 

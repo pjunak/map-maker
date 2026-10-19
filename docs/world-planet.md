@@ -142,8 +142,8 @@ rivers meander along their valley, with bends about eleven channel widths apart.
   the planet map starts to be magnified, between about 1x and 4x zoom depending
   on the window and the planet's detail
   ([ADR-0103](adr/0103-regional-detail-on-the-globe.md)). A region drawn in
-  another map adds nothing until you show this map in it. Saved globe images
-  include regional maps; globe models do not.
+  another map adds nothing until you show this map in it. Saved globe images and
+  globe models include regional maps.
 - Over an opened regional map the globe zooms past 16x, until the deepest map
   under the cursor shows one of its pixels per screen pixel: in a 1,000-pixel-tall
   view of a 6,000 km world, about 37x for a 150 km province and 190x for a 30 km
@@ -254,6 +254,11 @@ map-maker world globe my-planet --theme atlas --output atlas.glb
 - Poleward of 60° it shows two polar images drawn from the map, as sharp as the
   rest. A map stretched over the whole sphere would show radial streaks around
   the poles in viewers such as three.js.
+- The app's model also carries the regional maps you opened in the map you save,
+  at their own detail, fading into the map around them as on the app's globe; a
+  province lies over its region. `world globe` shows the planet map alone,
+  because builds hold no regional maps
+  ([ADR-0111](adr/0111-regional-maps-in-globe-models.md)).
 - Viewers that support glTF's unlit materials show the map's own shading; others
   light the globe as a matte ball.
 

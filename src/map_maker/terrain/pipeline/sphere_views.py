@@ -295,6 +295,12 @@ def _drape_weight(rho: float) -> float:
     return s * s * (3.0 - 2.0 * s)
 
 
+def drape_weights(rho: F64) -> F64:
+    """``_drape_weight`` of an array, for drapes drawn outside the kernels (globe models)."""
+    s = np.clip((1.0 - rho) / DRAPE_FADE, 0.0, 1.0)
+    return s * s * (3.0 - 2.0 * s)
+
+
 @njit(cache=True, inline="always")
 def _drapes(
     lon_deg: float, lat_deg: float, cos_lat: float, ground_rad: float,

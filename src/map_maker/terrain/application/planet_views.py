@@ -1,5 +1,6 @@
 """Views of planet maps: any saved theme in any projection, turning, or as a 3D globe model."""
 
+from collections.abc import Sequence
 from io import BytesIO
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from map_maker.terrain.adapters.globe_spin import (
 )
 from map_maker.terrain.adapters.map_projection import (
     MAX_GLOBE_ZOOM,
+    Drape,
     MapProjection,
     MapTexture,
     Size,
@@ -142,14 +144,22 @@ def export_globe(build: Path, destination: Path, theme_id: str) -> Path:
     return destination
 
 
-def save_globe(destination: Path, image: Image.Image, label: str, frame: WorldFrame) -> Path:
-    """Write a drawn world-frame map as a 3D globe model (.glb), as the app saves images."""
+def save_globe(
+    destination: Path,
+    image: Image.Image,
+    label: str,
+    frame: WorldFrame,
+    drapes: Sequence[Drape] = (),
+) -> Path:
+    """Write a drawn world-frame map as a 3D globe model (.glb), as the app saves images,
+    with the regional maps ``drapes`` over it as the app's globe shows them."""
     if destination.suffix.lower() != ".glb":
         raise ValueError("Globe models are written as .glb files.")
     png = BytesIO()
     image.save(png, format="PNG")
     model = globe_model(png.getvalue(), frame.central_meridian_deg, name=label,
-                        extras=_globe_extras(label, frame.radius_km, frame.central_meridian_deg))
+                        extras=_globe_extras(label, frame.radius_km, frame.central_meridian_deg),
+                        drapes=drapes)
     with destination.open("wb") as stream:
         stream.write(model)
     return destination

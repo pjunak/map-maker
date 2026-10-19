@@ -256,8 +256,8 @@ class PlanetResultPanel(ttk.Frame):
             command=save_globe,
         )
         self.globe_button.pack(fill="x", pady=(GAP, 0))
-        hint(keep, "A .glb model of the whole planet with this map, which 3D viewers, "
-             "Blender and game engines can turn.")
+        hint(keep, "A .glb model of the whole planet with this map and the regions opened "
+             "in it, which 3D viewers, Blender and game engines can turn.")
         self.spin_button = ttk.Button(
             keep, text="Save the shown globe spinning…", style="Quiet.TButton",
             command=save_spin,
