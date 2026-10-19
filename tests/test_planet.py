@@ -1683,6 +1683,25 @@ def test_volcanoes_drawn_at_pixel_scale_are_not_shaded_as_marbles(
     assert np.allclose(lit.slope, glossy.slope)
 
 
+def test_volcanic_island_coasts_are_not_drawn_as_fresh_lava(world_path: Path) -> None:
+    import map_maker.terrain.adapters.planet_natural as natural
+    from map_maker.terrain.adapters.planet_render import planet_rasters
+
+    result = generate_planet(open_world(world_path), replace(FAST, volcanic_islands=True))
+    rasters = planet_rasters(result, 1024)
+    islands = rasters.islands_px
+    assert islands.sum() > 20
+    land, z = rasters.land_px, rasters.elevation_m
+    fields = natural.display_fields(
+        result, rasters.raster, land, np.where(land, z, 0.0), np.where(land, 0.0, z), islands
+    )
+    # An island cone rises from the sea floor; lava and ash cover its summit,
+    # by height above the sea, not the whole island down to its shore.
+    shore = islands & (z < 300)
+    assert shore.any() and np.all(fields.volcanic[shore] == 0)
+    assert np.median(fields.volcanic[islands]) < 0.9
+
+
 def test_volcanic_islands_are_off_by_default(world_path: Path) -> None:
     result = generate_planet(open_world(world_path), replace(FAST, climate_passes=0))
     assert not result.settings.volcanic_islands

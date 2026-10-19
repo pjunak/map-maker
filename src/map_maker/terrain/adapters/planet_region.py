@@ -341,7 +341,10 @@ def _compose(
         # Opt-in volcanic islands rise from the sea floor beyond the authored coast.
         islands = inside & ~land & (sea > 0)
         land = land | islands
-        volcanic = np.where(land, np.clip((sharp - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
+        # Lava and ash cover summits. An island's cone rises from the sea floor,
+        # so its summit share is its height above the sea, not above that floor.
+        above = np.where(islands, sea, sharp)
+        volcanic = np.where(land, np.clip((above - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
     else:
         islands = np.zeros((pixels, pixels), dtype=bool)
     wonders = parent.wonders

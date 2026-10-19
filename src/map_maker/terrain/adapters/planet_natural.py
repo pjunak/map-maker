@@ -245,7 +245,9 @@ def display_fields(
     # Edifice relief drawn at pixel scale, on land and on the sea floor.
     edifice = np.where(land_px, sharp, base_sea - sea_floor)
     # Fresh lava and ash show near summits; lower flanks weather like their surroundings.
-    volcanic = np.where(land_px, _smooth(sharp, 300.0, 2500.0), 0.0)
+    # An island's cone rises from the sea floor, so its summit share is its height
+    # above the sea: measured from the floor, a whole island read as fresh lava.
+    volcanic = np.where(land_px, _smooth(np.where(islands, base_land, sharp), 300.0, 2500.0), 0.0)
     ridged = _smooth(base_land, 500, 2200).ravel()
     detail = eroded_fbm(
         points, ridged, DETAIL_SEED, DETAIL_OCTAVES, radius / DETAIL_WAVELENGTH_M, 0.55, 0.12
@@ -264,7 +266,9 @@ def display_fields(
         (45 + 0.38 * base_land)
         * ruggedness
         * (1 - 0.6 * volcanic)  # young cones have smooth, little-dissected flanks
-        * _smooth(coast, 0, 25e3)
+        # Detail fades at the coast; volcanic islands lie off the authored coast,
+        # so theirs fades over their lowest few hundred metres instead.
+        * np.where(islands, _smooth(base_land, 0.0, 400.0), _smooth(coast, 0, 25e3))
         / (1 + np.sqrt(np.expm1(discharge)) / 12)
     )
     rough = np.where(land_px, base_land + amplitude * detail, 0.0)
