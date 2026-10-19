@@ -320,9 +320,9 @@ def _compose(
     if floor is None:
         floor = np.where(parent.land, 0.0, -2000.0)
     sea = parent.sample(points, floor).reshape(pixels, pixels)
-    elevation = np.zeros(pixels * pixels)
-    elevation[inside.ravel()] = blend(grid, surfaces, relief(points[inside.ravel()], planet_m))
-    elevation = elevation.reshape(pixels, pixels)
+    blended = np.zeros(pixels * pixels)
+    blended[inside.ravel()] = blend(grid, surfaces, relief(points[inside.ravel()], planet_m))
+    elevation = blended = blended.reshape(pixels, pixels)
     volcanic = np.zeros((pixels, pixels))
     if parent.volcanoes is not None and parent.volcanic_m is not None:
         # Draw volcanoes sharply at pixel scale on the regional relief and sea floor.
@@ -378,7 +378,10 @@ def _compose(
         cover.reshape(pixels, pixels) > LAKE_CORE_COVER, level.reshape(pixels, pixels),
     )
     salt = lakes & closed.reshape(pixels, pixels)
-    flow, basin_depth = lake_flow(flow, lakes, salt, level.reshape(pixels, pixels))
+    # Hollows of the tiles' blend are filled plains; only the relief drawn on
+    # top of the tiles holds ponds (``drawn_hollows``).
+    tiles_z = np.where(land, np.maximum(blended, 1.0), flow.z)
+    flow, basin_depth = lake_flow(flow, lakes, salt, level.reshape(pixels, pixels), tiles_z)
     # Deep hollows (crater troughs, chasm floors, calderas) hold water or a
     # playa, and rivers end there; rivers cross the others on a filled flat.
     ponds, spills = window_ponds(flow, basin_depth, land & inside & ~lakes, climate)
@@ -502,10 +505,11 @@ def window_ponds(
     where it spills. It overflows when that water exceeds what its area at the
     spill level evaporates (open-water PET less precipitation), so its river
     runs on. An overflowing hollow that the river's sediment fills within
-    HOLLOW_AGE_YR is a plain the river crosses, not a lake: the hollows that
-    tile blending leaves along a big river. Pixels deeper than POND_DEPTH_M in
-    the remaining hollows hold water or a playa: crater troughs, chasm floors
-    and calderas, deep for their catchments, and closed basins of dry land.
+    HOLLOW_AGE_YR is a plain the river crosses, not a lake, such as a shallow
+    crater on a big river's course. Pixels deeper than POND_DEPTH_M in the
+    remaining hollows hold water or a playa: crater troughs, chasm floors and
+    calderas, deep for their catchments. ``depth`` measures only hollows drawn
+    on the tiles (``drawn_hollows``).
     """
     found = cast(tuple[NDArray[np.int32], int], label(ground & (depth > 0)))
     labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
@@ -777,23 +781,47 @@ def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
     return keep[labels]
 
 
-def lake_flow(flow: WindowFlow, lakes: B, closed: B, level: F64) -> tuple[WindowFlow, F64]:
+def lake_flow(
+    flow: WindowFlow, lakes: B, closed: B, level: F64, tiles: F64 | None = None
+) -> tuple[WindowFlow, F64]:
     """Drainage with the window's lakes, and the depth of its closed depressions.
 
     Routing fills each depression up to wherever the window lets it spill. For
     a lake's basin that can lie above the lake's level, so depressions are
     measured with every lake as a sink: the ground between a lake and its
-    basin's spill is no pond. Closed lakes are where their basin's water ends.
-    Rivers route through open lakes, so outflows keep their upstream area, over
-    an outflow lowered to the lake's level (``lake_outflows``).
+    basin's spill is no pond. Depressions of the tiles' blend count as filled
+    (``drawn_hollows``; ``tiles`` is the routed relief without what the window
+    draws on the tiles, None: every depression counts). Closed lakes are where
+    their basin's water ends. Rivers route through open lakes, so outflows keep
+    their upstream area, over an outflow lowered to the lake's level
+    (``lake_outflows``).
     """
+    sinks = flow.outlet | lakes
+    depth = drawn_hollows(flow.z, sinks, flow.pixel_m, tiles)
     if not lakes.any():
-        return flow, flow.filled - flow.z
-    inward, _, basins = grid_flow(
-        flow.z, flow.outlet | lakes, flow.pixel_m, np.zeros_like(flow.z)
-    )
+        return flow, depth
+    inward, _, _ = grid_flow(flow.z, sinks, flow.pixel_m, np.zeros_like(flow.z))
     routed = lake_outflows(flow, inward, lakes & ~closed, level)
-    return flow.rerouted(routed, flow.outlet | (lakes & closed)), basins - flow.z
+    return flow.rerouted(routed, flow.outlet | (lakes & closed)), depth
+
+
+def drawn_hollows(z: F64, sinks: B, pixel_m: float, tiles: F64 | None) -> F64:
+    """How far ground lies below where its hollow spills, in hollows drawn on the tiles.
+
+    Every tile fills its depressions as it erodes, so a hollow in the tiles'
+    blend is one that blending closed: overlapping tiles drain a plain through
+    valleys a few kilometres apart, and their weighted mean half fills each
+    valley with the other tile's flank, so the blend's sill stands above both
+    tiles' plains. Like the tiles' own hollows, sediment fills these, and rivers
+    cross them on the fill. Only relief the window draws on top of the tiles
+    (craters, chasm floors, calderas, volcanoes damming a valley) holds hollows:
+    their depth is measured over the tiles' blend with its hollows filled.
+    ``tiles`` is ``z`` without that relief (None: ``z`` is all drawn).
+    """
+    no_inflow = np.zeros_like(z)
+    if tiles is not None:
+        z = z + grid_flow(tiles, sinks, pixel_m, no_inflow)[2] - tiles
+    return grid_flow(z, sinks, pixel_m, no_inflow)[2] - z
 
 
 def lake_outflows(flow: WindowFlow, inward: NDArray[np.int64], lakes: B, level: F64) -> F64:

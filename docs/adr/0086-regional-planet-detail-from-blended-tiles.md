@@ -164,6 +164,57 @@ north-west too, but on lattices of their own, along lines up to 8 km apart, so
 their blend likely breaks the channel and the window's water takes the next way
 out. The regional tile algorithm becomes `planet-blended-tiles-v15`.
 
+## Revision (2026-10-19): hollows of the blend
+
+Every tile fills its depressions as it erodes, so it drains fully; parent lakes
+are its only sinks. A blend of tiles does not. Overlapping tiles drain the same
+plain through valleys that lie apart, and their weighted mean half fills each
+valley with the other tile's flank, so the blend's sill stands above both tiles'
+plains. Windows had drawn such hollows deeper than 10 m as lakes or playas. In
+the Aethelara region window at 56.87° E, 30.70° N (Standard 200,000-node planet,
+600 km, `planet-blended-tiles-v16`):
+
+| Hollow | Tiles (weight at the sill) | Their outlets | Each outlet in the other tile | Blended sill | Hollow, lake |
+|---|---|---|---|---:|---|
+| Basin plain, 59.4° E 29.1° N | 312 (0.36), 346 (0.64); plains at 746 and 776 m | gorges west through a range, 3–5 km apart, at 744 and 775–782 m | 815 and 797 m | 786 m | 28 m deep over 1,850 km²; lake 1,470 km² |
+| Coastal plain, 56.9° E 34.2° N | 257 (0.52), 291 (0.48); plain at 12–13 m | channels to the sea 13 km apart, at 12 and 11 m | 36 and 45 m (a coastal ridge) | 23.5 m | 11 m deep over 8,400 km²; lake 2,240 km² |
+
+Blend hollows deeper than 10 m covered 5,270 km² of that window, against 2,850 km²
+on v15 tiles: ADR-0109 raised the ranges beside such outlets by up to 300 m, and
+with them the flanks that fill the other tile's valley.
+
+Windows now treat hollows of the tiles' blend as plains that sediment fills, as
+tiles and the planet fill their own. Ponds are measured on the blend with its
+hollows filled, with the sea, the window's rim and lakes as sinks, plus the
+relief the window draws on top of the tiles: volcanoes, crater floors and
+wonders. Only that relief holds ponds, lakes and playas: crater troughs, chasm
+floors, calderas and valleys a volcano dams. Planet lakes still fill the relief
+from their cores, and the drawn relief and river routing are unchanged; rivers
+no longer end in blend hollows. Tiles are unchanged, windows change, and the
+regional algorithm becomes `planet-blended-tiles-v17`.
+
+| Aethelara windows (900 px), lakes drawn | v16 | v17 |
+|---|---:|---:|
+| Region, 600 km at 56.87° E 30.70° N | 3,732 km² (0.36 % of land) | 0 |
+| Province, 150 km there | 151 km² (0.21 %) | 0 |
+| Local, 30 km there | 0 | 0 |
+| Region, 300 km (600 px) over a 48,854 km² planet lake at 144.4° E 15.5° N | 48,946 km² | 48,946 km² |
+
+Not chosen:
+
+- **A blend that follows the lower tile** (a weighted soft-min over a scale T):
+  at T = 5–40 m it left 490–1,370 km² of hollows deeper than 10 m in that
+  window, while land stood 8–24 m and its highest tenth 34–79 m below the blend,
+  against the calibration of ADR-0109. Any continuous blend of valleys that lie
+  apart can close a hollow.
+- **Breaching the blend's sills in the drawn relief**: it would cut pixel-wide
+  trenches through ranges and change exported elevation, for hollows 10–30 m deep
+  on plains.
+- **Tiles sharing one mesh per level**, so that channels traced along the same
+  planet link coincide: it would align outlets at the source, but tiles also
+  differ in seeds, roughness and corrections. It stays with domain decomposition
+  below as a possible next step.
+
 ## Consequences
 
 - Detail is reproducible and independent of the requested window. Tiles are

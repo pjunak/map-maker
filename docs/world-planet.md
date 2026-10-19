@@ -167,10 +167,10 @@ rivers meander along their valley, with bends about eleven channel widths apart.
   floors, calderas) fill with lakes where it is wet. Where it is dry, a playa lies
   only in the lowest part. A hollow whose catchment brings more water than its
   area evaporates overflows, so its river runs on. A river whose sediment would
-  fill a hollow within about 10,000 years crosses it on a plain, as big rivers
-  cross the shallow hollows that blended detail leaves on their course. No water
-  leaves a map where a river comes in, so a river fills the hollow it enters and
-  spills onward.
+  fill a hollow within about 10,000 years crosses it on a plain. Hollows left
+  where overlapping detail tiles drain a plain through valleys a few kilometres
+  apart are plains too, never lakes. No water leaves a map where a river comes
+  in, so a river fills the hollow it enters and spills onward.
 - Planet lakes fill the zoomed relief up to their level, so shores follow its
   hills and valleys, including a crater's sharp trough. Their outlines also gain
   detail below the planet's mesh spacing, as coasts do. The world map draws the

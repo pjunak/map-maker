@@ -88,12 +88,17 @@ backlog, and [status](../research/status.md) records what works now.
      ridges above it unseen. Level 1 ends at 43 m RMS against the smoothed parent,
      level 2 at 92 m, near the noise of its own erosion (ADR-0109,
      `planet-blended-tiles-v16`).
+   - Maps no longer draw lakes where blended tiles disagree about an outlet.
+     Tiles drain fully, so the hollows their blend closes are plains that
+     sediment fills; only craters, chasms, calderas and volcanic dams drawn on
+     top of the tiles hold ponds. The Aethelara region window lost its two such
+     lakes, 2,240 and 1,470 km², while planet lakes are drawn as before
+     (ADR-0086 revision, `planet-blended-tiles-v17`).
    - **Next:** one course for a big river through every level. On the Aethelara
      basin plain the province and local maps turn the 160,000 km² river north at a
      junction where the region and the planet run it north-west: tiles' level
      parents route it along lines kilometres apart, and their blend breaks its
-     channel. Blended tiles also still close hollows where they disagree about an
-     outlet (two lakes in the Aethelara region window).
+     channel.
    - Polar land is worked in true distance and a touched pole is covered, so the
      south polar ice sheet domes over the pole instead of ending in a spike
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is

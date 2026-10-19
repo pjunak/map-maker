@@ -1388,6 +1388,64 @@ def test_big_rivers_cross_hollows_that_closed_basins_keep() -> None:
     assert held[hollow].all()
 
 
+def test_blended_tiles_close_no_ponds_where_they_drain_through_different_gorges() -> None:
+    from map_maker.terrain.adapters.planet_natural import PixelClimate
+    from map_maker.terrain.adapters.planet_region import (
+        POND_DEPTH_M,
+        WindowFlow,
+        lake_flow,
+        window_ponds,
+    )
+    from map_maker.terrain.pipeline.planet_detail import grid_flow
+
+    n, pixel_m = 160, 500.0
+    shape = (n, n)
+    rows, columns = np.mgrid[0:n, 0:n] + 0.5
+    outlet = np.zeros(shape, dtype=bool)
+    outlet[:, -1] = True
+    none = np.zeros(shape)
+
+    def tile(gorge_row: float, plain_m: float) -> np.ndarray:
+        # A plain falling 0.04 m/km to a 160 m range, which a gorge crosses to
+        # the sea at the east edge.
+        z = plain_m + 0.02 * (110 - columns) + 0.02 * np.abs(rows - gorge_row)
+        z = np.where((columns > 110) & (columns < 130), 160.0, z)
+        z = np.where(columns >= 130, 190.0 - columns, z)
+        gorge = (np.abs(rows - gorge_row) < 2) & (columns > 108)
+        return np.where(gorge, plain_m + 107.0 - columns, z)
+
+    # Two overlapping tiles drain the plain through gorges 10 km apart, as on
+    # Aethelara, where tiles drained a basin plain through gorges 3-5 km apart
+    # and a coastal plain through channels 13 km apart. Each drains fully, but
+    # their blend half fills each gorge with the other tile's range.
+    first, second = tile(70.5, 100.0), tile(90.5, 105.0)
+    for alone in (first, second):
+        assert np.max(grid_flow(alone, outlet, pixel_m, none)[2] - alone) < 0.1
+    weight = 0.75 - 0.5 * rows / n
+    tiles = weight * first + (1 - weight) * second
+    filled = grid_flow(tiles, outlet, pixel_m, none)[2]
+    assert np.sum(filled - tiles > POND_DEPTH_M) * pixel_m**2 > 4e9
+    # A caldera drawn on the tiles, in a cone standing on that plain.
+    r = np.hypot(rows - 80, columns - 45)
+    z = tiles + np.where(r < 18, 90.0 - 5.0 * r, 0.0) - np.where(r < 6, 50 * (1 - (r / 6) ** 2), 0)
+    climate = PixelClimate(
+        np.full(shape, 15.0), np.full(shape, 22.0), np.full(shape, 600.0), np.full(shape, 900.0)
+    )
+    dry = np.zeros(shape, dtype=bool)
+    flow = WindowFlow.route(z, outlet, pixel_m, none)
+    # Measured on the relief as a whole, the blend's hollow holds a lake over
+    # the plain, which its small catchment cannot fill with sediment.
+    _, depth = lake_flow(flow, dry, dry, none)
+    held, _ = window_ponds(flow, depth, ~outlet, climate)
+    assert held[r > 18].sum() * pixel_m**2 > 4e9
+    # Hollows of the tiles' blend are filled plains: only the caldera drawn on
+    # top of the tiles holds a pond, as deep as it is.
+    _, depth = lake_flow(flow, dry, dry, none, tiles)
+    held, _ = window_ponds(flow, depth, ~outlet, climate)
+    assert np.max(depth[r > 18]) < 0.1 and not held[r > 18].any()
+    assert held[r < 3].all() and 19.0 < depth[r < 1].max() < 21.0
+
+
 def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult) -> None:
     from dataclasses import replace
 
