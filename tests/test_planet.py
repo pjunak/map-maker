@@ -488,7 +488,7 @@ def test_scale_metrics_measure_rivers_and_mountain_belts(world_path: Path) -> No
 
 
 def test_flexural_basins_fill_to_well_drained_plains() -> None:
-    from map_maker.terrain.pipeline.planet_forcing import fill_basins
+    from map_maker.terrain.pipeline.planet_forcing import PLAIN_SLOPE, fill_basins
     from map_maker.terrain.pipeline.planet_kernels import steepest_receivers
     from map_maker.terrain.pipeline.planet_mesh import build_mesh
 
@@ -500,12 +500,17 @@ def test_flexural_basins_fill_to_well_drained_plains() -> None:
     depth = np.where(water, 0.0, 1200 * np.clip(1 - np.arccos(mesh.xyz @ centre) / 0.25, 0, 1))
     filled = fill_basins(mesh, water, h, depth)
     outside = ~water & (depth <= 0)
-    receiver, _ = steepest_receivers(
+    receiver, distance = steepest_receivers(
         filled, water, mesh.ptr, mesh.nbr, mesh.length_m, np.full(mesh.size, -1, np.int64)
     )
     assert np.all(receiver[~water] >= 0)  # every land node drains (no pits)
     basin = depth > 600
     assert filled[basin].std() < h[basin].std()  # the basin floor is smoother
+    # The plain falls towards where it spills at an alluvial gradient instead
+    # of lying level, so rivers crossing it keep a direction at any scale.
+    plain = basin & (filled > np.maximum(h - depth, 1.0) + 1.0)
+    fall = (filled - filled[receiver]) / np.maximum(distance, 1.0)
+    assert plain.sum() > 20 and np.median(fall[plain]) >= 0.9 * PLAIN_SLOPE
     # Outside basins the surface is only raised where closed pits are filled.
     assert np.all(filled[outside] >= h[outside] - 1e-9)
 

@@ -27,9 +27,9 @@ from map_maker.terrain.domain.world import WorldFrame
 from map_maker.terrain.domain.world_geology import GeologyProfile, WorldGeologyRecipe
 from map_maker.terrain.pipeline.planet_climate import surface_gradient, tangent_frame
 from map_maker.terrain.pipeline.planet_kernels import (
+    graded_flood,
     multi_source_distance,
     multi_source_nearest,
-    priority_flood,
 )
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh
 from map_maker.terrain.pipeline.planet_noise import fbm3, value_noise3
@@ -82,6 +82,11 @@ FOLD_WAVELENGTH_M = 45e3
 FORELAND_DEPTH_M = 1500.0
 INTERMONTANE_DEPTH_M = 800.0
 ALLUVIAL_RELIEF = 0.04
+# Sediment plains are graded to carry their rivers' load to where they drain:
+# the Ganges and Indus plains fall about 1-2e-4, the lower Mississippi valley
+# about 1e-4. A plain filled level gave finer levels no way to tell where a
+# river crossing it runs.
+PLAIN_SLOPE = 1e-4
 TRENCH_DEPTH_M = 3500.0
 RIFT_DEPTH_M = 900.0
 # Delta shelf radius R = DELTA_SHELF_COEFF * sqrt(Qs [m^3/yr]) in m, capped.
@@ -600,20 +605,24 @@ def build_forcing(
 
 
 def fill_basins(mesh: SphereMesh, water: B, h: F64, depth_m: F64) -> F64:
-    """Sink flexural basins and fill them with sediment to their spill level.
+    """Sink flexural basins and fill them with sediment from their spill level.
 
-    The filled plain keeps ALLUVIAL_RELIEF of the original relief above it, so
-    fans slope gently away from the mountain front and rivers gather along the
-    basin axis instead of crossing a perfectly flat floor. Note this also fills
-    every other closed depression; lakes come from young depressions instead.
+    The plain rises away from where it spills at PLAIN_SLOPE, an alluvial
+    gradient, and keeps ALLUVIAL_RELIEF of the original relief above it, so fans
+    slope gently away from the mountain front and rivers gather along the basin
+    axis instead of crossing a level floor. Note this also fills every other
+    closed depression; lakes come from young depressions instead.
     """
     sunk = np.where(water, h, np.maximum(h - depth_m, 1.0))
-    filled, _ = priority_flood(sunk, water, mesh.ptr, mesh.nbr, 1e-3)
+    slope = np.where(depth_m > 0, PLAIN_SLOPE, 0.0)
+    filled = graded_flood(sunk, water, mesh.ptr, mesh.nbr, mesh.length_m, slope, 1e-3)
     plain = filled + ALLUVIAL_RELIEF * np.maximum(h - filled, 0.0)
     # Sediment aggrades above old valley floors; outside basins nothing changes.
-    # A second fill keeps the plain well drained (no lakes from the fans alone).
+    # A second fill keeps the plain well drained (no lakes from the fans alone),
+    # graded too: where fans raised a plain's outlet, a level refill had flattened
+    # the plain behind it again.
     surface = np.where(water | (depth_m <= 0), h, plain)
-    return priority_flood(surface, water, mesh.ptr, mesh.nbr, 1e-3)[0]
+    return graded_flood(surface, water, mesh.ptr, mesh.nbr, mesh.length_m, slope, 1e-3)
 
 
 def measure_regions(h: F64, regions: GeologyRegions) -> tuple[float | None, ...]:

@@ -65,6 +65,42 @@ def priority_flood(h: F64, water: B, ptr: I64, nbr: I64, eps: float) -> tuple[F6
     return filled, parent
 
 
+@njit(cache=True)
+def graded_flood(
+    h: F64, water: B, ptr: I64, nbr: I64, length: F64, slope: F64, eps: float
+) -> F64:
+    """Fill land depressions so that filled ground falls towards where it spills.
+
+    As ``priority_flood``, but a node raised from its flood parent stands at
+    least its ``slope`` times the edge ``length`` above it (and at least
+    ``eps``), so a filled plain rises away from its outlet at that gradient
+    instead of lying level.
+    """
+    n = h.size
+    filled = h.copy()
+    closed = water.copy()
+    heap = [(0.0, np.int64(0))]
+    heap.pop()
+    for i in range(n):
+        if water[i]:
+            for k in range(ptr[i], ptr[i + 1]):
+                if not water[nbr[k]]:
+                    heapq.heappush(heap, (h[i], np.int64(i)))
+                    break
+    while heap:
+        level, c = heapq.heappop(heap)
+        for k in range(ptr[c], ptr[c + 1]):
+            j = nbr[k]
+            if closed[j]:
+                continue
+            closed[j] = True
+            floor = level + max(eps, slope[j] * length[k])
+            if filled[j] < floor:
+                filled[j] = floor
+            heapq.heappush(heap, (filled[j], j))
+    return filled
+
+
 @njit(cache=True, parallel=True)
 def steepest_receivers(
     z: F64, water: B, ptr: I64, nbr: I64, length: F64, parent: I64

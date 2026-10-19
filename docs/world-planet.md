@@ -420,8 +420,9 @@ SVG's size and it lies under your coastline drawing.
    foothills and a hinterland range, with valleys between them where rivers run
    along the range. Above the snowline glaciers erode fast, so peaks stay within
    a few kilometres of it. In front of great ranges and between their parallel
-   ranges the crust sags into basins that fill with sediment: flat plains with
-   rivers along their axis, and sometimes a long lake.
+   ranges the crust sags into basins that fill with sediment: plains that fall
+   gently towards where they drain, about 10 cm per kilometre as the Ganges
+   plain does, with rivers along their axis, and sometimes a long lake.
 4. **Climate.**
    - **Temperature** comes from latitude, height and distance from the sea.
    - **Winds** blow in trade, westerly and polar belts.

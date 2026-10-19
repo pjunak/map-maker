@@ -87,6 +87,9 @@ backlog, and [status](../research/status.md) records what works now.
      (ADR-0094, relief algorithm `sphere-mesh-stream-power-v26`). Polar land is
      first smoothed east-west, so shapes drawn on the flat map no longer become
      radial fingers in polar views (ADR-0100, `sphere-mesh-stream-power-v30`).
+   - Sediment-basin plains fall towards where they drain at an alluvial gradient
+     of 1e-4 instead of lying level at their spill height, so a river crossing a
+     plain has a direction at every zoom level (`sphere-mesh-stream-power-v31`).
 2. **Wonder layer** ([wonder guide](../wonders.md)). Titans, shattered and
    giant active volcanoes, craters, chasms, great cliffs, tepuis, oases and a
    splitting river are done; wonders age on their own patches (ADR-0091) and
