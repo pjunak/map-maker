@@ -22,7 +22,8 @@ Planet and map adapters:
   `pipeline/sphere_views.py`, with regional maps draped over them (ADR-0103),
   maps between view pixels and longitude and latitude (ADR-0101), and limits a
   globe's zoom by the regional maps under the cursor (ADR-0104);
-- `globe_model.py` writes a map as a glTF globe model (ADR-0102);
+- `globe_model.py` writes a map as a glTF globe model (ADR-0102), and
+  `globe_spin.py` a view turning once as an animated WebP (ADR-0110);
 - `map_topographic.py`, `map_parchment.py` and `map_thematic.py` render themes;
 - `planet_region.py` composes and exports regional windows.
 

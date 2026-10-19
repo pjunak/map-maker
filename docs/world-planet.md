@@ -103,7 +103,10 @@ left (Source map, Planet, Geology, Generate, Wonders, Explore; see the
 6. **Save the shown map as a 3D globe…** in Explore writes the whole-planet map
    you are looking at as a globe model (`.glb`) that 3D viewers, Blender and game
    engines can turn. See [Globe models](#globe-models).
-7. **Click Export planet build…** in Explore to write the same build folder as the
+7. **Save the shown globe spinning…** in Explore writes the globe or polar view
+   you are looking at, turning once, as an animated WebP image that web pages and
+   chats play. See [Spinning globes](#spinning-globes).
+8. **Click Export planet build…** in Explore to write the same build folder as the
    command line.
 
 Editing the world (names, frame, assignments) discards the generated planet and
@@ -253,6 +256,27 @@ map-maker world globe my-planet --theme atlas --output atlas.glb
   the poles in viewers such as three.js.
 - Viewers that support glTF's unlit materials show the map's own shading; others
   light the globe as a matte ball.
+
+### Spinning globes
+
+A spinning globe is an animated WebP image of the globe turning once, eastward as
+planets do, so the ground moves from left to right. Web browsers and most chat
+and document tools play it, in full colour, looping without a jump
+([ADR-0110](adr/0110-spinning-globes-as-animated-webp.md)):
+
+```powershell
+map-maker world spin my-planet --theme atlas --lat 20 --output atlas.webp
+map-maker world spin my-planet --projection north-polar --limit 30 --seconds 10 --output arctic.webp
+```
+
+- It takes `world view`'s options for a globe or a polar view; `--lon` is where
+  the turn starts. A polar view turns about its pole.
+- `--frames` (120 by default, 3° each) and `--seconds` (6) set how smooth and how
+  fast it turns. `--pixels` is 720 by default. A 720-pixel turn of a 4,096-pixel
+  atlas is about 4 MB.
+- The file must not exist. The same build and options always give the same file.
+- The app's **Save the shown globe spinning…** turns the view as shown, its middle
+  720-pixel square, with any regional maps it shows.
 
 ## Run it from the command line
 

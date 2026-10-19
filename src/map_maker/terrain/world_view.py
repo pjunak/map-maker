@@ -22,6 +22,7 @@ from uuid import uuid4
 
 from PIL import Image
 
+from map_maker.terrain.adapters.globe_spin import SPIN_FRAMES, write_spin
 from map_maker.terrain.adapters.map_projection import (
     PROJECTION_LABELS,
     PROJECTIONS,
@@ -87,6 +88,7 @@ AUTO_RADIUS = "Auto"
 # Radius choices when zooming from each level: the world, then region and province.
 REGION_RADII_KM = ((150, 300, 600, 1200), (30, 75, 150, 300), (6, 15, 30, 60))
 SAVE_PIXELS = 2048
+SPIN_PIXELS = 720  # a spinning globe's frames are this many pixels square
 START = (
     "Start with your world",
     "Import an SVG or open a saved world.\n"
@@ -1008,6 +1010,34 @@ class WorldMapView(ttk.Frame):
 
         self._jobs.start(
             "Saving the 3D globe…", work, lambda path: self._status(f"Saved {path.name}"),
+            cancellable=False,
+        )
+
+    def choose_save_spin(self) -> None:
+        """Save the shown globe or polar view turning once, as an animated image."""
+        if not self._uses_globe() or self.globe.image is None:
+            self._status("Show a planet map as a globe or polar view to save it spinning.")
+            return
+        selected = filedialog.asksaveasfilename(
+            parent=self, title="Save this globe spinning", defaultextension=".webp",
+            initialfile=f"spin-{uuid4().hex[:8]}.webp",
+            filetypes=[("Animated WebP image", "*.webp")],
+        )
+        if selected:
+            self.write_spin(Path(selected))
+
+    def write_spin(self, destination: Path) -> None:
+        """Save the view's middle square turning once (see ``globe_spin``)."""
+        draw = self.globe.turn_snapshot(SPIN_PIXELS, SPIN_FRAMES)
+
+        def work(_report: Report, _token: CancellationToken) -> Path:
+            frames = draw()
+            with destination.open("wb") as stream:
+                write_spin(frames, stream)
+            return destination
+
+        self._jobs.start(
+            "Saving the spinning globe…", work, lambda path: self._status(f"Saved {path.name}"),
             cancellable=False,
         )
 

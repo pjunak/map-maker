@@ -203,27 +203,19 @@ def create_parser() -> argparse.ArgumentParser:
     view = world_commands.add_parser(
         "view", help="Show a saved planet build's map as a globe, polar or flat view."
     )
-    view.add_argument("planet", type=Path, help="Planet build folder or its manifest.json.")
-    view.add_argument("--theme", default="atlas",
-                      help="Map theme, a build image's name without .png: atlas, relief, "
-                           "topographic, parchment, koppen, volcanoes, precipitation, "
-                           "temperature, plates, seafloor, basins, geology.")
-    view.add_argument("--projection", default="globe",
-                      choices=("globe", "north-polar", "south-polar", "equirectangular"))
-    view.add_argument("--lon", type=float, default=0.0,
-                      help="Globe centre, or the meridian at the bottom/top of a polar view.")
-    view.add_argument("--lat", type=float, default=0.0, help="Globe centre latitude.")
-    view.add_argument("--zoom", type=float, default=1.0,
-                      help="Globe zoom: 1 shows the whole globe, up to 16.")
-    view.add_argument("--limit", type=float, default=0.0,
-                      help="Latitude at the edge of a polar view (0 = the equator).")
-    view.add_argument("--pixels", type=int, default=1600, help="View height in pixels.")
-    view.add_argument("--width", type=int, default=None,
-                      help="View width in pixels (default: square, or twice the height "
-                           "for a flat world). Globe and polar views fit the shorter side.")
-    view.add_argument("--graticule", action="store_true", help="Draw a 30-degree grid.")
+    _view_arguments(view, ("globe", "north-polar", "south-polar", "equirectangular"), 1600)
     view.add_argument("--output", type=Path, required=True, help="New .png file.")
     view.set_defaults(_handler=_run_world_view)
+    spin = world_commands.add_parser(
+        "spin", help="Save a saved planet build's globe or polar view turning once, as an "
+                     "animated WebP image."
+    )
+    _view_arguments(spin, ("globe", "north-polar", "south-polar"), 720)
+    spin.add_argument("--frames", type=int, default=120, help="Frames in one turn (8-720).")
+    spin.add_argument("--seconds", type=float, default=6.0,
+                      help="Seconds one turn takes (1-120).")
+    spin.add_argument("--output", type=Path, required=True, help="New .webp file.")
+    spin.set_defaults(_handler=_run_world_spin)
     globe = world_commands.add_parser(
         "globe", help="Write a saved planet build's map as a 3D globe model (.glb)."
     )
@@ -334,6 +326,31 @@ def _run_world_region(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _view_arguments(
+    command: argparse.ArgumentParser, projections: tuple[str, ...], pixels: int
+) -> None:
+    """The build, map and view options shared by ``world view`` and ``world spin``."""
+    command.add_argument("planet", type=Path, help="Planet build folder or its manifest.json.")
+    command.add_argument("--theme", default="atlas",
+                         help="Map theme, a build image's name without .png: atlas, relief, "
+                              "topographic, parchment, koppen, volcanoes, precipitation, "
+                              "temperature, plates, seafloor, basins, geology.")
+    command.add_argument("--projection", default="globe", choices=projections)
+    command.add_argument("--lon", type=float, default=0.0,
+                         help="Globe centre, or the meridian at the bottom/top of a polar "
+                              "view (where a spin starts).")
+    command.add_argument("--lat", type=float, default=0.0, help="Globe centre latitude.")
+    command.add_argument("--zoom", type=float, default=1.0,
+                         help="Globe zoom: 1 shows the whole globe, up to 16.")
+    command.add_argument("--limit", type=float, default=0.0,
+                         help="Latitude at the edge of a polar view (0 = the equator).")
+    command.add_argument("--pixels", type=int, default=pixels, help="Height in pixels.")
+    command.add_argument("--width", type=int, default=None,
+                         help="Width in pixels (default: square, or twice the height for a "
+                              "flat world). Globe and polar views fit the shorter side.")
+    command.add_argument("--graticule", action="store_true", help="Draw a 30-degree grid.")
+
+
 def _run_world_view(arguments: argparse.Namespace) -> int:
     from map_maker.terrain.adapters.map_projection import MapProjection
     from map_maker.terrain.application.planet_views import export_view
@@ -350,6 +367,26 @@ def _run_world_view(arguments: argparse.Namespace) -> int:
         print(f"View failed: {error}", file=sys.stderr)
         return 1
     print(f"View written: {path}")
+    return 0
+
+
+def _run_world_spin(arguments: argparse.Namespace) -> int:
+    from map_maker.terrain.adapters.map_projection import MapProjection
+    from map_maker.terrain.application.planet_views import export_spin
+
+    try:
+        projection = MapProjection(
+            arguments.projection, arguments.lon, arguments.lat, arguments.limit, arguments.zoom
+        )
+        path = export_spin(
+            arguments.planet, arguments.output, arguments.theme, projection,
+            arguments.pixels, width=arguments.width, frames=arguments.frames,
+            seconds=arguments.seconds, graticule=arguments.graticule,
+        )
+    except (OSError, ValueError) as error:
+        print(f"Spin failed: {error}", file=sys.stderr)
+        return 1
+    print(f"Spin written: {path}")
     return 0
 
 

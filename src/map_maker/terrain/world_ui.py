@@ -272,7 +272,7 @@ class WorldWorkspace(ttk.Frame):
         self.result_panel = PlanetResultPanel(
             self.pages["explore"].body, export=self.export_planet,
             zoom=self.pick_region, save_image=self.save_map_image,
-            save_globe=self.save_map_globe,
+            save_globe=self.save_map_globe, save_spin=self.save_map_spin,
             change_settings=lambda: self.show_step("generate"),
         )
         self.result_panel.pack(fill="x")
@@ -1235,6 +1235,9 @@ class WorldWorkspace(ttk.Frame):
 
     def save_map_globe(self) -> None:
         self.map_view.choose_save_globe()
+
+    def save_map_spin(self) -> None:
+        self.map_view.choose_save_spin()
 
     def zoom_region(
         self, longitude: float, latitude: float, radius_km: float, level: int = 1

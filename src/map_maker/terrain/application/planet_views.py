@@ -1,4 +1,4 @@
-"""Views of planet maps: any saved theme in any projection, or as a 3D globe model."""
+"""Views of planet maps: any saved theme in any projection, turning, or as a 3D globe model."""
 
 from io import BytesIO
 from pathlib import Path
@@ -6,10 +6,18 @@ from pathlib import Path
 from PIL import Image
 
 from map_maker.terrain.adapters.globe_model import globe_model
+from map_maker.terrain.adapters.globe_spin import (
+    SPIN_FRAMES,
+    SPIN_SECONDS,
+    check_spin,
+    spin_frames,
+    write_spin,
+)
 from map_maker.terrain.adapters.map_projection import (
     MAX_GLOBE_ZOOM,
     MapProjection,
     MapTexture,
+    Size,
     render,
 )
 from map_maker.terrain.adapters.map_views import THEME_BY_ID, THEMES, MapTheme, theme_file
@@ -35,20 +43,8 @@ def render_view(
     wide as high. A globe or polar view fits its shorter side. The view shows the
     world map alone, so a globe zooms at most ``MAX_GLOBE_ZOOM`` times.
     """
-    if projection.zoom > MAX_GLOBE_ZOOM:
-        raise ValueError(f"World views zoom a globe from 1 to {MAX_GLOBE_ZOOM:g} times.")
-    theme = _theme(theme_id)
-    width = width or (2 * pixels if projection.kind == "equirectangular" else pixels)
-    for size in (pixels, width):
-        if not MIN_VIEW_PIXELS <= size <= MAX_VIEW_PIXELS:
-            raise ValueError(f"View sizes must be {MIN_VIEW_PIXELS}-{MAX_VIEW_PIXELS} pixels.")
-    name = theme_file(theme)
-    folder, manifest = verified_build(build, (name,))
-    with Image.open(folder / name) as image:
-        texture = MapTexture.from_image(
-            image, float(manifest["world_frame"]["central_meridian_deg"])
-        )
-    return render(texture, projection, (width, pixels), graticule=graticule)
+    texture, size = _view_texture(build, theme_id, projection, pixels, width)
+    return render(texture, projection, size, graticule=graticule)
 
 
 def export_view(
@@ -70,6 +66,56 @@ def export_view(
     with destination.open("xb") as stream:
         image.save(stream, format="PNG")
     return destination
+
+
+def export_spin(
+    build: Path,
+    destination: Path,
+    theme_id: str,
+    projection: MapProjection,
+    pixels: int,
+    *,
+    width: int | None = None,
+    frames: int = SPIN_FRAMES,
+    seconds: float = SPIN_SECONDS,
+    graticule: bool = False,
+) -> Path:
+    """Write a globe or polar view turning once as a new animated WebP (``globe_spin``).
+
+    Sizes are as for ``render_view``; existing files are never replaced.
+    """
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError(f"Spin destination already exists: {destination}")
+    if destination.suffix.lower() != ".webp":
+        raise ValueError("Spinning views are written as .webp images.")
+    if projection.kind == "equirectangular":
+        raise ValueError("Only a globe or a polar view turns.")
+    check_spin(frames, seconds)
+    texture, size = _view_texture(build, theme_id, projection, pixels, width)
+    images = spin_frames(texture, projection, size, frames=frames, graticule=graticule)
+    with destination.open("xb") as stream:
+        write_spin(images, stream, seconds)
+    return destination
+
+
+def _view_texture(
+    build: Path, theme_id: str, projection: MapProjection, pixels: int, width: int | None
+) -> tuple[MapTexture, Size]:
+    """The build's ``theme_id`` map prepared for views, and the view's checked size."""
+    if projection.zoom > MAX_GLOBE_ZOOM:
+        raise ValueError(f"World views zoom a globe from 1 to {MAX_GLOBE_ZOOM:g} times.")
+    theme = _theme(theme_id)
+    width = width or (2 * pixels if projection.kind == "equirectangular" else pixels)
+    for size in (pixels, width):
+        if not MIN_VIEW_PIXELS <= size <= MAX_VIEW_PIXELS:
+            raise ValueError(f"View sizes must be {MIN_VIEW_PIXELS}-{MAX_VIEW_PIXELS} pixels.")
+    name = theme_file(theme)
+    folder, manifest = verified_build(build, (name,))
+    with Image.open(folder / name) as image:
+        texture = MapTexture.from_image(
+            image, float(manifest["world_frame"]["central_meridian_deg"])
+        )
+    return texture, (width, pixels)
 
 
 def export_globe(build: Path, destination: Path, theme_id: str) -> Path:

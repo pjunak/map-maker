@@ -18,6 +18,7 @@ from typing import Protocol
 
 from PIL import Image, ImageTk
 
+from map_maker.terrain.adapters.globe_spin import spin_frames
 from map_maker.terrain.adapters.map_projection import (
     SPACE,
     Drape,
@@ -501,6 +502,24 @@ class GlobeCanvas(tk.Canvas):
             texture = self._texture_of(image, meridian)
             return render(texture, projection, size, graticule=graticule,
                           drapes=self._drape_textures_of(drapes))
+
+        return draw
+
+    def turn_snapshot(self, pixels: int, frames: int) -> Callable[[], list[Image.Image]]:
+        """The view's middle square turning once eastward, ``pixels`` square, to draw later.
+
+        Call it on the Tk thread; the drawing function it returns may run on any
+        thread (saving runs it as a background job).
+        """
+        image = self.image
+        assert image is not None
+        projection, meridian = self.projection(), self.central_meridian_deg
+        graticule, drapes = self.graticule, self.drapes
+
+        def draw() -> list[Image.Image]:
+            texture = self._texture_of(image, meridian)
+            return spin_frames(texture, projection, (pixels, pixels), frames=frames,
+                               graticule=graticule, drapes=self._drape_textures_of(drapes))
 
         return draw
 

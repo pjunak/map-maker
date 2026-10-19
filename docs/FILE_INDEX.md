@@ -1,11 +1,11 @@
 # Complete documentation file inventory
 
-Updated 2026-10-17. Scope: every version-controlled Markdown document in Map Maker,
+Updated 2026-10-19. Scope: every version-controlled Markdown document in Map Maker,
 plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**250 Markdown files + 1 legal notice = 251 documentation files.**
+**259 Markdown files + 1 legal notice = 260 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 102 |
-| Dated research reports | 99 |
+| Architecture decision records | 110 |
+| Dated research reports | 100 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **251** |
+| **Total** | **260** |
 
 ## Project entry and guidance (4)
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (102)
+## Architecture decision records (110)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -213,8 +213,9 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0107-regional-temperatures-follow-height-above-the-planet.md](adr/0107-regional-temperatures-follow-height-above-the-planet.md) | Every regional level is as warm as the planet at its height, and colour lapse-corrects display relief only about its own mean over a mesh spacing. |
 | [docs/adr/0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md](adr/0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md) | Regional tiles are calibrated against the parent surface smoothed as they are, so every level keeps the height of the level above at that level's spacing instead of exaggerating its mountains (`planet-blended-tiles-v14`). |
 | [docs/adr/0109-fit-regional-uplift-corrections-along-the-drainage.md](adr/0109-fit-regional-uplift-corrections-along-the-drainage.md) | Regional uplift corrections are fitted to the relief uplift builds along the drainage, from the steady state of the starting surface, so mountain tiles converge (`planet-blended-tiles-v16`). |
+| [docs/adr/0110-spinning-globes-as-animated-webp.md](adr/0110-spinning-globes-as-animated-webp.md) | A globe or polar view turning once eastward, saved as a looping animated WebP (120 frames, 6 s, 720 px by default) by `world spin` and the Explore step. |
 
-## Dated research reports (99)
+## Dated research reports (100)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 

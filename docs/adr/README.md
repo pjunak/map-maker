@@ -138,3 +138,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0107: Regional temperatures follow height above the planet surface](0107-regional-temperatures-follow-height-above-the-planet.md)
 - [ADR-0108: Calibrate regional relief against the parent smoothed alike](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md)
 - [ADR-0109: Fit regional uplift corrections to the relief uplift builds along the drainage](0109-fit-regional-uplift-corrections-along-the-drainage.md)
+- [ADR-0110: Save a turning globe as an animated WebP image](0110-spinning-globes-as-animated-webp.md)

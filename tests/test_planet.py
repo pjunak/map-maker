@@ -308,6 +308,22 @@ def test_planet_build_publishes_verified_world_aligned_products(
         export_globe(target, globe, "relief")
     with pytest.raises(ValueError, match=r".glb"):
         export_globe(target, tmp_path / "relief.png", "relief")
+    # A saved theme can also turn once as an animated image.
+    from map_maker.terrain.application.planet_views import export_spin
+
+    spin = tmp_path / "relief.webp"
+    assert main(["world", "spin", str(target), "--theme", "relief", "--pixels", "64",
+                 "--frames", "8", "--output", str(spin)]) == 0
+    with Image.open(spin) as image:
+        assert getattr(image, "n_frames", 1) == 8 and image.size == (64, 64)
+    with pytest.raises(FileExistsError):
+        export_spin(target, spin, "relief", MapProjection("globe"), 64, frames=8)
+    with pytest.raises(ValueError, match="webp"):
+        export_spin(target, tmp_path / "relief-spin.png", "relief", MapProjection("globe"), 64,
+                    frames=8)
+    with pytest.raises(ValueError, match="turns"):
+        export_spin(target, tmp_path / "flat.webp", "relief", MapProjection("equirectangular"),
+                    64, frames=8)
     (target / "relief.png").write_bytes(b"changed")
     with pytest.raises(ValueError, match="changed"):
         export_view(target, tmp_path / "y.png", "relief", MapProjection("globe"), 128)

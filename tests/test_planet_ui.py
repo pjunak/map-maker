@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PIL import Image
 from test_globe_model import read_glb
 
 from map_maker.terrain import ui, world_view
@@ -173,6 +174,14 @@ def test_planet_maps_follow_the_registry_in_every_projection(
         "map"
     ] == maps.display_layer.get()
     assert str(view.result_panel.globe_button["state"]) == "normal"
+    # ...and the shown globe turning once, as an animated image (small here, for speed).
+    monkeypatch.setattr(world_view, "SPIN_PIXELS", 64)
+    monkeypatch.setattr(world_view, "SPIN_FRAMES", 8)
+    maps.write_spin(tmp_path / "spin.webp")
+    wait(app)
+    with Image.open(tmp_path / "spin.webp") as spin:
+        assert getattr(spin, "n_frames", 1) == 8 and spin.size == (64, 64)
+    assert str(view.result_panel.spin_button["state"]) == "normal"
     # A new registry theme appears without UI code once it has a painter.
     extra = MapTheme("political", "Political", "Realms and borders.")
     by_label = {t.label: t for t in (*THEMES, extra)}

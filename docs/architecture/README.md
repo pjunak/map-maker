@@ -40,7 +40,8 @@ scientific engines; core contracts must not depend on those concrete libraries.
       globe or polar view (ADR-0087), drawn by pipeline/sphere_views.py (ADR-0101)
       with opened regional maps draped over it when zoomed in (ADR-0103), and
       zoomed into them to their own resolution (ADR-0104);
-      globe_model.py writes it as a glTF globe model (ADR-0102)
+      globe_model.py writes it as a glTF globe model (ADR-0102) and
+      globe_spin.py as a turning globe (ADR-0110)
    -> application/planet_region.py: fixed blended tiles enriched from the
       verified build without its wonders (pipeline/planet_regional.py,
       planet_tiles.py), composed into
