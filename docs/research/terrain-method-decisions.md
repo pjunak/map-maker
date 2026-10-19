@@ -1,6 +1,6 @@
 # Terrain method decisions and failed experiments
 
-Updated 2026-10-19 through T21 regional basin plains.
+Updated 2026-10-19 through T23 one river course through regional levels.
 This is the living record of
 material generation approaches that were rejected, constrained or retained only
 as references. A failed method does not remove its desired feature from the plan.
@@ -613,9 +613,9 @@ with the parent rivers' bankfull channels cut in, basin land never erodes below
 the planet's plain (less a margin ramp), basins start without random roughness,
 and level parents wall their boundary where planet rivers enter
 ([ADR-0086 revision](../adr/0086-regional-planet-detail-from-blended-tiles.md#revision-2026-10-19-sediment-basin-plains)).
-Open: at levels 2-3 the river takes another branch at a junction than level 1
-and the planet. Revisit with tile boundary exchange, or when tiles' level parents
-share one routing of the coarser level.
+At levels 2-3 the river then took another branch at a junction than level 1 and
+the planet; [T23](#t23---carry-a-big-rivers-course-through-every-regional-level)
+carries one course through every level.
 
 ## T22 - Draw planet relief between nodes with cubics or along a twist
 
@@ -666,6 +666,60 @@ triangle-linear relief (ADR-0085), with no planet-level twist. Regional seeding
 (ADR-0086) and the regional twist (ADR-0106) are unaffected. Revisit when nodes
 carry more than heights (erosion's own slopes or receivers for a Hermite surface),
 or to compare a smoother look for Standard builds against display detail.
+
+## T23 - Carry a big river's course through every regional level
+
+**Hypothesis.** On a held basin plain the province and local maps took a big river
+by another branch than the region and the planet. If every level cut its channels
+along the planet's links where its relief carries them, instead of along its level
+parent's own routing, tiles would agree on the channel and every level on the
+course.
+
+**Control and inputs.** Aethelara `planet-3200k-v31`; a 30 km region window and
+20 km province and local windows at 56.869° E 30.703° N, where the 160,000 km²
+river crosses a full basin; tiles of every level regenerated in scratch caches
+for each variant. A course is the routed path from the biggest inflow, compared
+with the region's inside 20 km of the centre (control: 5.1 and 4.5 km from it on
+average at levels 2 and 3, leaving the circle 30 km from where the region does).
+On the synthetic test planet, two overlapping finer tiles and six pairs of
+overlapping level-1 windows.
+
+**Outcome.**
+- Channels along the planet's links, at tile nodes carried into the planet's
+  relief through the level parents' warps, brought the two province tiles over
+  the window from 3.1 km apart on average (10.6 km at most) to 0.7 km.
+- Each link had been traced by stepping to the neighbour nearest its receiver,
+  which drifts off the line by about an eighth of the link's length: 20-30 km on
+  a 200 km test link, 1.4 km on a 12 km planet link. Tracing along the line, and
+  from where a link crosses into the region, brought the tiles to 0.5 km.
+- With those channels the province window's river ran back out of the window
+  7 km after its entry. Routing the level parents in the same channels changed
+  nothing there, nor later in the final design, and was dropped. Sampling the
+  held plain at the same carried points let the river cross the window, but by
+  the northern branch, 7.4 km from the region's course on average.
+- That branch came from a dam. Downstream, the planet's river runs between nodes
+  at 682.9 and 681.1 m through a gap between hills, where the smoothly sampled
+  surface rises to 710-714 m. Province tile 7577 (252 km across) breached its
+  plain over its own ring beside the river's entry, at 695.7 m, and filled
+  2,400 km² to that level; region tiles, 1,260 km across, breach the sill. Beds
+  graded along each link, from the planet's height at one node to the next less
+  the channel's depth, removed the dam. Province and local courses then lay 2.0
+  and 1.2 km from the region's and left the window within 0.5 km of where it does.
+
+**Diagnosed cause.** Each level re-derived a big river's course: tiles from their
+level parent's routing on a lattice of their own, and their plains from the
+outlets their own rings offered. A held plain carries only the planet's links and
+heights, so every level has to take both from the planet, at the same places.
+
+**Disposition.** Every level traces the planet's links of at least its process
+area at its nodes carried into the planet's relief, samples the held plain there,
+and grades channel beds along the links; level parents let planet rivers in where
+the warps carry them
+([ADR-0086 revision](../adr/0086-regional-planet-detail-from-blended-tiles.md#revision-2026-10-19-one-river-course-through-every-level),
+`planet-blended-tiles-v18`). Not chosen: channels along the planet's links at the
+nodes' own places (T21), stepping towards the receiver, and routing level parents
+in the channels. Rivers the planet does not resolve still take each tile's own
+course; revisit with tile boundary exchange.
 
 ## What the failures change
 

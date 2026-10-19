@@ -186,7 +186,9 @@ rivers meander along their valley, with bends about eleven channel widths apart.
 - Sediment plains keep the planet's height at every level, with the gentle fall
   towards their outlet that the planet gives them. Big rivers cross them in
   channels about as deep as their banks are high (about 5 m for a river draining
-  160,000 km²), instead of cutting valleys into them.
+  160,000 km²), instead of cutting valleys into them. A big river takes the same
+  course across a plain at every level, on average within about 2 km of where
+  the region draws it.
 - Valleys and rivers wind below the detail mesh. Each level's relief bends in
   an area-preserving flow, so a valley that the mesh holds as a straight line
   between its points winds instead, and rivers follow it. Heights and basins stay

@@ -19,6 +19,7 @@ location, so it can be rebuilt whenever it is needed.
 from __future__ import annotations
 
 from dataclasses import replace
+from functools import partial
 
 import numpy as np
 from numpy.typing import NDArray
@@ -97,11 +98,13 @@ def level_parent(
     erodibility = smoothly(planet.erodibility)
     # Planet rivers enter as inflows; the boundary lets no water out where they
     # do, rivers the patch resolves (its spacing squared, 24 times, as tiles'
-    # process areas are).
-    walls = entry_walls(planet, region, 24 * region.spacing_m**2)
+    # process areas are). They cross the rim where the coarser relief carries
+    # them, which the warps have moved off their planet links.
+    planet_points = partial(relief.planet_points, radius_m=planet.mesh.radius_m)
+    walls = entry_walls(planet, region, 24 * region.spacing_m**2, planet_points)
     flow = route(
         mesh, relief_m, ~land | (region.boundary & ~walls), runoff,
-        parent_inflows(planet, region),
+        parent_inflows(planet, region, planet_points),
     )
     nearest = np.asarray(KDTree(planet.mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
     # A parent's temperatures hold at its own surface, so the planet's are
@@ -145,6 +148,9 @@ def level_parent(
         ice=planet.ice,
         ice_margin=planet.ice_margin_m,
         plain_m=planet.surface_m - planet.young_m() if planet.plain_m is None else planet.plain_m,
+        river_receiver=np.where(planet.land, planet.receiver, -1),
+        river_area_m2=planet.area_m2,
+        planet_points=planet_points,
     )
     # Coarser tiles leave out volcanoes and wonders, which windows redraw sharply
     # from the planet's lists. The patch carries them as young relief on top of

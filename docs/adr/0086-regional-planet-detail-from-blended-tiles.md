@@ -215,6 +215,72 @@ Not chosen:
   differ in seeds, roughness and corrections. It stays with domain decomposition
   below as a possible next step.
 
+## Revision (2026-10-19): one river course through every level
+
+On the Aethelara basin plain (56.87° E, 30.70° N, `planet-3200k-v31`) the region
+and the planet run the 160,000 km² river north-west through the centre of a 20 km
+window, while the province and local maps turned it north at a junction 13 km
+east of the centre. Two faults combined.
+
+- **Tiles cut a river in different places.** Finer tiles traced their channels
+  along their level parent's own drainage, and each parent routes the coarser
+  relief on a lattice of its own: on the held plain two overlapping province
+  tiles cut the river 3.1 km apart on average and up to 10.6 km. Their blend
+  broke the channel.
+- **A tile dammed the plain.** A tile holds the planet's surface, sampled
+  smoothly. Downstream the planet's river runs between two nodes at 682.9 and
+  681.1 m through a gap between hills, and between them the smooth surface rises
+  to 710–714 m. Region tiles, 1,260 km across, breach that sill (their blend
+  crosses it at 678–680 m), but province tile 7577, 252 km across, found a lower
+  way out over its own ring beside the river's entry, at 695.7 m. It filled
+  2,400 km² of plain to that level, up to 14 m above the planet's.
+
+Every level now carries the planet's rivers instead of re-deriving them:
+
+- **Channels follow the planet's links where the coarser relief carries them.**
+  A level parent samples the coarser level's blend through its relief warp
+  (ADR-0106), and that level's tiles stood on a parent that sampled the level
+  above through the coarser warp, down to level 1, which is enriched from the
+  planet in place. Level parents carry the planet's links and that chain of warps
+  (`ReliefWarp.planet_points`). A tile traces the links at its nodes carried into
+  the planet's relief, so its channel lies in the coarser level's. Cut along the
+  links at the nodes' own places, channels lay up to the warps' displacement
+  beside the inherited ones, and the province window lost the river within 6 km
+  (T21). The held plain is sampled at the same points, so its lows lie where the
+  coarser level has them.
+- **Traced along the line.** A link is traced a neighbour at a time, to whichever
+  neighbour further along it lies nearest its line, from where it crosses into
+  the region. Stepping to the neighbour nearest the receiver drifted off the line
+  by about an eighth of the link's length: 1.4 km on a 12 km planet link, several
+  local spacings, and differently on every lattice. Links from beyond the region
+  had been traced along its ring.
+- **Beds follow the planet's river.** A channel's bed falls along its link from
+  the planet's height at one node to the next, less its bankfull depth, wherever
+  the sampled surface stands higher. Every level cuts the same bed, so smooth
+  sampling no longer raises sills across a river that the planet does not have.
+- **Level parents let planet rivers in where the warps carry them**, with their
+  entry walls there too. Routing level parents in the channels as well changed
+  no course in the province or local window, so they route the coarser relief
+  as before.
+
+| Aethelara, 20 km windows (level 1: 30 km) | v17 | v18 |
+|---|---:|---:|
+| Province tiles 7577 and 7721, big channel apart, mean / max (km) | 3.1 / 10.6 | 0.5 / 2.1 |
+| Province course from level 1's, mean / max (km) | 5.1 / 13.9 | 2.0 / 5.9 |
+| Local course from level 1's, mean / max (km) | 4.5 / 14.3 | 1.2 / 4.1 |
+| Where levels 1 / 2 / 3 leave the 20 km circle (km east, north) | (−17.9, 8.9) / (11.1, 16.6) / (10.8, 16.9) | (−16.3, 11.5) / (−16.6, 11.1) / (−16.5, 11.2) |
+| Box plain against the smooth planet, mean, levels 1 / 2 / 3 (m) | +3.4 / +1.7 / +1.6 | +0.1 / +0.9 / +1.7 |
+| Box plain against the linearly sampled planet, mean (m) | −0.6 / −2.3 / −2.3 | −3.9 / −3.0 / −2.3 |
+| Overlapping tiles' spread on the plain, levels 2 / 3, mean (m) | 4.7 / 0.5 | 0.5 / 0.1 |
+
+The box is the 36 km square of T21; its plain's medians lie within 0.4 m of the
+smooth planet at every level. The region's plain fell 3.3 m on average in its
+highest part (90th percentile 18.1 m above the smooth planet before, 12.5 m now),
+while its median moved 0.2 m. On the synthetic test planet six pairs of overlapping level-1 windows
+agree on 94.0 % of river pixels near their edges and 92.8 % inside (v17: 90.0 %
+and 92.6 %). Every level cuts the planet's links of at least its process area;
+the regional tile algorithm becomes `planet-blended-tiles-v18`.
+
 ## Consequences
 
 - Detail is reproducible and independent of the requested window. Tiles are

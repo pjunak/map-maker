@@ -65,12 +65,12 @@ def test_regional_relief_matches_its_parent_at_parent_scale(parent: PlanetResult
     assert last["rms_vs_parent_m"] < 10.0
     fixed = ~result.land | region.boundary
     assert non_descending_receivers(result.elevation_m, result.run.flow.receiver, fixed) == 0
-    # Boundary land stays at the parent's surface, less the channels of the
-    # parent rivers crossing it.
+    # Boundary land stays at the parent's surface, with the channels of the
+    # parent rivers crossing it cut in.
     edge = region.boundary & result.land
     channels = parent_channels(source, region, 2_000e6)
-    assert channels[edge].max() > 0
-    assert np.allclose(result.elevation_m[edge], result.target_m[edge] - channels[edge])
+    assert channels.depth_m[edge].max() > 0
+    assert np.allclose(result.elevation_m[edge], channels.cut(result.target_m)[edge])
     # Below the parent spacing the relief has more detail than its parent.
     from map_maker.terrain.pipeline.planet_forcing import smooth_over_land
 
@@ -953,6 +953,80 @@ def test_level_parents_bring_planet_rivers_in_across_the_area_they_serve(
     assert area[served].max() <= 1.001 * (area[entering].sum() + fell)
 
 
+def test_finer_tiles_cut_a_planet_river_in_one_channel_where_the_coarser_relief_has_it(
+    parent: PlanetResult, tmp_path: Path
+) -> None:
+    from map_maker.terrain.application.planet_region import ensure_level_tiles
+    from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+    from map_maker.terrain.pipeline.planet_regional import channel_depth_m
+
+    planet = RegionalParent.from_result(parent)
+    radius_m, spacing_km = parent.mesh.radius_m, TINY_LEVELS[1].spacing_km
+    node = _river_step(parent)
+    middle = _lonlat(parent.mesh.xyz[parent.flow.receiver[node]])
+    # Two overlapping finer tiles either side of where a big planet river step ends.
+    served_m = 150e3
+    centres = [
+        _lonlat(inverse_aeqd(np.array([dx]), np.zeros(1), *middle, radius_m)[0])
+        for dx in (-50e3, 50e3)
+    ]
+    grid = TileGrid.for_planet(radius_m, TINY_LEVELS[0])
+    relief = ReliefWarp.for_parent(TINY_LEVELS, 2, parent.settings.seed)
+    reach = level_parent_radius(planet, served_m, TINY_LEVELS[0].spacing_km) + relief.reach_m
+    needed = tuple(sorted({t for c in centres for t in grid.tiles_near(c, reach)}))
+    grid, tiles = ensure_level_tiles(
+        planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
+    )
+    big = parent.flow.area_m2[node]
+    deep = channel_depth_m(np.array([big]))[0]
+    # The planet's links at least as big as that step, in a plane about it.
+    links = np.flatnonzero(
+        parent.land & (parent.flow.receiver >= 0) & (parent.flow.area_m2 >= big)
+    )
+    start = forward_aeqd(parent.mesh.xyz[links], *middle, radius_m)
+    step = forward_aeqd(parent.mesh.xyz[parent.flow.receiver[links]], *middle, radius_m) - start
+
+    def off_links(xyz: np.ndarray) -> np.ndarray:
+        xy = forward_aeqd(xyz, *middle, radius_m)
+        along = np.einsum("pkj,kj->pk", xy[:, None] - start, step)
+        along /= np.einsum("kj,kj->k", step, step)
+        foot = start + np.clip(along, 0, 1)[..., None] * step
+        return np.linalg.norm(xy[:, None] - foot, axis=2).min(axis=1)
+
+    channels = []
+    for k, centre in enumerate(centres):
+        patch = level_parent(
+            planet, grid, tiles, centre, served_m, TINY_LEVELS[0].spacing_km, 11 + k, relief
+        )
+        region = regional_mesh(*centre, served_m / 1e3, spacing_km, radius_m, 21 + k)
+        depth = parent_channels(patch, region, TINY_LEVELS[1].process_area_km2 * 1e6).depth_m
+        # Inside the tile's blend support, away from its ring.
+        support = np.hypot(*region.plane_m.T) < 0.8 * served_m
+        xyz = region.mesh.xyz[(depth >= deep) & support]
+        assert patch.planet_points is not None and len(xyz) > 10
+        # The channel runs along the planet's link where the warps carry the
+        # tile's nodes, so in the coarser level's channel. Stepping towards the
+        # receiver instead drifted 20-30 km off this 200 km link.
+        on_planet = off_links(patch.planet_points(xyz))
+        assert on_planet.max() < 1.5 * spacing_km * 1e3
+        assert np.median(on_planet) < 0.5 * spacing_km * 1e3
+        channels.append(forward_aeqd(xyz, *middle, radius_m))
+    # Where both tiles reach, they cut the river in one channel, each on its own
+    # lattice, not side by side.
+    from scipy.spatial import KDTree
+
+    supports = [np.array([dx, 0.0]) for dx in (-50e3, 50e3)]
+
+    def in_both(xy: np.ndarray) -> np.ndarray:
+        return xy[np.all([np.hypot(*(xy - s).T) < 0.8 * served_m for s in supports], axis=0)]
+
+    shared = [in_both(c) for c in channels]
+    assert min(len(c) for c in shared) > 5
+    apart = np.r_[KDTree(shared[1]).query(shared[0])[0], KDTree(shared[0]).query(shared[1])[0]]
+    assert apart.max() < 1.5 * spacing_km * 1e3
+
+
 def test_level_two_windows_repeat_exactly_and_agree_with_level_one(
     parent: PlanetResult, tmp_path: Path
 ) -> None:
@@ -1607,6 +1681,17 @@ def test_relief_warp_octaves_nest_across_levels() -> None:
         # where level 1 does.
         assert shown == list(range(len(shown)))
         assert set(one) <= set(shown)
+    # A level's points lie in the planet's relief through its parent's warp and
+    # every coarser one; level 1 is enriched from the planet in place.
+    radius_m = 6.0e6
+    t = np.linspace(-40e3, 40e3, 41)
+    points = inverse_aeqd(t, 0.5 * t, 20.0, 10.0, radius_m)
+    two = ReliefWarp.for_parent(REGION_LEVELS, 2, 7)
+    three = ReliefWarp.for_parent(REGION_LEVELS, 3, 7)
+    assert np.array_equal(two.planet_points(points, radius_m), two(points, radius_m))
+    assert np.allclose(
+        three.planet_points(points, radius_m), two(three(points, radius_m), radius_m)
+    )
 
 
 def test_smooth_parent_sampling_has_no_creases_at_parent_triangle_edges(
@@ -1746,14 +1831,15 @@ def test_tiles_hold_a_basin_plain_that_a_big_inherited_river_crosses(
     channels = parent_channels(planet, region, 2_000e6)
     # Away from the parent's rivers the plain stays at the parent's level;
     # eroded, half of it had lain more than a metre below.
-    plain = held & (channels == 0)
+    plain = held & (channels.depth_m == 0)
     assert plain.sum() > 300
     assert np.mean(rise[plain] < -1.0) < 0.02 and abs(rise[plain].mean()) < 1.0
     # The river enters with 780,000 km2 and crosses the plain in its channel,
     # about 10 m deep, breaching only the sills that sampling leaves between
     # parent nodes; eroding the plain, it had cut a valley 72 m below the parent's.
     crossing = held & (result.run.flow.area_m2 > 0.5 * parent_inflows(planet, region).max())
-    assert crossing.sum() >= 5 and (rise + channels)[crossing].min() > -20.0
+    cut = result.elevation_m - channels.cut(result.target_m)
+    assert crossing.sum() >= 5 and cut[crossing].min() > -20.0
     fixed = ~result.land | region.boundary
     assert non_descending_receivers(result.elevation_m, result.run.flow.receiver, fixed) == 0
 
@@ -1775,7 +1861,7 @@ def test_parent_rivers_keep_connected_channels_that_leave_where_they_leave(
     channels = parent_channels(planet, region, 2_000e6)
     # The biggest river entering is cut its bankfull depth along a connected
     # path from where it enters to the boundary where it leaves.
-    deep = channels >= 0.99 * channel_depth_m(inflow[entry : entry + 1])[0]
+    deep = channels.depth_m >= 0.99 * channel_depth_m(inflow[entry : entry + 1])[0]
     rows = np.repeat(np.arange(mesh.size), np.diff(mesh.ptr))
     both = deep[rows] & deep[mesh.nbr]
     graph = coo_matrix((np.ones(both.sum()), (rows[both], mesh.nbr[both])), (mesh.size, mesh.size))
@@ -1784,4 +1870,47 @@ def test_parent_rivers_keep_connected_channels_that_leave_where_they_leave(
     assert deep[entry] and np.any(river & region.boundary)
     # The boundary is cut only where rivers leave, never beside where one enters.
     near_entry = np.isin(np.arange(mesh.size), mesh.nbr[mesh.ptr[entry] : mesh.ptr[entry + 1]])
-    assert not np.any(channels[region.boundary & near_entry] > 0)
+    assert not np.any(channels.depth_m[region.boundary & near_entry] > 0)
+
+
+def test_channel_beds_fall_along_the_planet_river_through_a_gap_between_hills(
+    parent: PlanetResult,
+) -> None:
+    from dataclasses import replace
+
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+    from map_maker.terrain.pipeline.planet_regional import channel_depth_m
+
+    planet = RegionalParent.from_result(parent)
+    mesh = parent.mesh
+    node = _river_step(parent)
+    receiver = int(parent.flow.receiver[node])
+    # Hills on both sides of the river's link: the third corners of the two
+    # triangles on its edge stand a kilometre higher.
+    triangles = mesh.triangles[np.isin(mesh.triangles, [node, receiver]).sum(axis=1) == 2]
+    hills = np.setdiff1d(triangles.ravel(), [node, receiver])
+    assert len(hills) == 2
+    raised = np.where(np.isin(np.arange(mesh.size), hills), 1000.0, 0.0)
+    hilly = replace(planet, surface_m=planet.surface_m + raised)
+    middle = _lonlat(mesh.xyz[node] + mesh.xyz[receiver])
+    region = regional_mesh(*middle, 150, 10, mesh.radius_m, 1)
+    channels = parent_channels(hilly, region, 2_000e6)
+    target = hilly.smooth_sampler(region.mesh.xyz)(hilly.surface_m - hilly.young_m())
+    # The channel along the link, away from its ends.
+    xy = forward_aeqd(region.mesh.xyz, *middle, mesh.radius_m)
+    ends = forward_aeqd(mesh.xyz[[node, receiver]], *middle, mesh.radius_m)
+    along = (xy - ends[0]) @ (ends[1] - ends[0]) / np.sum((ends[1] - ends[0]) ** 2)
+    deep = channel_depth_m(parent.flow.area_m2[node : node + 1])[0]
+    on = (channels.depth_m >= deep) & (along > 0.2) & (along < 0.8)
+    assert on.sum() > 3
+    # Sampled between the planet's nodes, the ground beside the link rises
+    # towards the hills, and the smooth surface along it rises above both its
+    # ends; a tile held there filled the plain upstream like a lake. The bed
+    # falls from one end to the other instead, its depth below the planet's river.
+    plain = hilly.surface_m - hilly.young_m()
+    top, low = plain[node], plain[receiver]
+    assert target[on].max() > max(top, low) + 20.0
+    cut = channels.cut(target)[on]
+    expected = top + along[on] * (low - top) - channels.depth_m[on]
+    assert np.allclose(cut, np.minimum(target[on] - channels.depth_m[on], expected), atol=0.5)
+    assert cut.max() <= max(top, low) - deep + 1e-6

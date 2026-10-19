@@ -11,7 +11,7 @@ so valleys wind below the tile mesh spacing.
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import inf, pi, sqrt
 
 import numpy as np
@@ -161,6 +161,9 @@ class ReliefWarp:
     coarsest_m: float  # only octaves shorter than this; inf at level 1
     finest_m: float
     seed: int
+    # The warp the relief sampled here was itself sampled through, down to
+    # level 1, which is enriched from the planet in place (``planet_points``).
+    coarser: ReliefWarp | None = None
 
     @classmethod
     def of_level(
@@ -191,7 +194,10 @@ class ReliefWarp:
         level ``level`` itself takes the finer octaves.
         """
         coarse = levels[level - 2].spacing_km * 1e3
-        return cls.of_level(levels, level - 1, master_seed, level_finest_m(coarse))
+        own = cls.of_level(levels, level - 1, master_seed, level_finest_m(coarse))
+        return replace(
+            own, coarser=cls.for_parent(levels, level - 1, master_seed) if level > 2 else None
+        )
 
     def octaves(self) -> tuple[int, list[tuple[float, float]]]:
         """The index of this warp's first octave in the shared sequence, and its octaves."""
@@ -211,6 +217,18 @@ class ReliefWarp:
     def __call__(self, xyz: F64, radius_m: float) -> F64:
         first, octaves = self.octaves()
         return swirl(xyz, radius_m, octaves, self.seed, first)
+
+    def planet_points(self, xyz: F64, radius_m: float) -> F64:
+        """Where ``xyz`` lies in the planet's relief, through this warp and the coarser ones.
+
+        A level parent samples the coarser level's blend through its warp, and
+        that level's tiles stood on a parent that sampled the level above
+        through the coarser warp, down to level 1. A river that level 1 cuts
+        along a planet link therefore lies, at a finer level, where these warps
+        carry points onto that link.
+        """
+        moved = self(xyz, radius_m)
+        return moved if self.coarser is None else self.coarser.planet_points(moved, radius_m)
 
 
 def blend(grid: TileGrid, tiles: dict[int, TileSurface], points: F64) -> F64:
