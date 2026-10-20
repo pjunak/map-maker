@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**261 Markdown files + 1 legal notice = 262 documentation files.**
+**263 Markdown files + 1 legal notice = 264 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -18,10 +18,10 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
 | Architecture decision records | 111 |
-| Dated research reports | 101 |
+| Dated research reports | 103 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **262** |
+| **Total** | **264** |
 
 ## Project entry and guidance (4)
 
@@ -216,15 +216,17 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0110-spinning-globes-as-animated-webp.md](adr/0110-spinning-globes-as-animated-webp.md) | A globe or polar view turning once eastward, saved as a looping animated WebP (120 frames, 6 s, 720 px by default) by `world spin` and the Explore step. |
 | [docs/adr/0111-regional-maps-in-globe-models.md](adr/0111-regional-maps-in-globe-models.md) | Globe models saved from the app carry the opened regional maps as opaque polar-grid surfaces lifted 0.2 mm per level, their rim fade drawn in against what lies below. |
 
-## Dated research reports (101)
+## Dated research reports (103)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
 | File | Purpose or document title |
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
-| [docs/research/2026-10-19-planet-build-speed.md](research/2026-10-19-planet-build-speed.md) | Planet build speed: stage times and peak memory at 200k, 800k and 3.2M nodes, where the time goes, estimates for finer meshes and what a Rust port would change. |
+| [docs/research/2026-10-19-planet-build-speed.md](research/2026-10-19-planet-build-speed.md) | Planet build speed: stage times and peak memory at 200k, 800k and 3.2M nodes, where the time goes, estimates for finer meshes, what a Rust port would change and a server-hosting estimate. |
 | [docs/research/2026-10-19-curved-interpolation.md](research/2026-10-19-curved-interpolation.md) | Straight against curved interpolation of planet relief: Clough-Tocher cubics and a planar twist rebuilding Earth (ETOPO 2022) and a synthetic build from coarse nodes; pass rules, results and the rejected trial (T22). |
+| [docs/research/2026-10-19-nested-regional-levels.md](research/2026-10-19-nested-regional-levels.md) | Nested regional levels: rivers lost at window rims, dissected basin fronts, wide-river meanders, overshooting cubics, tone and temperature across levels, held basin plains, calibration, blend hollows and one river course, with figures and open follow-ups (2026-10-18/19). |
+| [docs/research/2026-10-15-first-map-and-wonder-pass-speed.md](research/2026-10-15-first-map-and-wonder-pass-speed.md) | Drawing only the shown map after a run, and the wonder pass's explicit creep: profile, cause, implicit fix and timings. |
 | [docs/research/2026-10-13-refined-world-map.md](research/2026-10-13-refined-world-map.md) | The planet's refined land exported as a source map: import, planet comparison with the original drawing, coast detail added twice, and the ice-sheet drawing fix it exposed. |
 | [docs/research/2026-10-13-polar-land.md](research/2026-10-13-polar-land.md) | Polar land in true distance: the pole wedge and traced streaks, smoothing and cap trials, and Aethelara's covered south pole. |
 | [docs/research/2026-10-13-ice-sheets.md](research/2026-10-13-ice-sheets.md) | Ice sheets: causes of the latitude-line ice edge, mass balance and shallow-ice trials, sheet versus glacier drawing, margins and Aethelara results. |

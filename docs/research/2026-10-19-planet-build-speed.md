@@ -106,6 +106,41 @@ What would help more:
    cores.
 3. **Raising the node limit** for 6 km builds, once those two make them quick.
 
+## Hosting on a server (estimate)
+
+Would a hosted version on a rented root server need the Rust port? Nothing was run
+for this. The server's specifications are not in the infra repository, so the
+estimate assumes 2–4 cores for the app's container, each half to two-thirds as fast
+as the desktop's. The infra Compose files already allow the other services up to
+about 7.6 GB together (`mem_limit`, 4 GB of it for Music).
+
+| Job | Desktop now | Server, Python | Server, native core |
+|---|---|---|---|
+| Standard planet, 200k nodes | about 3 min | about 4–6 min | about 2–3 min |
+| Fine planet, 3.2M nodes | 8.5 min | about 15–30 min | about 6–12 min |
+| Region, province and local maps at a new place | about 11 min | about 20–45 min | about 8–20 min |
+| Peak memory, 3.2M nodes | 7.7 GiB | the same | lower, but maps still dominate |
+
+The regional row is a rough figure from recent runs, not timed for this estimate.
+
+- **A port is not required.** Builds take minutes in any language, so a hosted app
+  needs a background worker that runs one build at a time and reports progress.
+- **Memory decides more than speed.** About 5 GiB of the 5.4–7.7 GiB peak is maps
+  and libraries, which do not grow with the mesh; a build draws every theme at
+  4,096 px. Drawing on demand, in tiles or with 32-bit fields can be done in Python
+  and might bring a build to 2–3 GiB.
+- **Results are reusable.** The same inputs give the same planet, so a cache of
+  finished builds and regional tiles pays each cost once.
+- **Python deploys.** Numba runs in a Linux container. Baking its compiled cache
+  into the image avoids about a minute of compilation on the first build after
+  each deploy.
+- **The interface is the larger job.** The app is a Tkinter desktop program; a
+  hosted app needs a web front end over the application layer, and the desktop app
+  stays (local-first).
+
+The port becomes worth it with several users at once, paid CPU time, or 6 km planets
+built on the server: the same constant factor and lower memory as on the desktop.
+
 ## Limits
 
 - One run per size under shared load, as described under Method.
@@ -113,9 +148,12 @@ What would help more:
 - The estimates assume each stage keeps growing as it did from 800k to 3.2M.
 - The 0.8 KB per node is a peak-memory difference that includes temporary
   arrays.
+- The hosting figures assume the server's speed; none were measured there.
 
 ## Disposition
 
 The native core stays an M5 item (D27, R47), expected to give a constant factor
 and lower memory, not kilometre-scale planets. Finer detail stays the job of
-regional levels. The ice-flow cost is a new backlog item under M2.
+regional levels. The ice-flow cost is a new backlog item under M2. A hosted version
+would need a background worker, a result cache and lower map memory before it needs
+the port.

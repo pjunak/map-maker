@@ -19,14 +19,25 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Nested regional levels — 2026-10-19](2026-10-19-nested-regional-levels.md) gathers the
+  2026-10-18/19 work that made region, province and local maps agree: rivers lost at
+  window rims, dissected basin fronts, meanders, overshooting cubics, tone and temperature
+  across levels, held basin plains, calibration, blend hollows and one river course, with
+  the follow-ups left open.
+
 - [Planet build speed — 2026-10-19](2026-10-19-planet-build-speed.md) times full builds
   at 200k, 800k and 3.2M nodes and finds the heavy loops already compiled, so a Rust port
-  would give a constant factor and lower memory, not kilometre-scale planets.
+  would give a constant factor and lower memory, not kilometre-scale planets. A hosted
+  version would need a background worker, a cache and lower map memory before the port.
 
 - [Curved interpolation — 2026-10-19](2026-10-19-curved-interpolation.md) rebuilds Earth
   (ETOPO 2022) and a fine synthetic build from 50 and 25 km nodes with straight lines,
   Clough-Tocher cubics and a planar twist. Curves remove the mesh's facets but are no
   closer to real ground, so the planet stays triangle-linear (T22).
+
+- [First map and wonder pass speed — 2026-10-15](2026-10-15-first-map-and-wonder-pass-speed.md)
+  draws only the shown map after a run (11 s to 4–6 s) and finds 420 of 422 s of a wonder
+  pass in explicit creep on a jittered patch, now 25 implicit steps.
 
 - [Refined world map — 2026-10-13](2026-10-13-refined-world-map.md) builds Aethelara from
   its planet land traced back into vector form: the same geography with cleaner coasts,
