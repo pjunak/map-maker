@@ -45,8 +45,10 @@ scientific engines; core contracts must not depend on those concrete libraries.
    -> application/planet_region.py: fixed blended tiles enriched from the
       verified build without its wonders (pipeline/planet_regional.py,
       planet_tiles.py), composed into
-      regional windows (adapters/planet_region.py, ADR-0086); deeper levels are
-      enriched from level parents built from the coarser tiles
+      regional windows (adapters/planet_region.py, ADR-0086), whose rivers,
+      lakes and ponds are worked out on world-fixed cells of the sphere
+      (pipeline/planet_grid.py, ADR-0112) and drawn into their pixels; deeper
+      levels are enriched from level parents built from the coarser tiles
       (pipeline/planet_levels.py, ADR-0088)
 ```
 

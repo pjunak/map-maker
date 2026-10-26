@@ -132,6 +132,10 @@ as wide as their channel, about 4.8 √Q metres for a discharge of Q m³/s, so a
 river widens as you zoom in. Rivers narrower than a pixel keep a thin line that
 thickens with their discharge, whatever else the map shows. On gentle ground big
 rivers meander along their valley, with bends about eleven channel widths apart.
+Rivers, lakes and ponds are worked out on cells fixed to the planet near the map's
+pixel size, then drawn into the map
+([ADR-0112](adr/0112-regional-waters-on-sphere-cells.md)), so two overlapping maps at
+the same scale draw the same rivers and bends.
 - The path above the map (**World / Region … / Province …**) returns to any larger
   map. Each larger map outlines the smaller ones opened from it.
 - Back on the world's globe or polar view, opened regions lie over the planet map

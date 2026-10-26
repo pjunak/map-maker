@@ -19,13 +19,11 @@ from rasterio.crs import CRS
 from scipy.ndimage import (
     distance_transform_edt,
     gaussian_filter,
-    label,
     map_coordinates,
     maximum,
-    maximum_filter,
-    minimum_position,
     sum_labels,
 )
+from scipy.spatial import KDTree
 
 from map_maker.terrain.adapters.build import canonical_json, file_sha256
 from map_maker.terrain.adapters.map_parchment import parchment_image
@@ -40,7 +38,9 @@ from map_maker.terrain.adapters.planet_natural import (
     SALT_FLAT,
     IcePixels,
     PixelClimate,
+    RiverLine,
     blend_coast,
+    draw_river_lines,
     erg_cover,
     ice_surface,
     ice_undulation,
@@ -48,16 +48,23 @@ from map_maker.terrain.adapters.planet_natural import (
     paint_falls,
     parchment_inputs,
     ramp,
-    river_coverage,
+    river_lines,
     sea_depth_colour,
     shading,
     vegetation,
 )
 from map_maker.terrain.adapters.planet_render import edge_coverage
 from map_maker.terrain.domain.planet import REGIONAL_ALGORITHM, RegionalSettings
+from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.planet_climate import potential_evapotranspiration
-from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m, window_finest_m
-from map_maker.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, grid_flow
+from map_maker.terrain.pipeline.planet_coast import (
+    Coastline,
+    coastline,
+    level_finest_m,
+    window_finest_m,
+)
+from map_maker.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, graph_flow
+from map_maker.terrain.pipeline.planet_grid import GridCells, WorldGrid, cell_marks
 from map_maker.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
 from map_maker.terrain.pipeline.planet_patch import forward_aeqd, inverse_aeqd
 from map_maker.terrain.pipeline.planet_regional import (
@@ -65,7 +72,7 @@ from map_maker.terrain.pipeline.planet_regional import (
     RegionalParent,
     RegionalResult,
 )
-from map_maker.terrain.pipeline.planet_tiles import ReliefWarp, TileGrid, TileSurface
+from map_maker.terrain.pipeline.planet_tiles import ReliefWarp, TileGrid, TileSurface, blend
 from map_maker.terrain.pipeline.planet_volcanism import edifice_height, sea_floor_with_volcanoes
 from map_maker.terrain.pipeline.planet_wonders import (
     WonderCover,
@@ -96,6 +103,9 @@ DUNE_STREAK_STD = 0.12  # spread of dune noise averaged along the wind (measured
 DUNE_CREST_WIDTH = 0.45  # crest half-width, in streak spreads about a zero contour
 TRAP_STEP_M = 150.0  # thickness of the lava-flow packages that form benches
 ROUTE_PAD = 1.25  # rivers are routed over this multiple of a window's radius
+ROUTE_GRID_STAGE = "planet.route-grid"  # the jitter of the world's routing cells
+WALL_CELLS = 2.0  # a ring this many cells wide beyond the routing reach holds its walls
+RIVER_MARK_SEED = 47  # route cells' marks, which fix river bends to the place
 ENTRY_WALL_M = 1e4  # beyond the rim where parent rivers enter: above any spill
 POND_DEPTH_M = 10.0  # filled depressions deeper than this hold water or a playa
 # A river fills a hollow on its course with sediment unless the hollow holds more
@@ -231,141 +241,25 @@ def compose_window(
     spacing_m: float = 5000.0,
     pad: float = ROUTE_PAD,
 ) -> RegionWindow:
-    """A regional window, composed over a padded square and cropped to its circle.
+    """A regional window: relief and colour on its pixels, waters from the world's cells.
 
-    River routing has to start somewhere, and where it starts depends on the
-    window. Routing over ``pad`` times the radius keeps that start outside the
-    visible map: rivers inside follow the tile surface, which does not depend
-    on the window, so overlapping windows draw the same rivers. The tiles'
-    blend is sampled where ``relief`` moves each pixel (``ReliefWarp.for_window``).
+    Steepest descent depends on where cells lie, so rivers, lakes and ponds are
+    worked out on cells fixed to the sphere (``window_hydrology``) and drawn into
+    the window's pixels: windows that share a cell size draw the same waters
+    where they overlap. Drainage has to start somewhere, so it is routed over
+    ``pad`` times the radius, which keeps that start outside the visible map.
+    The tiles' blend is sampled where ``relief`` moves each point
+    (``ReliefWarp.for_window``).
     """
-    extra = round(pixels * (pad - 1) / 2)
-    size = pixels + 2 * extra
-    padded = _compose(
-        parent, grid, tiles, centre, radius_km * 1e3 * size / pixels, size, river_km2,
-        spacing_m, relief,
-    )
-    return crop_window(padded, extra, pixels)
-
-
-def crop_window(window: RegionWindow, extra: int, pixels: int) -> RegionWindow:
-    """The central ``pixels`` square of a padded window, masked to its circle."""
-    if extra == 0:
-        return window
-    rows = slice(extra, extra + pixels)
-    radius_m = window.pixel_m * pixels / 2
-    centres = (np.arange(pixels) + 0.5) * window.pixel_m - radius_m
-    gx, gy = np.meshgrid(centres, -centres)
-    circle = np.hypot(gx, gy) <= radius_m
-
-    def cut[T: np.generic](values: NDArray[T]) -> NDArray[T]:
-        return values[rows, rows]
-
-    climate = window.climate
-    if climate is not None:
-        climate = PixelClimate(
-            cut(climate.temperature_c), cut(climate.warm_season_c),
-            cut(climate.precipitation_mm), cut(climate.pet_mm),
-            None if climate.growing_mm is None else cut(climate.growing_mm),
-        )
-    size = window.pixels
-    return RegionWindow(
-        window.centre,
-        radius_m,
-        pixels,
-        np.where(circle, cut(window.elevation_m), np.nan),
-        cut(window.land) & circle,
-        cut(window.land_cover),
-        climate,
-        np.where(circle, cut(window.rivers), 0.0),
-        window.points.reshape(size, size, 3)[rows, rows].reshape(-1, 3),
-        window.tiles,
-        window.planet_m,
-        window.lapse_c_per_km,
-        cut(window.volcanic),
-        cut(window.lakes) & circle,
-        cut(window.salt) & circle,
-        cut(window.basalt),
-        None if window.wind is None else window.wind[rows, rows],
-        cut(window.playa) & circle,
-        window.detail_spacing_m,
-        window.seed,
-        None if window.cover is None else window.cover.crop(rows),
-        (
-            None
-            if window.ice_surface_m is None
-            else np.where(circle, cut(window.ice_surface_m), np.nan)
-        ),
-        None if window.ice_balance_m is None else cut(window.ice_balance_m),
-    )
-
-
-def _compose(
-    parent: RegionalParent,
-    grid: TileGrid,
-    tiles: dict[int, TileSurface],
-    centre: tuple[float, float],
-    radius_m: float,
-    pixels: int,
-    river_km2: float,
-    spacing_m: float,
-    relief: ReliefWarp,
-) -> RegionWindow:
+    radius_m = radius_km * 1e3
     planet_m = parent.mesh.radius_m
     points, inside = window_points(*centre, radius_m, pixels, planet_m)
-    from map_maker.terrain.pipeline.planet_tiles import blend
-
-    surfaces = tiles
-    finest = window_finest_m(spacing_m, 2 * radius_m / pixels)
-    coast = coastline(parent.world)
-    drawn = coast.contains(points, finest, parent.settings.seed).reshape(pixels, pixels)
-    land = drawn & inside
-    floor = parent.sea_floor_m
-    if floor is None:
-        floor = np.where(parent.land, 0.0, -2000.0)
-    sea = parent.sample(points, floor).reshape(pixels, pixels)
-    blended = np.zeros(pixels * pixels)
-    blended[inside.ravel()] = blend(grid, surfaces, relief(points[inside.ravel()], planet_m))
-    elevation = blended = blended.reshape(pixels, pixels)
-    volcanic = np.zeros((pixels, pixels))
-    if parent.volcanoes is not None and parent.volcanic_m is not None:
-        # Draw volcanoes sharply at pixel scale on the regional relief and sea floor.
-        sharp = edifice_height(points, planet_m, parent.volcanoes).reshape(pixels, pixels)
-        floor_only = sea - parent.sample(
-            points, np.where(parent.land, 0.0, parent.volcanic_m)
-        ).reshape(pixels, pixels)
-        sea = sea_floor_with_volcanoes(
-            points, planet_m, parent.volcanoes, floor_only.ravel()
-        ).reshape(pixels, pixels)
-        elevation = np.where(land, elevation + sharp, elevation)
-        # Opt-in volcanic islands rise from the sea floor beyond the authored coast.
-        islands = inside & ~land & (sea > 0)
-        land = land | islands
-        # Lava and ash cover summits. An island's cone rises from the sea floor,
-        # so its summit share is its height above the sea, not above that floor.
-        above = np.where(islands, sea, sharp)
-        volcanic = np.where(land, np.clip((above - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
-    else:
-        islands = np.zeros((pixels, pixels), dtype=bool)
-    wonders = parent.wonders
-    floors = parent.crater_floor_m
-    if floors is not None and np.any(floors != 0):
-        # Tiles carry the ground without wonders (ADR-0097): level crater floors
-        # as the planet did before drawing the craters on top.
-        elevation = np.where(
-            land, elevation + parent.sample(points, floors).reshape(pixels, pixels), elevation
-        )
-    if wonders is not None and len(wonders):
-        elevation = np.where(
-            land,
-            elevation + wonder_relief(points, planet_m, wonders, finest).reshape(pixels, pixels),
-            elevation,
-        )
-    elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
-    elevation = np.where(islands, sea, elevation)
-    elevation = np.where(inside, elevation, np.nan)
-    climate = regional_climate(parent, points, elevation, land)
     pixel_m = 2 * radius_m / pixels
+    finest = window_finest_m(spacing_m, pixel_m)
+    coast = coastline(parent.world)
+    ground = window_relief(parent, grid, tiles, relief, coast, points, inside, finest)
+    elevation, land, islands = ground.elevation, ground.land, ground.islands
+    climate = regional_climate(parent, points, elevation, land)
 
     def on_land(row: F64, column: F64) -> B:
         sub = inverse_aeqd(column * pixel_m - radius_m, radius_m - row * pixel_m, *centre, planet_m)
@@ -373,44 +267,22 @@ def _compose(
         return own | coast.contains(sub, finest, parent.settings.seed)
 
     # The share of land in each pixel, so coasts are drawn anti-aliased.
-    land_cover = edge_coverage(drawn | islands, on_land)
+    land_cover = edge_coverage(ground.drawn | islands, on_land)
     ice_surface, ice_balance = window_ice(parent, points, elevation, land, pixel_m, spacing_m)
-    flow = window_flow(parent, centre, points, elevation, land, inside, pixel_m, river_km2)
-    # Lakes fill the regional relief up to the parent lake level, so shores
-    # follow the fine terrain (and a crater's sharp trough) instead of the
-    # coarse parent mesh.
-    cover, level, closed = parent.lakes_at(points, level_finest_m(spacing_m))
-    lakes = lake_water(
-        flow.z, land & inside, flow.filled,
-        cover.reshape(pixels, pixels) > LAKE_CORE_COVER, level.reshape(pixels, pixels),
+    hydrology = window_hydrology(
+        parent, grid, tiles, relief, coast, centre, radius_m, pad * radius_m, pixel_m,
+        river_km2, spacing_m,
     )
-    salt = lakes & closed.reshape(pixels, pixels)
-    # Hollows of the tiles' blend are filled plains; only the relief drawn on
-    # top of the tiles holds ponds (``drawn_hollows``).
-    tiles_z = np.where(land, np.maximum(blended, 1.0), flow.z)
-    flow, basin_depth = lake_flow(flow, lakes, salt, level.reshape(pixels, pixels), tiles_z)
-    # Deep hollows (crater troughs, chasm floors, calderas) hold water or a
-    # playa, and rivers end there; rivers cross the others on a filled flat.
-    ponds, spills = window_ponds(flow, basin_depth, land & inside & ~lakes, climate)
-    depth = np.where(ponds, basin_depth, 0.0)
-    coverage = window_rivers(flow, lakes | ponds, river_km2)
-    # Closed ponds hold lakes where it is wet enough and playas where it is dry.
-    dry = np.zeros_like(ponds)
-    if climate is not None:
-        dry = (
-            climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < POND_LAKE_ARIDITY
-        )
-    # A wet or overflowing basin fills to its spill level; a dry closed one
-    # keeps only an ephemeral lake bed in its lowest part, flat and bright (a
-    # playa or salar).
-    closed = ponds & ~spills
-    playa = closed & dry & playa_beds(closed, depth)
-    lakes = lakes | (ponds & (spills | ~dry))
-    salt = salt | (closed & ~dry)
+    network = hydrology.network
+    coverage = draw_river_lines(
+        network.lines, network.links, river_widths(network.discharge, pixel_m, pixels),
+        (pixels, pixels),
+    )
+    lakes, salt, playa = hydrology.drawn.at(points, elevation, land)
     cover = (
         None
-        if wonders is None
-        or (found := wonder_cover(points, planet_m, wonders, finest)) is None
+        if parent.wonders is None
+        or (found := wonder_cover(points, planet_m, parent.wonders, finest)) is None
         else found.reshape((pixels, pixels))
     )
     if cover is not None:
@@ -436,7 +308,7 @@ def _compose(
         tuple(sorted(tiles)),
         planet_m,
         parent.settings.climate.lapse_c_per_km,
-        volcanic,
+        ground.volcanic,
         lakes,
         salt,
         (
@@ -459,6 +331,244 @@ def _compose(
         ice_surface,
         ice_balance,
     )
+
+
+@dataclass(frozen=True)
+class WindowRelief:
+    """The relief of a window's cells: the tiles' blend and what the window draws on it."""
+
+    elevation: F64  # NaN outside the window
+    blended: F64  # the tiles' blend alone (0 outside)
+    land: B  # land inside the window, volcanic islands included
+    drawn: B  # the authored land
+    islands: B  # volcanic islands beyond the authored coast
+    volcanic: F64  # 0..1 cover of young volcanic edifices near summits
+
+
+def window_relief(
+    parent: RegionalParent,
+    grid: TileGrid,
+    tiles: dict[int, TileSurface],
+    relief: ReliefWarp,
+    coast: Coastline,
+    points: F64,
+    inside: B,
+    finest_m: float,
+) -> WindowRelief:
+    """The tiles' blend at ``points`` (cells shaped like ``inside``), with volcanoes,
+    crater floors and wonders drawn on it and the sea floor around it."""
+    shape = inside.shape
+    planet_m = parent.mesh.radius_m
+    drawn = coast.contains(points, finest_m, parent.settings.seed).reshape(shape)
+    land = drawn & inside
+    floor = parent.sea_floor_m
+    if floor is None:
+        floor = np.where(parent.land, 0.0, -2000.0)
+    sea = parent.sample(points, floor).reshape(shape)
+    blended = np.zeros(inside.size)
+    blended[inside.ravel()] = blend(grid, tiles, relief(points[inside.ravel()], planet_m))
+    elevation = blended = blended.reshape(shape)
+    volcanic = np.zeros(shape)
+    if parent.volcanoes is not None and parent.volcanic_m is not None:
+        # Draw volcanoes sharply at pixel scale on the regional relief and sea floor.
+        sharp = edifice_height(points, planet_m, parent.volcanoes).reshape(shape)
+        floor_only = sea - parent.sample(
+            points, np.where(parent.land, 0.0, parent.volcanic_m)
+        ).reshape(shape)
+        sea = sea_floor_with_volcanoes(
+            points, planet_m, parent.volcanoes, floor_only.ravel()
+        ).reshape(shape)
+        elevation = np.where(land, elevation + sharp, elevation)
+        # Opt-in volcanic islands rise from the sea floor beyond the authored coast.
+        islands = inside & ~land & (sea > 0)
+        land = land | islands
+        # Lava and ash cover summits. An island's cone rises from the sea floor,
+        # so its summit share is its height above the sea, not above that floor.
+        above = np.where(islands, sea, sharp)
+        volcanic = np.where(land, np.clip((above - 300.0) / 2200.0, 0.0, 1.0) ** 2, 0.0)
+    else:
+        islands = np.zeros(shape, dtype=bool)
+    wonders = parent.wonders
+    floors = parent.crater_floor_m
+    if floors is not None and np.any(floors != 0):
+        # Tiles carry the ground without wonders (ADR-0097): level crater floors
+        # as the planet did before drawing the craters on top.
+        elevation = np.where(
+            land, elevation + parent.sample(points, floors).reshape(shape), elevation
+        )
+    if wonders is not None and len(wonders):
+        elevation = np.where(
+            land,
+            elevation + wonder_relief(points, planet_m, wonders, finest_m).reshape(shape),
+            elevation,
+        )
+    elevation = np.where(land, np.maximum(elevation, 1.0), np.minimum(sea, -5.0))
+    elevation = np.where(islands, sea, elevation)
+    elevation = np.where(inside, elevation, np.nan)
+    return WindowRelief(elevation, blended, land, drawn, islands, volcanic)
+
+
+@dataclass(frozen=True)
+class WindowWaters:
+    """Drainage, lakes and ponds on a window's cells."""
+
+    flow: WindowFlow  # routed through open lakes, ending in closed ones
+    lakes: B  # parent lakes standing on the relief
+    salt: B  # closed parent lakes
+    ponds: B  # hollows of the drawn relief that hold water or a playa
+    spills: B  # ponds that overflow
+    depth: F64  # how far ground lies below its hollow's spill level
+    level: F64  # the parent's lake level at each cell
+
+
+def window_waters(
+    parent: RegionalParent,
+    centre: tuple[float, float],
+    reach_m: float,
+    cells: GridCells,
+    ground: WindowRelief,
+    inside: B,
+    river_km2: float,
+    spacing_m: float,
+    climate: PixelClimate | None,
+) -> WindowWaters:
+    """Drainage, lakes and ponds on ``cells`` within ``reach_m`` of ``centre`` (``inside``)."""
+    land = ground.land
+    flow = window_flow(parent, centre, reach_m, cells, ground.elevation, land, inside, river_km2)
+    # Lakes fill the regional relief up to the parent lake level, so shores
+    # follow the fine terrain (and a crater's sharp trough) instead of the
+    # coarse parent mesh.
+    cover, level, closed = parent.lakes_at(cells.xyz, level_finest_m(spacing_m))
+    lakes = lake_water(cells, flow.z, land & inside, flow.filled, cover > LAKE_CORE_COVER, level)
+    salt = lakes & closed
+    # Hollows of the tiles' blend are filled plains; only the relief drawn on
+    # top of the tiles holds ponds (``drawn_hollows``).
+    tiles_z = np.where(land, np.maximum(ground.blended, 1.0), flow.z)
+    flow, depth = lake_flow(flow, lakes, salt, level, tiles_z)
+    # Deep hollows (crater troughs, chasm floors, calderas) hold water or a
+    # playa, and rivers end there; rivers cross the others on a filled flat.
+    ponds, spills = window_ponds(flow, depth, land & inside & ~lakes, climate)
+    return WindowWaters(flow, lakes, salt, ponds, spills, depth, level)
+
+
+@dataclass(frozen=True)
+class WaterCells:
+    """Cells under standing water or a playa bed, and how high each holds it."""
+
+    cells: GridCells
+    lake: B  # lakes: parent lakes, and ponds that overflow or are wet enough
+    salt: B  # lake cells of closed salt lakes
+    playa: B  # dry closed basins' ephemeral lake beds
+    top_m: F64  # at lake and playa cells: ground up to this height is water or bed
+
+    def at(self, points: F64, elevation: F64, ground: B) -> tuple[B, B, B]:
+        """Lakes, salt lakes and playas at ``points`` (shaped like ``ground``).
+
+        A point is water, or a playa bed, where the nearest wet cell lies within
+        a cell spacing and the point's ground is no higher than that cell's top,
+        so shores follow the points' own relief.
+        """
+        shape = ground.shape
+        wet = np.flatnonzero(self.lake | self.playa)
+        found = [np.zeros(shape, dtype=bool) for _ in range(3)]
+        at = np.flatnonzero(ground.ravel())
+        if not len(wet) or not len(at):
+            return found[0], found[1], found[2]
+        chord, near = KDTree(self.cells.xyz[wet]).query(points[at], workers=-1)
+        cell = wet[np.asarray(near, dtype=np.intp)]
+        held = (np.asarray(chord) * self.cells.planet_m <= self.cells.cell_m) & (
+            elevation.ravel()[at] <= self.top_m[cell]
+        )
+        for out, kind in zip(found, (self.lake, self.salt, self.playa), strict=True):
+            out.ravel()[at[held & kind[cell]]] = True
+        return found[0], found[1], found[2]
+
+
+@dataclass(frozen=True)
+class WindowHydrology:
+    """A window's waters on the world's cells, and its rivers as lines in its pixels."""
+
+    cells: GridCells
+    waters: WindowWaters
+    network: RiverNetwork  # lines in the window's pixel units
+    drawn: WaterCells  # the cells whose water the window draws
+
+
+def window_hydrology(
+    parent: RegionalParent,
+    grid: TileGrid,
+    tiles: dict[int, TileSurface],
+    relief: ReliefWarp,
+    coast: Coastline,
+    centre: tuple[float, float],
+    radius_m: float,
+    reach_m: float,
+    pixel_m: float,
+    river_km2: float,
+    spacing_m: float,
+) -> WindowHydrology:
+    """Rivers, lakes and ponds within ``reach_m`` of ``centre``, on cells fixed to the sphere.
+
+    A window's own pixels lie where its centre puts them, and steepest descent
+    across gentle ground follows the cells it runs on: windows routed on their
+    own pixels put 1-8 % of their river pixels apart. The cells here belong to
+    the planet (``WorldGrid``, the size of the ladder nearest the window's
+    pixels), so windows that share a cell size work out the same drainage,
+    lakes and ponds wherever they overlap, and bends are fixed to the cells'
+    marks (``river_network``). Rivers come back as lines in the window's pixels
+    (``radius_m`` and ``pixel_m``), lakes as cells the window draws from.
+    """
+    planet_m = parent.mesh.radius_m
+    world = WorldGrid.for_pixels(
+        pixel_m, planet_m, stage_seed(parent.settings.seed, ROUTE_GRID_STAGE)
+    )
+    middle = inverse_aeqd(np.zeros(1), np.zeros(1), *centre, planet_m)[0]
+    # A ring of cells beyond the reach holds the routing rim's walls.
+    cells = world.disc(middle, reach_m + WALL_CELLS * world.cell_m)
+    inside = cells.xyz @ middle >= np.cos(reach_m / planet_m)
+    ground = window_relief(
+        parent, grid, tiles, relief, coast, cells.xyz, inside,
+        window_finest_m(spacing_m, world.cell_m),
+    )
+    climate = None
+    if ground.land.any():
+        # Only hollows need the climate, to tell which overflow; the rest stays 0.
+        at = ground.land
+        found = regional_climate(parent, cells.xyz[at], ground.elevation[at], at[at])
+        if found is not None:
+            precipitation, pet = np.zeros(cells.size), np.zeros(cells.size)
+            precipitation[at], pet[at] = found.precipitation_mm, found.pet_mm
+            unused = np.zeros(cells.size)
+            climate = PixelClimate(unused, unused, precipitation, pet)
+    waters = window_waters(
+        parent, centre, reach_m, cells, ground, inside, river_km2, spacing_m, climate
+    )
+    flow, depth = waters.flow, waters.depth
+    # Closed ponds hold lakes where it is wet enough and playas where it is dry.
+    # A wet or overflowing basin fills to its spill level; a dry closed one
+    # keeps only an ephemeral lake bed in its lowest part, flat and bright (a
+    # playa or salar).
+    dry = np.zeros(cells.size, dtype=bool)
+    if climate is not None:
+        dry = climate.precipitation_mm / np.maximum(climate.pet_mm, 1.0) < POND_LAKE_ARIDITY
+    spill = flow.z + depth
+    closed = waters.ponds & ~waters.spills
+    floor = playa_floor(cells, closed, depth)
+    playa = closed & dry & (depth >= floor)
+    lake = waters.lakes | (waters.ponds & (waters.spills | ~dry))
+    salt = waters.salt | (closed & ~dry)
+    top = np.full(cells.size, -np.inf)
+    top[waters.lakes] = waters.level[waters.lakes] + LAKE_SHORE_M
+    held = waters.ponds & lake
+    top[held] = spill[held] - POND_DEPTH_M
+    top[playa] = spill[playa] - np.maximum(floor[playa], POND_DEPTH_M)
+    x, y = forward_aeqd(cells.xyz, *centre, planet_m).T
+    marks = cell_marks(cells.rank, parent.settings.seed + RIVER_MARK_SEED)
+    network = river_network(
+        flow, waters.lakes | waters.ponds, river_km2,
+        np.stack(((x + radius_m) / pixel_m, (radius_m - y) / pixel_m), axis=1), pixel_m, marks,
+    )
+    return WindowHydrology(cells, waters, network, WaterCells(cells, lake, salt, playa, top))
 
 
 def window_ice(
@@ -505,7 +615,7 @@ def _wide_blur(values: F64, sigma: float) -> F64:
 def window_ponds(
     flow: WindowFlow, depth: F64, ground: B, climate: PixelClimate | None
 ) -> tuple[B, B]:
-    """Pixels of closed hollows that hold water or a playa, and those that overflow.
+    """Cells of closed hollows that hold water or a playa, and those that overflow.
 
     ``depth`` is how far ``ground`` lies below its hollow's spill level. Each
     hollow gathers the runoff and sediment of its catchment, the drainage area
@@ -513,26 +623,23 @@ def window_ponds(
     spill level evaporates (open-water PET less precipitation), so its river
     runs on. An overflowing hollow that the river's sediment fills within
     HOLLOW_AGE_YR is a plain the river crosses, not a lake, such as a shallow
-    crater on a big river's course. Pixels deeper than POND_DEPTH_M in the
+    crater on a big river's course. Cells deeper than POND_DEPTH_M in the
     remaining hollows hold water or a playa: crater troughs, chasm floors and
     calderas, deep for their catchments. ``depth`` measures only hollows drawn
     on the tiles (``drawn_hollows``).
     """
-    found = cast(tuple[NDArray[np.int32], int], label(ground & (depth > 0)))
-    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    labels, count = flow.cells.label(ground & (depth > 0))
     ponds = ground & (depth > POND_DEPTH_M)
     if not count:
         return ponds, np.zeros_like(ponds)
     ids = np.arange(1, count + 1)
-    cell_m2 = flow.pixel_m**2
-    volume = np.asarray(sum_labels(depth, labels, ids), dtype=np.float64) * cell_m2
-    catchment = np.asarray(
-        maximum(flow.area_m2.reshape(labels.shape), labels, ids), dtype=np.float64
-    )
+    cell_m2 = flow.cells.area_m2
+    volume = np.asarray(sum_labels(depth * cell_m2, labels, ids), dtype=np.float64)
+    catchment = np.asarray(maximum(flow.area_m2, labels, ids), dtype=np.float64)
     evaporation = np.zeros(count)
     if climate is not None:
         net_m = np.maximum(climate.pet_mm - climate.precipitation_mm, 0.0) / 1000
-        evaporation = np.asarray(sum_labels(net_m, labels, ids), dtype=np.float64) * cell_m2
+        evaporation = np.asarray(sum_labels(net_m * cell_m2, labels, ids), dtype=np.float64)
     spills = np.zeros(count + 1, dtype=bool)
     spills[1:] = catchment * MEAN_RUNOFF_M_YR > evaporation
     alluvial = np.zeros(count + 1, dtype=bool)
@@ -541,120 +648,125 @@ def window_ponds(
     return ponds, ponds & spills[labels]
 
 
-def playa_beds(ponds: B, depth: F64) -> B:
-    """The lowest part of each closed basin, where an ephemeral lake bed lies."""
-    found = cast(tuple[NDArray[np.int32], int], label(ponds))
-    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+def playa_floor(cells: GridCells, ponds: B, depth: F64) -> F64:
+    """How deep in each closed basin its ephemeral lake bed starts (inf off the basins).
+
+    The bed is the lowest part of the basin: PLAYA_SHARE of its depth, within
+    PLAYA_MIN_M to PLAYA_MAX_M, above its deepest point.
+    """
+    floor = np.full(cells.size, np.inf)
+    labels, count = cells.label(ponds)
     if not count:
-        return np.zeros_like(ponds)
+        return floor
     deepest = np.zeros(count + 1)
     deepest[1:] = np.asarray(maximum(depth, labels, np.arange(1, count + 1)), dtype=np.float64)
     bed = np.clip(PLAYA_SHARE * deepest, PLAYA_MIN_M, PLAYA_MAX_M)
-    return ponds & (depth >= deepest[labels] - bed[labels])
+    floor[ponds] = (deepest - bed)[labels[ponds]]
+    return floor
 
 
 @dataclass(frozen=True)
 class WindowFlow:
-    """Drainage routed on a window's blended relief."""
+    """Drainage routed on a window's cells."""
 
-    z: F64  # routed relief: elevation inside the window, 0 outside
-    outlet: B  # sea and the area outside the window
-    receiver: NDArray[np.int64]  # flat indices, -1 at outlets
-    area_m2: F64  # drainage area, with the water entering from beyond the window
+    cells: GridCells
+    z: F64  # routed relief: elevation within the routing reach, walls beyond it
+    outlet: B  # sea and the cells beyond the reach
+    receiver: NDArray[np.int64]  # cell indices, -1 at outlets
+    area_m2: F64  # drainage area, with the water entering from beyond the reach
     filled: F64  # relief with closed depressions filled to their spill level
-    links: tuple[tuple[int, int], ...]  # splitting rivers: (split pixel, branch pixel)
-    inflow_m2: F64  # drainage area entering at each pixel from beyond the window
-    pixel_m: float
+    links: tuple[tuple[int, int], ...]  # splitting rivers: (split cell, branch cell)
+    inflow_m2: F64  # drainage area entering at each cell from beyond the reach
 
     @classmethod
     def route(
         cls,
+        cells: GridCells,
         z: F64,
         outlet: B,
-        pixel_m: float,
         inflow_m2: F64,
         links: tuple[tuple[int, int], ...] = (),
     ) -> WindowFlow:
-        receiver, area, filled = grid_flow(z, outlet, pixel_m, inflow_m2)
-        return cls(z, outlet, receiver, area, filled, links, inflow_m2, pixel_m)
+        receiver, area, filled = graph_flow(
+            cells.ptr, cells.nbr, cells.step_m, cells.rank, cells.area_m2, z, outlet, inflow_m2
+        )
+        return cls(cells, z, outlet, receiver, area, filled, links, inflow_m2)
 
     def rerouted(self, z: F64, outlet: B) -> WindowFlow:
         """The same water routed over other relief and outlets."""
-        return WindowFlow.route(z, outlet, self.pixel_m, self.inflow_m2, self.links)
+        return WindowFlow.route(self.cells, z, outlet, self.inflow_m2, self.links)
 
 
 def window_flow(
     parent: RegionalParent,
     centre: tuple[float, float],
-    points: F64,
+    reach_m: float,
+    cells: GridCells,
     elevation: F64,
     land: B,
     inside: B,
-    pixel_m: float,
     river_km2: float,
 ) -> WindowFlow:
-    """One drainage network over the whole window, with no seams between tiles.
+    """One drainage network over ``cells`` within ``reach_m`` of ``centre`` (``inside``).
 
-    Parent rivers that cross into the window bring their upstream area in near
-    where they cross (``river_crossings``, ``entry_pixels``). Beyond the window
-    circle the ground is a wall at the highest neighbouring height inside, so a
-    rim pixel drains along the window's relief: water leaves only where a valley
-    reaches the rim, and a river entering on the rim flows in. Ground at the sea
-    floor or at zero beyond the rim drained every rim pixel straight out,
+    Parent rivers that cross into that circle bring their upstream area in
+    near where they cross (``river_crossings``, ``entry_cells``). Beyond the
+    circle the ground is a wall at the highest neighbouring height inside, so
+    a rim cell drains along the relief: water leaves only where a valley
+    reaches the rim, and a river entering on the rim flows in. Ground at the
+    sea floor or at zero beyond the rim drained every rim cell straight out,
     inherited rivers included. Where a river of ``river_km2`` or more flows in,
     no water leaves (``entry_walls``).
     """
-    pixels = elevation.shape[0]
+    planet_m = parent.mesh.radius_m
     ground = np.where(inside, np.nan_to_num(elevation, nan=0.0), -np.inf)
-    wall = np.asarray(maximum_filter(ground, size=3), dtype=np.float64)
+    wall = cells.neighbour_max(ground)
     z = np.where(inside, ground, np.where(np.isfinite(wall), wall, 0.0))
     outlet = ~inside | ~land
-    inflow = np.zeros(pixels * pixels)
-    rows, columns, area = river_crossings(parent, centre, pixel_m * pixels / 2, pixel_m)
+    inflow = np.zeros(cells.size)
+    entries, area = river_crossings(parent, centre, reach_m)
     if len(area):
-        spread = max(parent.mesh.spacing_m / pixel_m, 2.0)
+        spread_m = max(parent.mesh.spacing_m, 2 * cells.cell_m)
+        entry_xyz = inverse_aeqd(entries[:, 0], entries[:, 1], *centre, planet_m)
+        exits, out_area = river_crossings(parent, centre, reach_m, outward=True)
+        exit_xyz = inverse_aeqd(exits[:, 0], exits[:, 1], *centre, planet_m)
         big = area >= river_km2 * 1e6
-        out_rows, out_columns, out_area = river_crossings(
-            parent, centre, pixel_m * pixels / 2, pixel_m, outward=True
-        )
         leave = out_area >= river_km2 * 1e6
-        walls = entry_walls(
-            (rows[big], columns[big]), (out_rows[leave], out_columns[leave]), inside, spread
-        )
+        walls = entry_walls(cells, entry_xyz[big], exit_xyz[leave], inside, spread_m)
         z = np.where(walls, float(ground.max()) + ENTRY_WALL_M, z)
-        dry = WindowFlow.route(z, outlet, pixel_m, np.zeros((pixels, pixels)))
-        reach = downstream_steps(dry.receiver).reshape(pixels, pixels)
-        target = entry_pixels(rows, columns, reach, inside & land, spread)
+        dry = WindowFlow.route(cells, z, outlet, np.zeros(cells.size))
+        target = entry_cells(
+            cells, entry_xyz, downstream_steps(dry.receiver), inside & land, spread_m
+        )
         entered = target >= 0
         np.add.at(inflow, target[entered], area[entered])
-    inflow = inflow.reshape(pixels, pixels)
     # A splitting river's branch starts with its share of the river's water.
     links: list[tuple[int, int]] = []
     forks = None if parent.wonders is None else parent.wonders.forks
     if forks is not None and len(forks):
+        tree = KDTree(cells.xyz)
         for a, b, carried in zip(forks.split_xyz, forks.branch_xyz, forks.area_m2, strict=True):
-            ends = [int(np.argmax(points @ end)) for end in (a, b)]
-            if all(points[k] @ end > np.cos(pixel_m / parent.mesh.radius_m)
-                   for k, end in zip(ends, (a, b), strict=True)):
-                inflow.ravel()[ends[1]] += carried
-                links.append((ends[0], ends[1]))
-    return WindowFlow.route(z, outlet, pixel_m, inflow, tuple(links))
+            (gap_a, at_a), (gap_b, at_b) = tree.query(a), tree.query(b)
+            if max(float(gap_a), float(gap_b)) * planet_m <= cells.cell_m:
+                inflow[int(at_b)] += carried
+                links.append((int(at_a), int(at_b)))
+    return WindowFlow.route(cells, z, outlet, inflow, tuple(links))
 
 
 def river_crossings(
     parent: RegionalParent,
     centre: tuple[float, float],
     radius_m: float,
-    pixel_m: float,
     *,
     outward: bool = False,
-) -> tuple[F64, F64, F64]:
+) -> tuple[F64, F64]:
     """Where parent rivers cross into a window's routing circle, and their area.
 
     Every parent river step that crosses into the circle of ``radius_m`` about
-    ``centre`` gives its crossing (pixel row and column, fractional) and its
-    upstream area, so each inherited river enters once and nothing enters where
-    rivers leave. With ``outward``, the steps that cross out of the circle.
+    ``centre`` gives its crossing (in metres in the centre's azimuthal
+    equidistant plane) and its upstream area, so each inherited river enters
+    once and nothing enters where rivers leave. With ``outward``, the steps
+    that cross out of the circle.
     """
     mesh = parent.mesh
     planet_m = mesh.radius_m
@@ -679,45 +791,35 @@ def river_crossings(
     t = (-b + sign * np.sqrt(np.maximum(root, 0.0))) / np.maximum(a, 1e-9)
     crosses = (root >= 0) & (t >= 0) & (t <= 1)
     crossing = start[crosses] + t[crosses, None] * step[crosses]
-    row = (radius_m - crossing[:, 1]) / pixel_m
-    column = (crossing[:, 0] + radius_m) / pixel_m
-    return row, column, parent.area_m2[nodes[crosses]]
+    return crossing, parent.area_m2[nodes[crosses]]
 
 
 def entry_walls(
-    entries: tuple[F64, F64], exits: tuple[F64, F64], inside: B, spread_px: float
+    cells: GridCells, entries: F64, exits: F64, inside: B, spread_m: float
 ) -> B:
-    """Ground beyond the rim near where parent rivers cross in, not where they leave.
+    """Cells beyond the rim near where parent rivers cross in, not where they leave.
 
-    ``entries`` and ``exits`` are crossings (pixel rows and columns). A parent
-    river flows in at an entry, so beyond the rim lies its valley upstream,
-    rising away from the window. Water does not leave there: a hollow that a
-    river enters fills and spills onward, not back out past the river's entry.
-    Tile blending can leave the window's relief a few metres off the parent's
-    within one parent spacing (``spread_px``) of where it puts the river; a rim
+    ``entries`` and ``exits`` are crossings (unit vectors). A parent river flows
+    in at an entry, so beyond the rim lies its valley upstream, rising away
+    from the window. Water does not leave there: a hollow that a river enters
+    fills and spills onward, not back out past the river's entry. Tile
+    blending can leave the window's relief a few metres off the parent's
+    within one parent spacing (``spread_m``) of where it puts the river; a rim
     draining there sent a province window's 160,000 km2 river straight back
     out. The rim stays open nearer an exit than an entry, so a river crossing a
     window smaller than the parent's spacing still leaves where it should.
     """
-    entering = rim_distance(entries, inside.shape)
-    if entering is None:
+    if not len(entries):
         return np.zeros_like(inside)
-    leaving = rim_distance(exits, inside.shape)
-    nearer = np.ones_like(inside) if leaving is None else entering < leaving
-    return ~inside & (entering <= spread_px) & nearer
+    entering = nearest_distance(cells, entries)
+    leaving = nearest_distance(cells, exits) if len(exits) else np.full(cells.size, np.inf)
+    return ~inside & (entering <= spread_m) & (entering < leaving)
 
 
-def rim_distance(crossings: tuple[F64, F64], shape: tuple[int, ...]) -> F64 | None:
-    """Distance in pixels from the nearest of ``crossings`` (None without any)."""
-    rows, columns = crossings
-    if not len(rows):
-        return None
-    marks = np.ones(shape, dtype=bool)
-    marks[
-        np.clip(np.floor(rows).astype(np.intp), 0, shape[0] - 1),
-        np.clip(np.floor(columns).astype(np.intp), 0, shape[1] - 1),
-    ] = False
-    return np.asarray(distance_transform_edt(marks), dtype=np.float64)
+def nearest_distance(cells: GridCells, points: F64) -> F64:
+    """Distance (metres) from each cell's node to the nearest of ``points``."""
+    chord = np.asarray(KDTree(points).query(cells.xyz, workers=-1)[0], dtype=np.float64)
+    return 2 * cells.planet_m * np.arcsin(np.minimum(chord / 2, 1.0))
 
 
 def downstream_steps(receiver: NDArray[np.int64]) -> NDArray[np.int64]:
@@ -731,46 +833,44 @@ def downstream_steps(receiver: NDArray[np.int64]) -> NDArray[np.int64]:
     return steps
 
 
-def entry_pixels(
-    rows: F64, columns: F64, reach: NDArray[np.int64], ground: B, spread_px: float
+def entry_cells(
+    cells: GridCells, entries: F64, reach: NDArray[np.int64], ground: B, spread_m: float
 ) -> NDArray[np.intp]:
-    """Flat pixels where inherited rivers enter a window (-1: they reach its sea).
+    """Cells where inherited rivers enter a window (-1: they reach its sea).
 
-    A parent places its rivers only to within its spacing (``spread_px``), and
+    A parent places its rivers only to within its spacing (``spread_m``), and
     the window's finer relief can put the valley a little to one side. A river
     enters at its crossing if the window's water runs inward from there for at
-    least ``spread_px`` steps (``reach``). Otherwise it enters at the nearest
-    ``ground`` pixel within ``spread_px`` where the water does, or failing that
-    where it runs furthest, so it joins the window's own valley instead of
-    leaving down a side valley at once. With no ground that near, the river has
-    reached the sea.
+    least ``spread_m`` (``reach``, in steps of about a cell). Otherwise it
+    enters at the nearest ``ground`` cell within ``spread_m`` where the water
+    does, or failing that where it runs furthest, so it joins the window's own
+    valley instead of leaving down a side valley at once. With no ground that
+    near, the river has reached the sea.
     """
-    size = ground.shape[0]
-    radius = int(np.ceil(spread_px))
-    targets = np.full(len(rows), -1, dtype=np.intp)
-    for k, (row, column) in enumerate(zip(rows, columns, strict=True)):
-        r0, c0 = int(np.floor(row)), int(np.floor(column))
-        top, left = max(r0 - radius, 0), max(c0 - radius, 0)
-        bottom, right = min(r0 + radius + 1, size), min(c0 + radius + 1, size)
-        if top >= bottom or left >= right:
+    targets = np.full(len(entries), -1, dtype=np.intp)
+    if not len(entries):
+        return targets
+    steps = spread_m / cells.cell_m
+    tree = KDTree(cells.xyz)
+    chord = 2 * np.sin(spread_m / cells.planet_m / 2)
+    for k, point in enumerate(entries):
+        near = np.asarray(tree.query_ball_point(point, chord), dtype=np.intp)
+        near = near[ground[near]]
+        if not len(near):
             continue
-        r, c = np.mgrid[top:bottom, left:right]
-        gap = (r + 0.5 - row) ** 2 + (c + 0.5 - column) ** 2
-        near = ground[top:bottom, left:right] & (gap <= spread_px**2)
-        if not near.any():
-            continue
-        runs = reach[top:bottom, left:right]
-        inward = near & (runs >= spread_px)
+        gap = np.linalg.norm(cells.xyz[near] - point, axis=1)
+        runs = reach[near]
+        inward = runs >= steps
         best = (
             np.argmin(np.where(inward, gap, np.inf))
             if inward.any()
-            else np.argmax(np.where(near, runs, -1))
+            else np.lexsort((gap, -runs))[0]
         )
-        targets[k] = int(r.ravel()[best]) * size + int(c.ravel()[best])
+        targets[k] = int(near[best])
     return targets
 
 
-def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
+def lake_water(cells: GridCells, z: F64, land: B, filled: F64, core: B, level: F64) -> B:
     """Parent lakes as water standing on the regional relief at the lake level.
 
     Water covers ground up to ``level`` (plus LAKE_SHORE_M) that is connected to
@@ -780,8 +880,7 @@ def lake_water(z: F64, land: B, filled: F64, core: B, level: F64) -> B:
     cover, which is linear, so straight, inside each parent triangle.
     """
     wet = land & (z <= level + LAKE_SHORE_M) & (filled >= level - LAKE_SHORE_M)
-    found = cast(tuple[NDArray[np.int32], int], label(wet))
-    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    labels, count = cells.label(wet)
     keep = np.zeros(count + 1, dtype=bool)
     keep[labels[wet & core]] = True
     keep[0] = False
@@ -804,15 +903,15 @@ def lake_flow(
     (``lake_outflows``).
     """
     sinks = flow.outlet | lakes
-    depth = drawn_hollows(flow.z, sinks, flow.pixel_m, tiles)
+    depth = drawn_hollows(flow.cells, flow.z, sinks, tiles)
     if not lakes.any():
         return flow, depth
-    inward, _, _ = grid_flow(flow.z, sinks, flow.pixel_m, np.zeros_like(flow.z))
+    inward = WindowFlow.route(flow.cells, flow.z, sinks, np.zeros(flow.cells.size)).receiver
     routed = lake_outflows(flow, inward, lakes & ~closed, level)
     return flow.rerouted(routed, flow.outlet | (lakes & closed)), depth
 
 
-def drawn_hollows(z: F64, sinks: B, pixel_m: float, tiles: F64 | None) -> F64:
+def drawn_hollows(cells: GridCells, z: F64, sinks: B, tiles: F64 | None) -> F64:
     """How far ground lies below where its hollow spills, in hollows drawn on the tiles.
 
     Every tile fills its depressions as it erodes, so a hollow in the tiles'
@@ -825,16 +924,20 @@ def drawn_hollows(z: F64, sinks: B, pixel_m: float, tiles: F64 | None) -> F64:
     their depth is measured over the tiles' blend with its hollows filled.
     ``tiles`` is ``z`` without that relief (None: ``z`` is all drawn).
     """
-    no_inflow = np.zeros_like(z)
+    no_inflow = np.zeros(cells.size)
+
+    def filled(surface: F64) -> F64:
+        return WindowFlow.route(cells, surface, sinks, no_inflow).filled
+
     if tiles is not None:
-        z = z + grid_flow(tiles, sinks, pixel_m, no_inflow)[2] - tiles
-    return grid_flow(z, sinks, pixel_m, no_inflow)[2] - z
+        z = z + filled(tiles) - tiles
+    return filled(z) - z
 
 
 def lake_outflows(flow: WindowFlow, inward: NDArray[np.int64], lakes: B, level: F64) -> F64:
     """Routed relief with each lake's outflow lowered to the lake's level.
 
-    A lake's routed path out, from its last-filled pixel, may cross the filled
+    A lake's routed path out, from its last-filled cell, may cross the filled
     basin to a pour point above the lake's level, where the tiles do not hold
     the parent's outflow. Drainage would then cross that flat towards the pour
     point instead of entering the lake. The outflow is lowered to the level
@@ -844,16 +947,17 @@ def lake_outflows(flow: WindowFlow, inward: NDArray[np.int64], lakes: B, level: 
     shore. The basin then drains into the lake and the lake out over the pour
     point. Only routing uses this relief.
     """
-    found = cast(tuple[NDArray[np.int32], int], label(lakes))
-    labels, count = np.asarray(found[0], dtype=np.int64), int(found[1])
+    ids, count = flow.cells.label(lakes)
     if not count:
         return flow.z
-    relief, filled, outlet = flow.z.ravel(), flow.filled.ravel(), flow.outlet.ravel()
-    z, ids, columns = relief.copy(), labels.ravel(), flow.z.shape[1]
-    starts = minimum_position(flow.filled, labels, np.arange(1, count + 1))
-    for lake, (row, column) in enumerate(cast(list[tuple[int, int]], starts), start=1):
-        start = row * columns + column
-        top = float(level.ravel()[start])
+    relief, filled, outlet = flow.z, flow.filled, flow.outlet
+    z = relief.copy()
+    # Each lake's lowest filled cell, ties to the lower rank.
+    held = np.flatnonzero(ids)
+    held = held[np.lexsort((flow.cells.rank[held], filled[held], ids[held]))]
+    starts = held[np.r_[True, np.diff(ids[held]) != 0]]
+    for lake, start in enumerate(starts.tolist(), start=1):
+        top = float(level[start])
         path: list[int] = []
         node = int(flow.receiver[start])
         while node >= 0 and not outlet[node] and filled[node] > top + LAKE_SHORE_M:
@@ -871,35 +975,74 @@ def lake_outflows(flow: WindowFlow, inward: NDArray[np.int64], lakes: B, level: 
         # Where the floor does not lead back to this lake, keep the routed path.
         channel = path[crest:] + (floor if node >= 0 else path[:crest])
         z[channel] = np.minimum(z[channel], top)
-    return z.reshape(flow.z.shape)
+    return z
 
 
-def window_rivers(flow: WindowFlow, water: B, river_km2: float) -> F64:
-    """River coverage on the window's drainage; rivers end in ``water``."""
-    z, receiver, area, pixel_m = flow.z, flow.receiver, flow.area_m2, flow.pixel_m
-    pixels = z.shape[0]
-    flat = np.arange(pixels * pixels)
-    x = (flat % pixels + 0.5).astype(np.float64)
-    y = (flat // pixels + 0.5).astype(np.float64)
-    stop = (flow.outlet | water).ravel()
+@dataclass(frozen=True)
+class RiverNetwork:
+    """River lines on a flow's cells, in the drawing's pixel units."""
+
+    lines: list[RiverLine]
+    links: list[tuple[F64, F64, int]]  # splitting rivers' branches (start, end, end cell)
+    discharge: F64  # m^3/s at each cell
+
+
+def river_network(
+    flow: WindowFlow,
+    water: B,
+    river_km2: float,
+    xy_px: F64,
+    pixel_m: float,
+    marks: F64 | None = None,
+) -> RiverNetwork:
+    """The rivers of ``flow`` drawn as lines; rivers end in ``water``.
+
+    ``xy_px`` places each cell in the drawing, whose pixels are ``pixel_m``
+    across. ``marks`` (0..1 per cell) fix their bends to the place
+    (``meander``); without them bends follow the cells' indices.
+    """
+    z, receiver, area = flow.z, flow.receiver, flow.area_m2
+    stop = flow.outlet | water
     major = ~stop & (receiver >= 0) & (area >= river_km2 * 1e6)
     # Hydraulic geometry: channel width ~4.8 sqrt(Q) m (Leopold and Maddock
     # 1953), meander wavelength ~11 widths; rivers meander on gentle ground.
     discharge = area * MEAN_RUNOFF_M_YR / 3.156e7
-    channel_px = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(discharge) / pixel_m
-    wavelength = 11 * channel_px
-    # A river is drawn at least as wide as its channel. Narrower ones get a
-    # visible width tapered by discharge against a fixed reference, not against
-    # the largest river in the window, so other rivers do not change it.
-    shown = (0.4 + 1.6 * np.sqrt(np.clip(discharge / RIVER_DISPLAY_Q_M3_S, 0, 1))) * pixels / 1100
-    width_px = np.maximum(channel_px, shown)
+    wavelength = 11 * CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(discharge) / pixel_m
+    xyz = flow.cells.xyz
     target = np.maximum(receiver, 0)
-    drop = z.ravel() - z.ravel()[target]
-    run = np.hypot(flat % pixels - target % pixels, flat // pixels - target // pixels) * pixel_m
+    drop = z - z[target]
+    chord = np.linalg.norm(xyz - xyz[target], axis=1)
+    run = 2 * flow.cells.planet_m * np.arcsin(np.minimum(chord / 2, 1.0))
     gentle = 1 - np.clip((drop / np.maximum(run, 1.0) - 0.0005) / 0.0025, 0, 1)
-    return river_coverage(
-        x, y, receiver, area, major, stop, (pixels, pixels), width_px,
-        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), links=flow.links,
+    lines, links = river_lines(
+        xy_px[:, 0], xy_px[:, 1], receiver, area, major, stop,
+        meander_px=np.where(gentle > 0.3, wavelength * gentle, 0.0), meander_scale_px=wavelength,
+        marks=marks, links=flow.links, rank=flow.cells.rank,
+    )
+    return RiverNetwork(lines, links, discharge)
+
+
+def river_widths(discharge: F64, pixel_m: float, pixels: int) -> F64:
+    """Drawn river widths (pixels) on an image of ``pixels`` pixels of ``pixel_m``.
+
+    A river is drawn at least as wide as its channel. Narrower ones get a
+    visible width tapered by discharge against a fixed reference, not against
+    the largest river in the window, so other rivers do not change it.
+    """
+    channel_px = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(discharge) / pixel_m
+    shown = (0.4 + 1.6 * np.sqrt(np.clip(discharge / RIVER_DISPLAY_Q_M3_S, 0, 1))) * pixels / 1100
+    return np.maximum(channel_px, shown)
+
+
+def window_rivers(flow: WindowFlow, water: B, river_km2: float, shape: tuple[int, int]) -> F64:
+    """River coverage of a flow on raster cells (``GridCells.raster``) of ``shape``."""
+    columns = shape[1]
+    flat = np.arange(flow.cells.size)
+    xy = np.stack((flat % columns + 0.5, flat // columns + 0.5), axis=1).astype(np.float64)
+    network = river_network(flow, water, river_km2, xy, flow.cells.cell_m)
+    return draw_river_lines(
+        network.lines, network.links,
+        river_widths(network.discharge, flow.cells.cell_m, shape[0]), shape,
     )
 
 

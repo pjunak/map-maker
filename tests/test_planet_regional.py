@@ -13,6 +13,7 @@ from map_maker.terrain.application.world import open_world
 from map_maker.terrain.domain.planet import PlanetSettings, RegionalSettings
 from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
 from map_maker.terrain.pipeline.planet_evolution import EvolutionRun
+from map_maker.terrain.pipeline.planet_grid import GridCells
 from map_maker.terrain.pipeline.planet_metrics import non_descending_receivers
 from map_maker.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
 from map_maker.terrain.pipeline.planet_regional import RegionalParent, enrich, parent_channels
@@ -31,6 +32,20 @@ def parent(tmp_path_factory: pytest.TempPathFactory) -> PlanetResult:
     world = open_world(build_world(WorldSpec(seed=7, columns=512), folder, "w"))
     settings = PlanetSettings(nodes=20_000, duration_myr=6.0, step_kyr=250.0, climate_passes=0)
     return generate_planet(world, settings)
+
+
+def _route(z: np.ndarray, outlet: np.ndarray, cell_m: float, inflow: np.ndarray) -> WindowFlow:
+    """A window flow over a raster's pixels (eight neighbours each), flat like a window's cells."""
+    cells = GridCells.raster(z.shape, cell_m)
+    return WindowFlow.route(cells, z.ravel(), outlet.ravel(), inflow.ravel())
+
+
+def _grid_flow(
+    z: np.ndarray, outlet: np.ndarray, cell_m: float, inflow: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Receivers, drainage area and the filled surface (shaped like ``z``) of a raster."""
+    flow = _route(z, outlet, cell_m, inflow)
+    return flow.receiver, flow.area_m2, flow.filled.reshape(z.shape)
 
 
 def _land_centre(parent: PlanetResult) -> tuple[float, float]:
@@ -552,7 +567,6 @@ def test_regional_rivers_are_as_wide_as_their_channels() -> None:
     from map_maker.terrain.adapters.planet_region import (
         CHANNEL_WIDTH_PER_ROOT_Q,
         MEAN_RUNOFF_M_YR,
-        WindowFlow,
         window_rivers,
     )
 
@@ -567,8 +581,8 @@ def test_regional_rivers_are_as_wide_as_their_channels() -> None:
         inflow[0, 60] = area
         if bigger:
             inflow[0, 150] = 30 * area
-        flow = WindowFlow.route(z, rows == n - 1, pixel_m, inflow)
-        cover = window_rivers(flow, np.zeros((n, n), dtype=bool), 2_000.0)
+        flow = _route(z, rows == n - 1, pixel_m, inflow)
+        cover = window_rivers(flow, np.zeros(n * n, dtype=bool), 2_000.0, (n, n))
         return float(cover[n // 2, 20:85].sum())
 
     channel_m = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEAN_RUNOFF_M_YR / 3.156e7)
@@ -601,7 +615,7 @@ def _winding_valley() -> tuple[WindowFlow, float, float, list[int]]:
     inflow = np.zeros((n, n))
     start = round(axis[0, 0])
     inflow[0, start] = area
-    flow = WindowFlow.route(z, rows == n - 1, pixel_m, inflow)
+    flow = _route(z, rows == n - 1, pixel_m, inflow)
     width = CHANNEL_WIDTH_PER_ROOT_Q * np.sqrt(area * MEAN_RUNOFF_M_YR / 3.156e7) / pixel_m
     valley = float(np.hypot(1.0, np.diff(axis[:, 0])).sum())
     node, chain = start, [start]
@@ -616,11 +630,12 @@ def test_meanders_follow_the_valley_without_crossing_themselves() -> None:
 
     from map_maker.terrain.adapters.planet_natural import meander
 
-    flow, width, valley, chain = _winding_valley()
-    n = flow.z.shape[0]
+    _, width, valley, chain = _winding_valley()
+    n = 400
     steps = np.stack((np.array(chain) % n + 0.5, np.array(chain) // n + 0.5), axis=1)
     wavelength = 11 * width
-    wound = meander(steps, np.full(len(steps), wavelength), 3)
+    marks = np.random.default_rng(3).random(len(steps))
+    wound = meander(steps, np.full(len(steps), wavelength), marks)
     assert np.allclose(wound[0], steps[0]) and np.allclose(wound[-1], steps[-1])
     along = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(wound, axis=0).T))))
     # No two stretches of channel more than three widths apart along the river
@@ -640,8 +655,8 @@ def test_wide_regional_rivers_draw_one_channel_as_wide_as_itself() -> None:
     from map_maker.terrain.adapters.planet_region import window_rivers
 
     flow, width, valley, _ = _winding_valley()
-    n = flow.z.shape[0]
-    cover = window_rivers(flow, np.zeros((n, n), dtype=bool), 2_000.0)
+    n = 400
+    cover = window_rivers(flow, np.zeros(n * n, dtype=bool), 2_000.0, (n, n))
     drawn = cover > 0.5
     # One channel, nowhere much wider than itself: tangled bends merged into
     # blobs many widths across.
@@ -685,7 +700,8 @@ def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
     from map_maker.terrain.adapters.planet_natural import meander
 
     path = np.stack((np.linspace(0, 400, 50), np.full(50, 100.0)), axis=1)
-    wound = meander(path, np.full(50, 40.0), 3, np.array([0.5]))
+    marks = np.random.default_rng(3).random(50)
+    wound = meander(path, np.full(50, 40.0), marks, anchors=np.array([25]))
     assert np.allclose(wound[0], path[0]) and np.allclose(wound[-1], path[-1], atol=1.5)
     middle = int(0.5 * len(wound))
     assert abs(wound[middle, 1] - 100.0) < 6.0  # pinned at the junction
@@ -693,9 +709,7 @@ def test_meanders_keep_river_ends_and_wind_the_middle() -> None:
     assert 1.15 < length / 400 < 3.0  # sinuosity of a meandering river
 
 
-def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
-    from map_maker.terrain.pipeline.planet_detail import grid_flow
-
+def test_graph_flow_drains_every_cell_and_counts_inflow() -> None:
     rows = columns = 30
     _, x = np.mgrid[0:rows, 0:columns]
     z = 10.0 * x + np.random.default_rng(4).random((rows, columns))
@@ -703,7 +717,7 @@ def test_grid_flow_drains_every_cell_and_counts_inflow() -> None:
     outlet[:, 0] = True
     inflow = np.zeros((rows, columns))
     inflow[15, -1] = 1e9
-    receiver, area, filled = grid_flow(z, outlet, 100.0, inflow)
+    receiver, area, filled = _grid_flow(z, outlet, 100.0, inflow)
     assert np.all(filled >= z - 1e-9)
     land = ~outlet.ravel()
     assert np.all(receiver[land] >= 0)
@@ -733,8 +747,6 @@ def test_grid_routing_follows_the_ground_through_filled_hollows() -> None:
     """
     from scipy.ndimage import gaussian_filter
 
-    from map_maker.terrain.pipeline.planet_detail import grid_flow
-
     n, cell = 96, 500.0
     rng = np.random.default_rng(5)
     y, x = np.mgrid[0:n, 0:n] - (n - 1) / 2
@@ -744,7 +756,7 @@ def test_grid_routing_follows_the_ground_through_filled_hollows() -> None:
     outlet = np.zeros((n, n), dtype=bool)
     outlet[[0, -1], :] = True
     outlet[:, [0, -1]] = True
-    receiver, area, filled = grid_flow(z, outlet, cell, np.zeros((n, n)))
+    receiver, area, filled = _grid_flow(z, outlet, cell, np.zeros((n, n)))
     land = ~outlet.ravel()
     assert np.mean((filled - z)[~outlet] > 0.01) > 0.5
     assert np.all(receiver[land] >= 0)
@@ -1190,13 +1202,18 @@ def test_colour_lapse_corrects_display_relief_about_its_own_mean() -> None:
 
 def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path: Path) -> None:
     from scipy.ndimage import binary_dilation
+    from scipy.spatial import KDTree
 
-    from map_maker.terrain.application.planet_region import region_window
+    from map_maker.terrain.adapters.planet_region import ROUTE_PAD, window_hydrology
+    from map_maker.terrain.application.planet_region import ensure_level_tiles, region_window
+    from map_maker.terrain.pipeline.planet_coast import coastline
     from map_maker.terrain.pipeline.planet_patch import forward_aeqd
 
     planet = RegionalParent.from_result(parent)
+    radius_m = parent.mesh.radius_m
     lon, lat = _land_centre(parent)
-    shifted = (lon + np.degrees(120e3 / (parent.mesh.radius_m * np.cos(np.radians(lat)))), lat)
+    shifted = (lon + np.degrees(120e3 / (radius_m * np.cos(np.radians(lat)))), lat)
+    pixel_m = 600e3 / 160
 
     def window(centre: tuple[float, float]) -> RegionWindow:
         return region_window(
@@ -1204,27 +1221,185 @@ def test_overlapping_windows_draw_the_same_rivers(parent: PlanetResult, tmp_path
             workers=1, river_km2=500.0,
         ).window
 
+    # The two windows route on the same cells of the sphere and trace the same lines.
+    relief = ReliefWarp.for_window(TINY_LEVELS, 1, planet.settings.seed)
+    reach_m = 300e3 * ROUTE_PAD
+
+    def lines(centre: tuple[float, float]) -> tuple[np.ndarray, np.ndarray, int]:
+        grid = TileGrid.for_planet(radius_m, TINY_LEVELS[0])
+        grid, tiles = ensure_level_tiles(
+            planet, "p" * 64, tmp_path, 1, grid.tiles_near(centre, reach_m + relief.reach_m),
+            TINY_LEVELS, workers=1,
+        )
+        hydrology = window_hydrology(
+            planet, grid, tiles, relief, coastline(planet.world), centre, 300e3, reach_m,
+            pixel_m, 500.0, 30e3,
+        )
+        drawn = np.vstack([line.path for line in hydrology.network.lines])
+        points = inverse_aeqd(
+            drawn[:, 0] * pixel_m - 300e3, 300e3 - drawn[:, 1] * pixel_m, *centre, radius_m
+        )
+        return points, hydrology.cells.rank, hydrology.cells.size
+
+    lines_a, ranks_a, _ = lines((lon, lat))
+    lines_b, ranks_b, _ = lines(shifted)
+    assert len(np.intersect1d(ranks_a, ranks_b)) > 0.3 * len(ranks_b)
+    middle = np.array([_unit(lon, lat), _unit(*shifted)])
+    both = np.all(np.arccos(np.clip(lines_b @ middle.T, -1, 1)) * radius_m < 0.98 * 300e3, axis=1)
+    assert both.sum() > 1000
+    # Each window bends its rivers in its own map plane, which differs from the
+    # other's by a few parts in 10,000 over these distances: a few metres.
+    assert KDTree(lines_a).query(lines_b[both])[0].max() * radius_m < 0.002 * pixel_m
+
+    # So do the drawn maps, but for anti-aliasing on their own pixels: each of B's
+    # river pixels lies within 1.5 pixels of A's ink. With rivers routed on each
+    # window's own pixels, 1-2 % of them lay further off.
     a, b = window((lon, lat)), window(shifted)
-    rivers_b = b.rivers > 0.5
-    # B's river pixels in A's grid, away from both windows' edges.
     x, y = forward_aeqd(b.points, *a.centre, a.planet_m).T
-    column = np.round((x + a.radius_m) / a.pixel_m - 0.5).astype(int)
-    row = np.round((a.radius_m - y) / a.pixel_m - 0.5).astype(int)
     xb, yb = forward_aeqd(b.points, *b.centre, b.planet_m).T
-    # Where they overlap near either window's edge, where routing used to start:
-    # unpadded routing agrees on about 92 % of river pixels here, padded about 94 %.
-    # One pair varies with the relief (82-100 % over six pairs, pooled 91 % with
-    # tiles v10 and v11 alike). With valleys winding below the mesh (v12) this
-    # pair agrees on 91.4 %; six pairs pool 89 % near the edges and 92 % inside
-    # (v11: 90 % and 88 %). With uplift corrections fitted along the drainage
-    # (v16) it agrees on 88.4 %, and six pairs pool 90.0 % and 92.6 % (v15:
-    # 93.1 % and 91.4 %).
     ra, rb = np.hypot(x, y) / a.radius_m, np.hypot(xb, yb) / b.radius_m
-    edge = (ra < 0.98) & (rb < 0.98) & ((ra > 0.75) | (rb > 0.75))
-    check = rivers_b.ravel() & edge
-    assert check.sum() > 20
-    near_a = binary_dilation(a.rivers > 0.5, iterations=2)
-    assert near_a[row[check], column[check]].mean() > 0.87
+    check = (b.rivers > 0.5).ravel() & (ra < 0.98) & (rb < 0.98)
+    assert check.sum() > 100
+    ink = np.argwhere(binary_dilation(a.rivers > 0.05))
+    centres = np.stack(((ink[:, 1] + 0.5) * a.pixel_m - a.radius_m,
+                        a.radius_m - (ink[:, 0] + 0.5) * a.pixel_m), axis=1)
+    gap = KDTree(centres).query(np.stack((x, y), axis=1)[check])[0]
+    assert np.all(gap <= 1.5 * a.pixel_m)
+
+
+def _unit(lon: float, lat: float) -> np.ndarray:
+    lo, la = np.radians(lon), np.radians(lat)
+    return np.array([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo), np.sin(la)])
+
+
+def test_routing_cells_belong_to_the_sphere_not_the_window() -> None:
+    from map_maker.terrain.pipeline.planet_grid import CELLS_PER_OCTAVE, WorldGrid, cell_size
+
+    planet_m = 6.0e6
+    # Cell sizes step by 2^(1/4): a window's pixels are within 9 % of its cells.
+    for pixel_m in (13.3, 66.7, 512.0, 700.0, 2667.0):
+        assert abs(np.log2(cell_size(pixel_m) / pixel_m)) <= 0.5 / CELLS_PER_OCTAVE + 1e-12
+    grid = WorldGrid.for_pixels(5000.0, planet_m, seed=3)
+    assert WorldGrid.for_pixels(5300.0, planet_m, seed=3) == grid
+    # Two discs about different centres, one across a cube corner, hold the same
+    # nodes where they overlap, joined to the same neighbours away from their rims.
+    corner = np.ones(3) / np.sqrt(3)
+    other = _unit(np.degrees(np.arctan2(corner[1], corner[0])) + 4.0, 33.0)
+    a, b = grid.disc(corner, 900e3), grid.disc(other, 700e3)
+    shared, ia, ib = np.intersect1d(a.rank, b.rank, return_indices=True)
+    assert len(shared) > 0.3 * b.size
+    np.testing.assert_array_equal(a.xyz[ia], b.xyz[ib])
+    np.testing.assert_array_equal(a.area_m2[ia], b.area_m2[ib])
+    away = (np.arccos(np.clip(a.xyz[ia] @ corner, -1, 1)) * planet_m < 900e3 - 4 * grid.cell_m) & (
+        np.arccos(np.clip(b.xyz[ib] @ other, -1, 1)) * planet_m < 700e3 - 4 * grid.cell_m
+    )
+    assert away.sum() > 1000
+
+    def neighbours(cells: GridCells, k: int) -> list[int]:
+        return sorted(cells.rank[cells.nbr[cells.ptr[k] : cells.ptr[k + 1]]].tolist())
+
+    pairs = zip(ia[away], ib[away], strict=True)
+    assert all(neighbours(a, i) == neighbours(b, j) for i, j in pairs)
+    # Every node lies in its own cell, cells tile the sphere, and nodes stay apart.
+    np.testing.assert_array_equal(grid.locate(a.xyz), a.rank)
+    whole = WorldGrid(64, planet_m, 3)
+    i, j = np.mgrid[0:64, 0:64]
+    assert 6 * whole.cell_area_m2(i.ravel(), j.ravel()).sum() == pytest.approx(
+        4 * np.pi * planet_m**2, rel=1e-12
+    )
+    owner = np.repeat(np.arange(a.size), np.diff(a.ptr))
+    nearest = np.full(a.size, np.inf)
+    np.minimum.at(nearest, owner, a.step_m)
+    assert nearest.min() > 0.15 * grid.cell_m
+    assert np.median(np.diff(a.ptr)) == 6
+
+
+def test_windows_draw_lakes_from_the_cells_with_their_own_shores() -> None:
+    from map_maker.terrain.adapters.planet_region import LAKE_SHORE_M, WaterCells, window_points
+    from map_maker.terrain.pipeline.planet_grid import WorldGrid
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+
+    planet_m, centre = 6.0e6, (30.0, -10.0)
+    cells = WorldGrid.for_pixels(500.0, planet_m, seed=2).disc(_unit(*centre), 40e3)
+
+    def bowl(xyz: np.ndarray) -> np.ndarray:
+        x, y = forward_aeqd(xyz, *centre, planet_m).T
+        return 100.0 + 0.004 * np.hypot(x - 3e3, y) + 1.0 * np.sin(x / 700.0)
+
+    top = 140.0 + LAKE_SHORE_M
+    z = bowl(cells.xyz)
+    lake = z <= top
+    water = WaterCells(
+        cells, lake, lake & (z < 120.0), np.zeros(cells.size, dtype=bool),
+        np.where(lake, top, -np.inf),
+    )
+    points, inside = window_points(*centre, 30e3, 120, planet_m)
+    ground = bowl(points).reshape(120, 120)
+    lakes, salt, playa = water.at(points, ground, inside)
+    # The lake stands where the cells hold it, up to its level on each pixel's
+    # own ground: away from the shore's own cells, the shore is the pixels'
+    # level contour.
+    clear = inside & (np.abs(ground - top) > 3.0)
+    np.testing.assert_array_equal(lakes[clear], (ground <= top)[clear])
+    assert not np.any(lakes & (ground > top))
+    assert lakes.sum() > 1000 and not playa.any()
+    assert salt.any() and not np.any(salt & ~lakes)
+
+
+def test_routing_cells_have_no_preferred_directions() -> None:
+    from map_maker.terrain.pipeline.planet_detail import graph_flow
+    from map_maker.terrain.pipeline.planet_grid import WorldGrid
+    from map_maker.terrain.pipeline.planet_patch import forward_aeqd
+
+    # Steepest descent on a pixel grid steps in eight directions, so a river on a
+    # plane tilted 30 degrees off a grid axis runs 15 degrees off its slope. On the
+    # sphere's jittered, triangulated cells it follows the slope in any direction.
+    planet_m = 6.0e6
+    cells = WorldGrid.for_pixels(1000.0, planet_m, seed=5).disc(_unit(10.0, 20.0), 200e3)
+    x, y = forward_aeqd(cells.xyz, 10.0, 20.0, planet_m).T
+    rim = np.hypot(x, y) > 195e3
+    rng = np.random.default_rng(1)
+    starts = rng.choice(np.flatnonzero(~rim & (np.hypot(x, y) < 60e3)), 200)
+    for azimuth in np.radians([0.0, 10.0, 22.5, 30.0, 45.0, 60.0, 80.0]):
+        z = -0.01 * (x * np.cos(azimuth) + y * np.sin(azimuth)) + 0.3 * rng.normal(size=cells.size)
+        receiver, _, _ = graph_flow(
+            cells.ptr, cells.nbr, cells.step_m, cells.rank, cells.area_m2, z, rim,
+            np.zeros(cells.size),
+        )
+        errors = []
+        for start in starts:
+            node = start
+            for _ in range(120):
+                if receiver[node] < 0:
+                    break
+                node = receiver[node]
+            heading = np.arctan2(y[node] - y[start], x[node] - x[start])
+            errors.append(abs(np.angle(np.exp(1j * (heading - azimuth)))))
+        assert np.degrees(np.median(errors)) < 3.0
+
+
+def test_meanders_belong_to_the_river_not_to_where_it_is_drawn_from() -> None:
+    from scipy.spatial import KDTree
+
+    from map_maker.terrain.adapters.planet_natural import meander
+
+    # A gently wandering river 2,000 pixels long with a 40-pixel meander wavelength.
+    t = np.arange(2001.0)
+    path = np.stack((t, 300.0 + 40.0 * np.sin(t / 150.0)), axis=1)
+    wavelength = np.full(len(t), 40.0)
+    marks = np.random.default_rng(11).random(len(t))
+    whole = meander(path, wavelength, marks)
+    # The same river drawn from its 600th node on, as a window whose routing
+    # starts there would draw it, winds through the same bends a few
+    # wavelengths past where it starts (the curves are only sampled at
+    # different points).
+    part = meander(path[600:], wavelength[600:], marks[600:])
+    along = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(part, axis=0).T))))
+    beyond = (along > 8 * 40.0) & (along < along[-1] - 2 * 40.0)
+    assert KDTree(whole).query(part[beyond])[0].max() < 0.25
+    # And they are real meanders.
+    length = np.hypot(*np.diff(whole, axis=0).T).sum()
+    assert length / np.hypot(*np.diff(path, axis=0).T).sum() > 1.15
 
 
 def test_inherited_rivers_cross_small_windows(parent: PlanetResult, tmp_path: Path) -> None:
@@ -1279,11 +1454,22 @@ def _longest_straight_run(shore: np.ndarray, band: float = 1.5, gap: float = 2.0
     return best
 
 
+def _lakes(
+    z: np.ndarray, land: np.ndarray, filled: np.ndarray, core: np.ndarray, level: float
+) -> np.ndarray:
+    """``lake_water`` on a raster of 500 m pixels, shaped like ``z``."""
+    from map_maker.terrain.adapters.planet_region import lake_water
+
+    cells = GridCells.raster(z.shape, 500.0)
+    return lake_water(
+        cells, z.ravel(), land.ravel(), filled.ravel(), core.ravel(), np.full(z.size, level)
+    ).reshape(z.shape)
+
+
 def test_lake_shores_follow_the_fine_relief_not_the_parent_mesh() -> None:
     from scipy.ndimage import binary_dilation, gaussian_filter
 
-    from map_maker.terrain.adapters.planet_region import LAKE_SHORE_M, lake_water
-    from map_maker.terrain.pipeline.planet_detail import grid_flow
+    from map_maker.terrain.adapters.planet_region import LAKE_SHORE_M
 
     n, edge, level = 200, 50.0, 500.0
     rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
@@ -1298,8 +1484,8 @@ def test_lake_shores_follow_the_fine_relief_not_the_parent_mesh() -> None:
     z = level + 4.0 * (np.hypot(rows, columns) - 0.92 * edge) + 25.0 * rough / rough.std()
     outlet = np.zeros((n, n), dtype=bool)
     outlet[[0, -1], :] = outlet[:, [0, -1]] = True
-    _, _, filled = grid_flow(z, outlet, 500.0, np.zeros((n, n)))
-    lakes = lake_water(z, ~outlet, filled, cover > 0.5, np.full((n, n), level))
+    _, _, filled = _grid_flow(z, outlet, 500.0, np.zeros((n, n)))
+    lakes = _lakes(z, ~outlet, filled, cover > 0.5, level)
     # Gating the lake by the parent's cover cut it along straight triangle edges
     # (0.85 edges long); the relief's own contour bends within a few pixels.
     gated = (cover > 0.15) & (z <= level + LAKE_SHORE_M)
@@ -1313,9 +1499,6 @@ def test_lake_shores_follow_the_fine_relief_not_the_parent_mesh() -> None:
 
 
 def test_open_lake_water_stops_at_its_outlet() -> None:
-    from map_maker.terrain.adapters.planet_region import lake_water
-    from map_maker.terrain.pipeline.planet_detail import grid_flow
-
     n, level = 120, 300.0
     rows, columns = np.mgrid[0:n, 0:n] + 0.5 - n / 2
     r = np.hypot(rows, columns)
@@ -1328,8 +1511,8 @@ def test_open_lake_water_stops_at_its_outlet() -> None:
     z[valley] = level - 2.0 * (columns[valley] - 25)
     outlet = np.zeros((n, n), dtype=bool)
     outlet[:, -1] = True
-    _, _, filled = grid_flow(z, outlet, 500.0, np.zeros((n, n)))
-    lakes = lake_water(z, ~outlet, filled, r < 10.0, np.full((n, n), level))
+    _, _, filled = _grid_flow(z, outlet, 500.0, np.zeros((n, n)))
+    lakes = _lakes(z, ~outlet, filled, r < 10.0, level)
     assert np.all(lakes[r < 25.0])
     assert np.all(lakes[hollow])  # low ground beside the lake fills to its level
     assert not np.any(lakes[valley & (columns > 28)])  # water does not run downstream
@@ -1340,9 +1523,7 @@ def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
 
     from map_maker.terrain.adapters.planet_region import (
         POND_DEPTH_M,
-        WindowFlow,
         lake_flow,
-        lake_water,
         window_rivers,
     )
 
@@ -1362,12 +1543,16 @@ def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
     # A river enters the bowl over its north rim, far from the pass.
     inflow = np.zeros((n, n))
     inflow[16, n // 2] = 2e9
-    flow = WindowFlow.route(z, outlet, pixel_m, inflow)
-    lakes = lake_water(z, ~outlet, flow.filled, r < 10.0, np.full((n, n), level))
+    flow = _route(z, outlet, pixel_m, inflow)
+    filled = flow.filled.reshape(n, n)
+    lakes = _lakes(z, ~outlet, filled, r < 10.0, level)
     assert np.all(lakes[r < 25.0]) and not np.any(lakes[(r > 27.0) & ~valley])
     shore = (r > 27.0) & (r < 33.0) & ~valley
-    assert np.all(flow.filled[shore] - z[shore] > POND_DEPTH_M)  # far below the basin's spill
-    routed, depth = lake_flow(flow, lakes, np.zeros((n, n), dtype=bool), np.full((n, n), level))
+    assert np.all(filled[shore] - z[shore] > POND_DEPTH_M)  # far below the basin's spill
+    routed, depth = lake_flow(
+        flow, lakes.ravel(), np.zeros(n * n, dtype=bool), np.full(n * n, level)
+    )
+    depth = depth.reshape(n, n)
     # The lake drains its basin: the ground between its shore and the spill
     # holds no pond (a pale playa ring in dry climates).
     ponds = ~outlet & ~lakes & (depth > POND_DEPTH_M)
@@ -1381,7 +1566,7 @@ def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
     # in one river from the shore along the valley floor, not across the bowl.
     exit_area = routed.area_m2.reshape(n, n)[n // 2 - 2 : n // 2 + 2, -2].max()
     assert exit_area > 2e9 + 0.9 * np.pi * 45.0**2 * pixel_m**2
-    coverage = window_rivers(routed, lakes | ponds, 500.0)
+    coverage = window_rivers(routed, (lakes | ponds).ravel(), 500.0, (n, n))
     drawn = (coverage > 0.3) & (r > 27.0) & (r < 44.0)
     north = (np.abs(columns) < 5) & (rows < 0)
     assert drawn[valley].any() and not np.any(drawn & ~north & (np.abs(rows) > 5))
@@ -1395,9 +1580,10 @@ def test_open_lakes_drain_their_window_basin_without_a_pond_ring() -> None:
 def test_a_river_fills_the_hollow_it_enters_instead_of_leaving_past_its_entry() -> None:
     from scipy.ndimage import maximum_filter
 
-    from map_maker.terrain.adapters.planet_region import ENTRY_WALL_M, WindowFlow, entry_walls
+    from map_maker.terrain.adapters.planet_region import ENTRY_WALL_M, entry_walls
 
     n, pixel_m = 120, 100.0
+    cells = GridCells.raster((n, n), pixel_m)
     rows, columns = np.mgrid[0:n, 0:n] + 0.5
     inside = np.hypot(rows - n / 2, columns - n / 2) <= n / 2 - 1
     # A valley falling west across the window. Blending left its reach by the
@@ -1414,7 +1600,7 @@ def test_a_river_fills_the_hollow_it_enters_instead_of_leaving_past_its_entry() 
     def exit_column(relief: np.ndarray) -> int:
         inflow = np.zeros((n, n))
         inflow[60, 118] = 1.6e11
-        flow = WindowFlow.route(relief, ~inside, pixel_m, inflow)
+        flow = _route(relief, ~inside, pixel_m, inflow)
         node = 60 * n + 118
         while flow.receiver[node] >= 0:
             node = int(flow.receiver[node])
@@ -1424,13 +1610,13 @@ def test_a_river_fills_the_hollow_it_enters_instead_of_leaving_past_its_entry() 
     # The parent's river crosses the rim at (60.5, 119.5) and leaves at
     # (60.5, 0.5). Within a parent spacing of its entry no water leaves, so it
     # fills the reach and spills over the sill.
-    entry, leaving = (np.array([60.5]), np.array([119.5])), (np.array([60.5]), np.array([0.5]))
-    walls = entry_walls(entry, leaving, inside, 3.0)
+    entry, leaving = cells.xyz[[60 * n + 119]], cells.xyz[[60 * n]]
+    walls = entry_walls(cells, entry, leaving, inside.ravel(), 3 * pixel_m).reshape(n, n)
     assert walls.any() and not np.any(walls & inside)
     assert exit_column(np.where(walls, ground.max() + ENTRY_WALL_M, z)) < 10
     # In a window smaller than the parent spacing the rim stays open nearer the
     # exit, where the parent's river leaves.
-    wide = entry_walls(entry, leaving, inside, 1000.0)
+    wide = entry_walls(cells, entry, leaving, inside.ravel(), 1000 * pixel_m).reshape(n, n)
     assert wide[:, n // 2 + 1 :].any() and not wide[:, : n // 2 - 1].any()
 
 
@@ -1438,7 +1624,6 @@ def test_big_rivers_cross_hollows_that_closed_basins_keep() -> None:
     from map_maker.terrain.adapters.planet_natural import PixelClimate
     from map_maker.terrain.adapters.planet_region import (
         POND_DEPTH_M,
-        WindowFlow,
         lake_flow,
         window_ponds,
         window_rivers,
@@ -1462,20 +1647,22 @@ def test_big_rivers_cross_hollows_that_closed_basins_keep() -> None:
     def ponds(inflow_m2: float, precipitation_mm: float, pet_mm: float):
         inflow = np.zeros(shape)
         inflow[110, -1] = inflow_m2
-        flow = WindowFlow.route(z, outlet, pixel_m, inflow)
-        flow, depth = lake_flow(flow, np.zeros(shape, dtype=bool), outlet, np.zeros(shape))
+        flow = _route(z, outlet, pixel_m, inflow)
+        flow, depth = lake_flow(flow, np.zeros(n * n, dtype=bool), outlet.ravel(), np.zeros(n * n))
+        depth = depth.reshape(shape)
         assert depth[hollow].min() > POND_DEPTH_M and depth[caldera].min() > POND_DEPTH_M
         climate = PixelClimate(
-            np.full(shape, 15.0), np.full(shape, 22.0), np.full(shape, precipitation_mm),
-            np.full(shape, pet_mm),
+            np.full(n * n, 15.0), np.full(n * n, 22.0), np.full(n * n, precipitation_mm),
+            np.full(n * n, pet_mm),
         )
-        return flow, *window_ponds(flow, depth, ~outlet, climate)
+        held, spills = window_ponds(flow, depth.ravel(), ~outlet.ravel(), climate)
+        return flow, held.reshape(shape), spills.reshape(shape)
 
     # A 160,000 km2 river brings far more water than the hollow evaporates and
     # fills it with sediment within the Holocene: it flows on across a plain.
     flow, held, spills = ponds(1.6e11, 200.0, 1500.0)
     assert not held[hollow].any()
-    coverage = window_rivers(flow, held, 2000.0)
+    coverage = window_rivers(flow, held.ravel(), 2000.0, shape)
     assert np.all(coverage[105:116, 70:91].max(axis=0) > 0.5)
     # The caldera drains only its crater, which evaporates more than it gathers
     # in a dry climate: a closed basin, a playa in the window.
@@ -1494,11 +1681,9 @@ def test_blended_tiles_close_no_ponds_where_they_drain_through_different_gorges(
     from map_maker.terrain.adapters.planet_natural import PixelClimate
     from map_maker.terrain.adapters.planet_region import (
         POND_DEPTH_M,
-        WindowFlow,
         lake_flow,
         window_ponds,
     )
-    from map_maker.terrain.pipeline.planet_detail import grid_flow
 
     n, pixel_m = 160, 500.0
     shape = (n, n)
@@ -1522,28 +1707,34 @@ def test_blended_tiles_close_no_ponds_where_they_drain_through_different_gorges(
     # their blend half fills each gorge with the other tile's range.
     first, second = tile(70.5, 100.0), tile(90.5, 105.0)
     for alone in (first, second):
-        assert np.max(grid_flow(alone, outlet, pixel_m, none)[2] - alone) < 0.1
+        assert np.max(_grid_flow(alone, outlet, pixel_m, none)[2] - alone) < 0.1
     weight = 0.75 - 0.5 * rows / n
     tiles = weight * first + (1 - weight) * second
-    filled = grid_flow(tiles, outlet, pixel_m, none)[2]
+    filled = _grid_flow(tiles, outlet, pixel_m, none)[2]
     assert np.sum(filled - tiles > POND_DEPTH_M) * pixel_m**2 > 4e9
     # A caldera drawn on the tiles, in a cone standing on that plain.
     r = np.hypot(rows - 80, columns - 45)
     z = tiles + np.where(r < 18, 90.0 - 5.0 * r, 0.0) - np.where(r < 6, 50 * (1 - (r / 6) ** 2), 0)
     climate = PixelClimate(
-        np.full(shape, 15.0), np.full(shape, 22.0), np.full(shape, 600.0), np.full(shape, 900.0)
+        np.full(n * n, 15.0), np.full(n * n, 22.0), np.full(n * n, 600.0), np.full(n * n, 900.0)
     )
-    dry = np.zeros(shape, dtype=bool)
-    flow = WindowFlow.route(z, outlet, pixel_m, none)
+    dry = np.zeros(n * n, dtype=bool)
+    flow = _route(z, outlet, pixel_m, none)
+
+    def held_ponds(tiles_z: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
+        _, depth = lake_flow(
+            flow, dry, dry, np.zeros(n * n), None if tiles_z is None else tiles_z.ravel()
+        )
+        held, _ = window_ponds(flow, depth, ~outlet.ravel(), climate)
+        return held.reshape(shape), depth.reshape(shape)
+
     # Measured on the relief as a whole, the blend's hollow holds a lake over
     # the plain, which its small catchment cannot fill with sediment.
-    _, depth = lake_flow(flow, dry, dry, none)
-    held, _ = window_ponds(flow, depth, ~outlet, climate)
+    held, depth = held_ponds(None)
     assert held[r > 18].sum() * pixel_m**2 > 4e9
     # Hollows of the tiles' blend are filled plains: only the caldera drawn on
     # top of the tiles holds a pond, as deep as it is.
-    _, depth = lake_flow(flow, dry, dry, none, tiles)
-    held, _ = window_ponds(flow, depth, ~outlet, climate)
+    held, depth = held_ponds(tiles)
     assert np.max(depth[r > 18]) < 0.1 and not held[r > 18].any()
     assert held[r < 3].all() and 19.0 < depth[r < 1].max() < 21.0
 
@@ -1641,7 +1832,6 @@ def test_relief_warp_winds_straight_tile_valleys_and_keeps_their_drainage() -> N
     from scipy.spatial import Delaunay
 
     from map_maker.terrain.domain.planet import REGION_LEVELS
-    from map_maker.terrain.pipeline.planet_detail import grid_flow
     from map_maker.terrain.pipeline.planet_mesh import mesh_from_triangles
 
     radius_m, lon, lat, spacing = 6.0e6, 20.0, 10.0, 5e3
@@ -1665,7 +1855,7 @@ def test_relief_warp_winds_straight_tile_valleys_and_keeps_their_drainage() -> N
 
     def route(at: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         z = tile.sample(at).reshape(pixels, pixels)
-        receiver, area, filled = grid_flow(z, outlet, pixel_m, np.zeros_like(z))
+        receiver, area, filled = _grid_flow(z, outlet, pixel_m, np.zeros_like(z))
         return z, receiver, area, filled
 
     straight, moved = route(points), route(warp(points, radius_m))

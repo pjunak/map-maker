@@ -140,3 +140,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0109: Fit regional uplift corrections to the relief uplift builds along the drainage](0109-fit-regional-uplift-corrections-along-the-drainage.md)
 - [ADR-0110: Save a turning globe as an animated WebP image](0110-spinning-globes-as-animated-webp.md)
 - [ADR-0111: Carry opened regional maps into globe models as lifted, pre-faded surfaces](0111-regional-maps-in-globe-models.md)
+- [ADR-0112: Work out regional waters on cells fixed to the sphere](0112-regional-waters-on-sphere-cells.md)

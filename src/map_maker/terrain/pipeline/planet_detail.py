@@ -240,6 +240,108 @@ def _route(
 
 
 @njit(cache=True)
+def _graph_route(
+    h: F64, fixed: B, ptr: I64, nbr: I64, step: F64, rank: I64, source: F64
+) -> tuple[F64, I64, F64]:
+    """``_route`` on any graph of cells: filled surface, receivers and accumulation.
+
+    Ties, in the flood and between equally steep neighbours, break by ``rank``
+    (lowest first, as a raster's row-major order does), so cells that two graphs
+    share and rank alike route alike whatever order the graphs list them in.
+    """
+    n = len(h)
+    filled = h.copy()
+    closed = fixed.copy()
+    parent = np.full(n, -1, np.int64)
+    parent_step = np.ones(n)
+    order = np.empty(n, np.int64)
+    count = 0
+    heap = [(0.0, 0.0, np.int64(0), np.int64(0))]
+    heap.pop()
+    for i in range(n):
+        if not fixed[i]:
+            continue
+        for k in range(ptr[i], ptr[i + 1]):
+            if not fixed[nbr[k]]:
+                heapq.heappush(heap, (h[i], h[i], rank[i], np.int64(i)))
+                break
+    while heap:
+        level, _, _, i = heapq.heappop(heap)
+        if not fixed[i]:
+            order[count] = i
+            count += 1
+        for k in range(ptr[i], ptr[i + 1]):
+            j = nbr[k]
+            if closed[j]:
+                continue
+            closed[j] = True
+            parent[j] = i
+            parent_step[j] = step[k]
+            if filled[j] < filled[i] + 1e-3:
+                filled[j] = filled[i] + 1e-3
+            heapq.heappush(heap, (max(h[j], level), h[j], rank[j], np.int64(j)))
+    receiver = np.full(n, -1, np.int64)
+    for idx in range(count):
+        i = order[idx]
+        if filled[i] > h[i]:
+            receiver[i] = parent[i]
+            continue
+        best = 0.0
+        for k in range(ptr[i], ptr[i + 1]):
+            j = nbr[k]
+            slope = (filled[i] - filled[j]) / step[k]
+            if slope > best or (slope == best and slope > 0 and rank[j] < rank[receiver[i]]):
+                best = slope
+                receiver[i] = j
+    area = source.copy()
+    for idx in range(count - 1, -1, -1):
+        i = order[idx]
+        j = receiver[i]
+        if j >= 0 and not fixed[j]:
+            area[j] += area[i]
+    return filled, receiver, area
+
+
+def grid_flow(
+    z: F64, outlet: B, cell_m: float, inflow_m2: F64
+) -> tuple[NDArray[np.int64], F64, F64]:
+    """Steepest-descent receivers (flat indices, -1 at outlets), drainage area (m^2)
+    and the filled surface of a raster.
+
+    Depressions are filled to their spill level first, so every cell drains to
+    an ``outlet``. ``inflow_m2`` adds area entering from beyond the grid.
+    """
+    rows, columns = z.shape
+    source = np.full(rows * columns, cell_m * cell_m) + np.ascontiguousarray(
+        inflow_m2, dtype=np.float64
+    ).ravel()
+    filled, _, _, receiver, _, area = _route(
+        np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet), float(cell_m),
+        np.full(rows, float(cell_m)), False, source,
+    )
+    return receiver, area, filled.reshape(rows, columns)
+
+
+def graph_flow(
+    ptr: I64, nbr: I64, step_m: F64, rank: I64, area_m2: F64, z: F64, outlet: B, inflow_m2: F64
+) -> tuple[NDArray[np.int64], F64, F64]:
+    """Steepest-descent drainage on a graph of cells (CSR neighbours ``ptr``/``nbr``).
+
+    Depressions are filled to their spill level first, so every cell drains to
+    an ``outlet`` (``_route``). Returns receivers (-1 at outlets), drainage
+    area (each cell's ``area_m2`` plus ``inflow_m2``, and everything upstream)
+    and the filled surface. ``step_m`` is the distance to each neighbour.
+    """
+    filled, receiver, area = _graph_route(
+        np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet),
+        np.ascontiguousarray(ptr), np.ascontiguousarray(nbr),
+        np.ascontiguousarray(step_m, dtype=np.float64), np.ascontiguousarray(rank),
+        np.ascontiguousarray(area_m2 + inflow_m2, dtype=np.float64),
+    )
+    return receiver, area, filled
+
+
+@njit(cache=True)
 def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int, wrap: bool) -> F64:
     rows, columns = h.shape
     cells = np.empty(rows * columns)
@@ -258,26 +360,6 @@ def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int,
             filled[ri, ci] = (filled[ri, ci] + f * filled[j // columns, j % columns]) / (1 + f)
         h = filled
     return h
-
-
-def grid_flow(
-    z: F64, outlet: B, cell_m: float, inflow_m2: F64
-) -> tuple[NDArray[np.int64], F64, F64]:
-    """Steepest-descent receivers (flat indices, -1 at outlets), drainage area (m^2)
-    and the filled surface.
-
-    Depressions are filled to their spill level first, so every cell drains to
-    an ``outlet``. ``inflow_m2`` adds area entering from beyond the grid.
-    """
-    rows, columns = z.shape
-    source = np.full(rows * columns, cell_m * cell_m) + np.ascontiguousarray(
-        inflow_m2, dtype=np.float64
-    ).ravel()
-    filled, _, _, receiver, _, area = _route(
-        np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet), float(cell_m),
-        np.full(rows, float(cell_m)), False, source,
-    )
-    return receiver, area, filled.reshape(rows, columns)
 
 
 def carve_valleys(

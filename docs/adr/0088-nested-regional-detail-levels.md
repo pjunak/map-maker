@@ -9,6 +9,9 @@
   is as warm as the planet at its height.
 - Refined by [ADR-0108](0108-calibrate-regional-relief-against-the-parent-smoothed-alike.md):
   every level keeps the height of the level above at that level's spacing.
+- Refined by [ADR-0112](0112-regional-waters-on-sphere-cells.md): rivers,
+  lakes and ponds are worked out on cells fixed to the sphere, not on each window's
+  pixels.
 
 ## Context
 

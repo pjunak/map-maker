@@ -8,6 +8,9 @@
   tiles are calibrated against the parent surface smoothed alike.
 - Refined by [ADR-0109](0109-fit-regional-uplift-corrections-along-the-drainage.md):
   the uplift correction is fitted to the relief uplift builds along the drainage.
+- Refined by [ADR-0112](0112-regional-waters-on-sphere-cells.md):
+  windows work out rivers, lakes and ponds on the tiles' blend over cells fixed to
+  the sphere.
 
 ## Context
 

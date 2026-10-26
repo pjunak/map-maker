@@ -40,16 +40,14 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Port the stable kernels to a native core.
   - [ ] Decide what replaces the local composed generator.
 - [ ] **M6 regional and local zoom:**
-  - [ ] Rivers exactly identical across windows (routing over a padded window
-    leaves only pixel-grid differences, about 4 % near edges).
   - [ ] Check drainage realism at fine levels: rock texture now follows each level's
     spacing and level-3 tiles branch; compare against reference terrain.
   - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
   - [ ] Sample basin depth, lakes and planet forcing at each level's `planet_points`,
     so basin fronts and lake shores stay put between levels (they shift by the
     relief warps' few kilometres).
-  - [ ] A minimum pond size, so pixel centres off winding valley floors leave no
-    one-pixel ponds ([nested levels](docs/research/2026-10-19-nested-regional-levels.md#open-after-3443ff2)).
+  - [ ] A minimum pond size, so cells that sample winding valley floors off their
+    floor leave no one-cell ponds ([nested levels](docs/research/2026-10-19-nested-regional-levels.md#open-after-3443ff2)).
 - [ ] **Map views (ADR-0087):** political and civilization views from authored
   overlays.
 
