@@ -125,7 +125,9 @@ The region opens in the same view, at about 5 km detail: ridges, valley networks
 altitude zones and rivers. From a region, **Zoom to province** builds 1 km detail
 (30–300 km radius); from a province, **Zoom to local** builds 200 m detail
 (6–60 km radius). Each level is enriched from the one above
-([ADR-0088](adr/0088-nested-regional-detail-levels.md)). A river entering a map
+([ADR-0088](adr/0088-nested-regional-detail-levels.md)), in overlapping pieces
+eroded on points fixed to the planet, so neighbouring pieces carve the same valleys
+([ADR-0113](adr/0113-regional-tiles-on-world-fixed-nodes.md)). A river entering a map
 from beyond its edge brings the drainage of the level above, so big rivers
 continue through every level. Rivers are drawn at least
 as wide as their channel, about 4.8 √Q metres for a discharge of Q m³/s, so a large

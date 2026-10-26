@@ -44,7 +44,8 @@ scientific engines; core contracts must not depend on those concrete libraries.
       globe_spin.py as a turning globe (ADR-0110)
    -> application/planet_region.py: fixed blended tiles enriched from the
       verified build without its wonders (pipeline/planet_regional.py,
-      planet_tiles.py), composed into
+      planet_tiles.py) on world-fixed nodes of the sphere (pipeline/planet_patch.py,
+      ADR-0113), composed into
       regional windows (adapters/planet_region.py, ADR-0086), whose rivers,
       lakes and ponds are worked out on world-fixed cells of the sphere
       (pipeline/planet_grid.py, ADR-0112) and drawn into their pixels; deeper

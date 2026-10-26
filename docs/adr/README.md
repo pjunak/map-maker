@@ -141,3 +141,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0110: Save a turning globe as an animated WebP image](0110-spinning-globes-as-animated-webp.md)
 - [ADR-0111: Carry opened regional maps into globe models as lifted, pre-faded surfaces](0111-regional-maps-in-globe-models.md)
 - [ADR-0112: Work out regional waters on cells fixed to the sphere](0112-regional-waters-on-sphere-cells.md)
+- [ADR-0113: Build regional tiles on world-fixed nodes](0113-regional-tiles-on-world-fixed-nodes.md)

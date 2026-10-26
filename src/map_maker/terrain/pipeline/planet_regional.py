@@ -52,6 +52,7 @@ from map_maker.terrain.pipeline.planet_forcing import (
     Forcing,
     land_smoother,
 )
+from map_maker.terrain.pipeline.planet_grid import cell_marks
 from map_maker.terrain.pipeline.planet_ice import (
     IceSheets,
     ice_sheet_nodes,
@@ -62,7 +63,12 @@ from map_maker.terrain.pipeline.planet_kernels import downstream_sum, priority_b
 from map_maker.terrain.pipeline.planet_lakes import refined_lake_cover
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, sample_field
 from map_maker.terrain.pipeline.planet_noise import fbm3
-from map_maker.terrain.pipeline.planet_patch import Region, forward_aeqd, inverse_aeqd
+from map_maker.terrain.pipeline.planet_patch import (
+    LATTICE_CELL,
+    Region,
+    forward_aeqd,
+    inverse_aeqd,
+)
 from map_maker.terrain.pipeline.planet_volcanism import Volcanoes
 from map_maker.terrain.pipeline.planet_wonders import Wonders
 from map_maker.terrain.pipeline.world import WorldMap
@@ -694,6 +700,8 @@ def enrich(
     seed: int,
     cancellation: CancellationToken | None = None,
 ) -> RegionalResult:
+    if region.cell is None:
+        raise ValueError("Regional detail is enriched on world-fixed nodes (world_patch).")
     mesh = region.mesh
     land = coastline(parent.world).contains(
         mesh.xyz, level_finest_m(region.spacing_m), parent.settings.seed
@@ -731,9 +739,12 @@ def enrich(
     drained = priority_breach(level, fixed, mesh.ptr, mesh.nbr, FILL_EPS_M)
     steady = np.maximum(smoothly(parent.steady_uplift), 0.0)
     pulse = np.maximum(smoothly(parent.pulse_uplift), 0.0)
+    # Rock texture and starting roughness belong to the level (``seed``) and the
+    # world-fixed nodes, not to the tile, so overlapping tiles start from the
+    # same ground.
+    texture_m = FINE_TEXTURE_SPACINGS * LATTICE_CELL * region.spacing_m
     erodibility = smoothly(parent.erodibility) * np.exp(
-        FINE_TEXTURE
-        * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / (FINE_TEXTURE_SPACINGS * mesh.spacing_m))
+        FINE_TEXTURE * fbm3(mesh.xyz, seed + 31, 4, mesh.radius_m / texture_m)
     )
     basin_depth = parent.basin_at(mesh.xyz, level_finest_m(region.spacing_m))
     floor, rough = None, 1.0
@@ -778,8 +789,7 @@ def enrich(
     # fell; the region's runoff where a river enters does not change it.
     inflow = parent_inflows(parent, region)
     settings = parent.settings
-    rng = np.random.default_rng(seed)
-    initial = np.maximum(drained, 1.0) + 5 * rough * rng.random(mesh.size)
+    initial = np.maximum(drained, 1.0) + 5 * rough * cell_marks(region.cell, seed)
     smoothing = parent.mesh.spacing_m
     process_area_m2 = process_area_km2 * 1e6
     interior = land & ~fixed

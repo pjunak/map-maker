@@ -259,6 +259,7 @@ class WorldGrid:
     cells_per_edge: int
     planet_m: float
     seed: int
+    jitter: float = NODE_JITTER  # how far a node may lie from its cell's centre (cells)
 
     @classmethod
     def for_pixels(cls, pixel_m: float, planet_m: float, seed: int) -> WorldGrid:
@@ -277,8 +278,8 @@ class WorldGrid:
         key = self.ids(face, i, j).astype(np.uint64) ^ np.uint64(
             (self.seed * 0x632BE59BD9B4E019 + self.cells_per_edge) % 2**64
         )
-        a = -pi / 4 + (i + 0.5 + NODE_JITTER * (2 * _uniform(key, 1) - 1)) * width
-        b = -pi / 4 + (j + 0.5 + NODE_JITTER * (2 * _uniform(key, 2) - 1)) * width
+        a = -pi / 4 + (i + 0.5 + self.jitter * (2 * _uniform(key, 1) - 1)) * width
+        b = -pi / 4 + (j + 0.5 + self.jitter * (2 * _uniform(key, 2) - 1)) * width
         return face_points(face, a, b)
 
     def ids(self, face: I64, i: I64, j: I64) -> I64:
@@ -305,17 +306,13 @@ class WorldGrid:
         j = np.clip(np.floor((b + pi / 4) / width), 0, n - 1).astype(np.int64)
         return self.ids(face, i, j)
 
-    def disc(self, centre: F64, radius_m: float) -> GridCells:
-        """The cells whose nodes lie within ``radius_m`` of ``centre``, triangulated."""
-        rho = radius_m / self.planet_m
+    def within(self, centre: F64, rho: float) -> tuple[I64, I64, I64, F64]:
+        """Face, row, column and node of the cells whose nodes lie within ``rho`` radians
+        of ``centre``."""
         if not 0 < rho <= MAX_DISC_RAD:
             raise ValueError(f"Grid discs need a radius up to {MAX_DISC_RAD} planet radii.")
         centre = centre / np.linalg.norm(centre)
-        e1 = np.cross([0.0, 0.0, 1.0], centre)
-        if np.linalg.norm(e1) < 1e-9:
-            e1 = np.array([1.0, 0.0, 0.0])
-        e1 /= np.linalg.norm(e1)
-        e2 = np.cross(centre, e1)
+        e1, e2 = _tangents(centre)
         n = self.cells_per_edge
         width = pi / 2 / n
         # The disc's rim, in each face's gnomonic plane, bounds the cells to try.
@@ -346,15 +343,15 @@ class WorldGrid:
         face_ids = np.concatenate(faces)
         i, j = np.concatenate(rows), np.concatenate(columns)
         xyz = self.nodes(face_ids, i, j)
-        within = xyz @ centre >= np.cos(rho)
-        face_ids, i, j, xyz = face_ids[within], i[within], j[within], xyz[within]
+        held = xyz @ centre >= np.cos(rho)
+        return face_ids[held], i[held], j[held], xyz[held]
+
+    def disc(self, centre: F64, radius_m: float) -> GridCells:
+        """The cells whose nodes lie within ``radius_m`` of ``centre``, triangulated."""
+        centre = centre / np.linalg.norm(centre)
+        face_ids, i, j, xyz = self.within(centre, radius_m / self.planet_m)
         ids = self.ids(face_ids, i, j)
-        # Stereographic plane about the centre: circles stay circles, so planar
-        # Delaunay there is the triangulation on the sphere. The plane's scale
-        # grows away from the centre, by under 10 % within MAX_DISC_RAD.
-        scale = 2 / (1 + xyz @ centre)
-        plane = np.stack((scale * (xyz @ e1), scale * (xyz @ e2)), axis=1)
-        triangles = delaunay(plane, 1.1 * self.cell_m / self.planet_m)
+        triangles = delaunay(stereographic(xyz, centre), 1.1 * self.cell_m / self.planet_m)
         src = triangles.ravel()
         dst = triangles[:, [1, 2, 0]].ravel()
         # Each interior edge is in two triangles: keep each pair once, both ways.
@@ -365,3 +362,24 @@ class WorldGrid:
         return GridCells.from_edges(
             xyz, ids, self.cell_area_m2(i, j), src, dst, self.planet_m, self.cell_m,
         )
+
+
+def _tangents(centre: F64) -> tuple[F64, F64]:
+    """Two unit vectors that span the tangent plane at ``centre`` (east and north)."""
+    e1 = np.cross([0.0, 0.0, 1.0], centre)
+    if np.linalg.norm(e1) < 1e-9:
+        e1 = np.array([1.0, 0.0, 0.0])
+    e1 /= np.linalg.norm(e1)
+    return e1, np.cross(centre, e1)
+
+
+def stereographic(xyz: F64, centre: F64) -> F64:
+    """Unit vectors in the stereographic plane about ``centre`` (unit radius).
+
+    The projection maps circles to circles, so planar Delaunay there is the
+    triangulation on the sphere. Its scale grows away from the centre, by under
+    10 % within MAX_DISC_RAD.
+    """
+    e1, e2 = _tangents(centre)
+    scale = 2 / (1 + xyz @ centre)
+    return np.stack((scale * (xyz @ e1), scale * (xyz @ e2)), axis=1)

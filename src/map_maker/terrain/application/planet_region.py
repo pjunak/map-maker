@@ -28,7 +28,6 @@ from map_maker.terrain.domain.planet import (
     REGION_LEVELS,
     RegionalSettings,
 )
-from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken, ProgressCallback, check_cancelled
 from map_maker.terrain.pipeline.planet_levels import level_parent, level_parent_radius
 from map_maker.terrain.pipeline.planet_regional import RegionalParent
@@ -94,10 +93,9 @@ class _LevelJob:
         )
         radius_m = self.planet.mesh.radius_m
         coarse = {t: self.coarse_store.load(t, radius_m) for t in needed}
-        seed = stage_seed(self.planet.settings.seed, f"planet.level-parent.l{self.level}.{tile}")
         return level_parent(
             self.planet, self.coarse_grid, coarse, centre, reach,
-            self.coarse_settings.spacing_km, seed, self.coarse_relief,
+            self.coarse_settings.spacing_km, self.coarse_relief,
         )
 
 
@@ -326,9 +324,7 @@ def region_window(
         if progress is not None:
             progress(0.91, "Preparing the coarser level")
         window_parent = level_parent(
-            parent, coarse_grid, coarse, centre, reach_m,
-            coarse_settings.spacing_km,
-            stage_seed(parent.settings.seed, f"planet.level-window.l{level}"),
+            parent, coarse_grid, coarse, centre, reach_m, coarse_settings.spacing_km,
             coarse_relief,
         )
     if progress is not None:

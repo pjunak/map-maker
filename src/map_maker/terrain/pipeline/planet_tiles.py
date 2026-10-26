@@ -23,7 +23,7 @@ from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken
 from map_maker.terrain.pipeline.planet_coast import level_finest_m, swirl
 from map_maker.terrain.pipeline.planet_mesh import SphereMesh, fibonacci_nodes, sample_field
-from map_maker.terrain.pipeline.planet_patch import regional_mesh
+from map_maker.terrain.pipeline.planet_patch import world_patch
 from map_maker.terrain.pipeline.planet_regional import (
     RegionalParent,
     RegionalResult,
@@ -96,8 +96,9 @@ class TileGrid:
         return tuple(sorted({int(t) for t in np.unique(ids[weights > 0])}))
 
 
-def tile_seed(master: int, tile: int, level: int = 1) -> int:
-    return stage_seed(master, f"{tile_stage_prefix(level)}{tile}")
+def level_seed(master: int, level: int = 1) -> int:
+    """The seed of a level's rock texture and starting roughness, shared by its tiles."""
+    return stage_seed(master, f"{tile_stage_prefix(level)}relief")
 
 
 def generate_tile(
@@ -110,14 +111,14 @@ def generate_tile(
     cancellation: CancellationToken | None = None,
 ) -> RegionalResult:
     lon, lat = grid.lonlat(tile)
-    seed = tile_seed(parent.settings.seed, tile, level)
-    region = regional_mesh(
+    region = world_patch(
         lon, lat, (grid.support_m + grid.halo_m) / 1e3, settings.spacing_km,
-        parent.mesh.radius_m, seed,
+        parent.mesh.radius_m, parent.settings.seed,
     )
     return enrich(
         parent, region, process_area_km2=settings.process_area_km2,
-        iterations=settings.calibration_iterations, seed=seed, cancellation=cancellation,
+        iterations=settings.calibration_iterations, seed=level_seed(parent.settings.seed, level),
+        cancellation=cancellation,
     )
 
 

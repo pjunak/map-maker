@@ -15,7 +15,7 @@ from map_maker.terrain.pipeline.planet import PlanetResult, generate_planet
 from map_maker.terrain.pipeline.planet_evolution import EvolutionRun
 from map_maker.terrain.pipeline.planet_grid import GridCells
 from map_maker.terrain.pipeline.planet_metrics import non_descending_receivers
-from map_maker.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh
+from map_maker.terrain.pipeline.planet_patch import inverse_aeqd, regional_mesh, world_patch
 from map_maker.terrain.pipeline.planet_regional import RegionalParent, enrich, parent_channels
 from map_maker.terrain.pipeline.planet_tiles import (
     ReliefWarp,
@@ -66,7 +66,7 @@ def test_inverse_aeqd_preserves_distance_from_the_centre() -> None:
 
 def test_regional_relief_matches_its_parent_at_parent_scale(parent: PlanetResult) -> None:
     lon, lat = _land_centre(parent)
-    region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
+    region = world_patch(lon, lat, 600, 20, parent.mesh.radius_m, 1)
     assert region.boundary.sum() > 50 and np.all(np.hypot(*region.plane_m.T) <= 600e3 + 1)
     # Multi-scale parent forcing starts the coarse (20k-node) fixture further from
     # its parent; it converges 75 -> 34 -> 17 -> 11 -> 8 m (a per-node secant
@@ -113,7 +113,7 @@ def test_regional_relief_keeps_the_parent_height_on_its_peaks(parent: PlanetResu
     x, y = forward_aeqd(parent.mesh.xyz, lon, lat, parent.mesh.radius_m).T
     bumps = np.cos(np.pi * x / (2 * spacing)) * np.cos(np.pi * y / (2 * spacing))
     peaked = replace(source, surface_m=np.where(source.land, 1500 + 1000 * bumps, 0.0))
-    region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
+    region = world_patch(lon, lat, 600, 20, parent.mesh.radius_m, 1)
     result = enrich(peaked, region, process_area_km2=2_000, iterations=3, seed=1)
     land, target, relief = result.land, result.target_m, result.elevation_m
 
@@ -125,12 +125,13 @@ def test_regional_relief_keeps_the_parent_height_on_its_peaks(parent: PlanetResu
     lowered = float(np.mean((target - smooth(target))[high]))
     assert lowered > 200.0
     # Seen at the parent spacing, the relief keeps the parent's height on its peaks
-    # (8 m above; a per-node secant ended 35 m below). Calibrated against the
+    # (13 m above; a per-node secant ended 35 m below). Calibrated against the
     # unsmoothed parent, it stood 119 m above it there, and 323 m above the
     # parent's own peaks. Below the parent spacing the relief is free: its own
-    # peaks and valleys there leave it 115 m above the parent's peaks.
+    # peaks and valleys there leave it 131 m above the parent's peaks, 0.37-0.45
+    # of the lowering over five node seeds (0.37-0.40 on a jittered lattice).
     assert abs(np.mean((smooth(relief) - smooth(target))[high])) < 0.1 * lowered
-    assert abs(np.mean((relief - target)[high])) < 0.4 * lowered
+    assert abs(np.mean((relief - target)[high])) < 0.5 * lowered
 
 
 def test_downstream_sums_follow_each_drainage_path_and_hold_at_floors() -> None:
@@ -269,7 +270,7 @@ def test_calibration_starts_from_the_steady_state_its_drainage_settles_to(
 
     lon, lat = _land_centre(parent)
     source = RegionalParent.from_result(parent)
-    region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
+    region = world_patch(lon, lat, 600, 20, parent.mesh.radius_m, 1)
     # Level parents carry the planet's uplift, which builds finer levels two to
     # three times too high. Before the first erosion run, the correction takes
     # back most of what the starting surface's drainage would settle to: here
@@ -315,6 +316,22 @@ def test_tiles_are_window_independent_and_blend_to_a_partition_of_unity(
     assert np.array_equal(blend(grid, tiles, points[5:12]), values[5:12])
     with pytest.raises(ValueError, match="not available"):
         blend(grid, {}, points)
+    # Overlapping tiles erode the same world-fixed nodes from the same ground and
+    # rock, so where two weigh a quarter or more they differ only by their own
+    # uplift corrections (on their own jittered lattices: median 46 m, 90 % 125 m).
+    g = np.linspace(-500e3, 500e3, 41)
+    x, y = np.meshgrid(g, g)
+    plane = inverse_aeqd(x.ravel(), y.ravel(), lon, lat, radius)
+    ids, weights = grid.weights(plane)
+    assert set(ids[weights >= 0.25].tolist()) <= set(tiles)
+    heights = np.full(ids.shape, np.nan)
+    for t, surface in tiles.items():
+        rows, columns = np.nonzero((ids == t) & (weights >= 0.25))
+        heights[rows, columns] = surface.sample(plane[rows])
+    shared = np.sum(np.isfinite(heights), axis=1) >= 2
+    spread = (np.nanmax(heights, axis=1) - np.nanmin(heights, axis=1))[shared]
+    assert len(spread) > 100
+    assert np.median(spread) < 40.0 and np.quantile(spread, 0.9) < 100.0
 
 
 def test_region_build_reuses_cached_tiles_and_publishes_a_manifest(
@@ -825,12 +842,12 @@ TINY_LEVELS = (
 def test_detail_levels_have_their_own_seeds() -> None:
     from map_maker.terrain.domain.planet import REGION_LEVELS, tile_stage_prefix
     from map_maker.terrain.domain.seeds import stage_seed
-    from map_maker.terrain.pipeline.planet_tiles import tile_seed
+    from map_maker.terrain.pipeline.planet_tiles import level_seed
 
     assert tile_stage_prefix(1) == "planet.tile."
     assert len({tile_stage_prefix(level) for level in (1, 2, 3)}) == 3
-    assert len({tile_seed(7, 5, level) for level in (1, 2, 3)}) == 3
-    assert tile_seed(7, 5) == stage_seed(7, "planet.tile.5")
+    assert len({level_seed(7, level) for level in (1, 2, 3)}) == 3
+    assert level_seed(7) == stage_seed(7, "planet.tile.relief")
     spacings = [settings.spacing_km for settings in REGION_LEVELS]
     assert spacings == sorted(spacings, reverse=True)
 
@@ -880,7 +897,7 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
 
     # A smooth uplift field, to see how planet forcing reaches the patch.
     forced = replace(planet, steady_uplift=uplift(parent.mesh.xyz))
-    patch = level_parent(forced, grid, tiles, centre, 300e3, 30.0, 11, relief)
+    patch = level_parent(forced, grid, tiles, centre, 300e3, 30.0, relief)
     land = patch.land
     assert land.any()
     coarse = blend(grid, tiles, relief(patch.mesh.xyz, parent.mesh.radius_m))
@@ -934,7 +951,7 @@ def test_level_parents_are_as_warm_as_the_planet_at_every_height(
     grid, tiles = ensure_level_tiles(
         planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
     )
-    patch = level_parent(planet, grid, tiles, centre, 300e3, 30.0, 11, relief)
+    patch = level_parent(planet, grid, tiles, centre, 300e3, 30.0, relief)
     points = patch.mesh.xyz[patch.land]
     # The coarser tiles the patch stands on depart from the planet surface...
     coarse = (patch.surface_m - patch.young_m())[patch.land]
@@ -982,7 +999,7 @@ def test_level_parents_bring_planet_rivers_in_across_the_area_they_serve(
     grid, tiles = ensure_level_tiles(
         planet, "p" * 64, tmp_path, 1, needed, TINY_LEVELS, workers=1
     )
-    patch = level_parent(planet, grid, tiles, centre, radius_m, 30.0, 11, relief)
+    patch = level_parent(planet, grid, tiles, centre, radius_m, 30.0, relief)
     mesh, receiver, area = patch.mesh, patch.receiver, patch.area_m2
     middle = parent.mesh.xyz[parent.flow.receiver[node]]
     served = mesh.radius_m * np.arccos(np.clip(mesh.xyz @ middle, -1, 1)) <= radius_m
@@ -1035,11 +1052,11 @@ def test_finer_tiles_cut_a_planet_river_in_one_channel_where_the_coarser_relief_
         return np.linalg.norm(xy[:, None] - foot, axis=2).min(axis=1)
 
     channels = []
-    for k, centre in enumerate(centres):
+    for centre in centres:
         patch = level_parent(
-            planet, grid, tiles, centre, served_m, TINY_LEVELS[0].spacing_km, 11 + k, relief
+            planet, grid, tiles, centre, served_m, TINY_LEVELS[0].spacing_km, relief
         )
-        region = regional_mesh(*centre, served_m / 1e3, spacing_km, radius_m, 21 + k)
+        region = world_patch(*centre, served_m / 1e3, spacing_km, radius_m, parent.settings.seed)
         depth = parent_channels(patch, region, TINY_LEVELS[1].process_area_km2 * 1e6).depth_m
         # Inside the tile's blend support, away from its ring.
         support = np.hypot(*region.plane_m.T) < 0.8 * served_m
@@ -1052,8 +1069,8 @@ def test_finer_tiles_cut_a_planet_river_in_one_channel_where_the_coarser_relief_
         assert on_planet.max() < 1.5 * spacing_km * 1e3
         assert np.median(on_planet) < 0.5 * spacing_km * 1e3
         channels.append(forward_aeqd(xyz, *middle, radius_m))
-    # Where both tiles reach, they cut the river in one channel, each on its own
-    # lattice, not side by side.
+    # Where both tiles reach, they cut the river in one channel, on the same
+    # world-fixed nodes, not side by side.
     from scipy.spatial import KDTree
 
     supports = [np.array([dx, 0.0]) for dx in (-50e3, 50e3)]
@@ -1376,6 +1393,50 @@ def test_routing_cells_have_no_preferred_directions() -> None:
             heading = np.arctan2(y[node] - y[start], x[node] - x[start])
             errors.append(abs(np.angle(np.exp(1j * (heading - azimuth)))))
         assert np.degrees(np.median(errors)) < 3.0
+
+
+def test_overlapping_tiles_hold_the_same_world_fixed_nodes() -> None:
+    from map_maker.terrain.pipeline.planet_evolution import route
+    from map_maker.terrain.pipeline.planet_patch import Region
+
+    # Tiles of a level take the world's fixed nodes of its spacing, so where two
+    # tiles overlap they erode the same nodes, joined alike away from their rings.
+    planet_m = 6.0e6
+    a = world_patch(56.9, 30.7, 630, 5, planet_m, 7)
+    b = world_patch(60.0, 31.5, 630, 5, planet_m, 7)
+    assert a.cell is not None and b.cell is not None
+    inner_a, inner_b = np.flatnonzero(a.cell >= 0), np.flatnonzero(b.cell >= 0)
+    shared, ia, ib = np.intersect1d(a.cell[inner_a], b.cell[inner_b], return_indices=True)
+    ia, ib = inner_a[ia], inner_b[ib]
+    assert len(shared) > 0.6 * len(inner_b)
+    np.testing.assert_array_equal(a.mesh.xyz[ia], b.mesh.xyz[ib])
+    assert a.boundary.sum() == np.ceil(2 * np.pi * 630 / 5) and not a.boundary[ia].any()
+
+    def triangles(region: Region, keep: np.ndarray) -> set[tuple[int, ...]]:
+        assert region.cell is not None
+        cells = region.cell[region.mesh.triangles]
+        inside = np.isin(cells, keep).all(axis=1)
+        return {tuple(sorted(t)) for t in cells[inside].tolist()}
+
+    away = (np.hypot(*a.plane_m[ia].T) < 600e3) & (np.hypot(*b.plane_m[ib].T) < 600e3)
+    found = triangles(a, a.cell[ia[away]])
+    assert len(found) > 50_000 and found == triangles(b, a.cell[ia[away]])
+    # As many nodes as a lattice of that spacing, wherever the patch lies on the cube.
+    lattice = regional_mesh(56.9, 30.7, 630, 5, planet_m, 7).mesh.size
+    for lon, lat in ((0.0, 0.0), (45.0, 35.26), (56.9, 30.7)):
+        assert 0.8 < world_patch(lon, lat, 630, 5, planet_m, 7).mesh.size / lattice < 1.25
+    # Nodes lie anywhere in their cells: steepest descent on a tilted plane keeps
+    # within 2.5 degrees of the slope on average (5 within 0.4 of a cell).
+    patch = world_patch(56.9, 30.7, 300, 5, planet_m, 7)
+    p = patch.plane_m
+    inner = np.hypot(*p.T) < 250e3
+    rng = np.random.default_rng(1)
+    for azimuth in np.radians(np.arange(0.0, 90.0, 10.0)):
+        z = -1e-3 * (p @ [np.cos(azimuth), np.sin(azimuth)]) + 0.1 * rng.random(len(p))
+        receiver = route(patch.mesh, z, patch.boundary).receiver
+        step = p[receiver[inner]] - p[inner]
+        heading = np.angle(np.mean(np.exp(1j * np.arctan2(step[:, 1], step[:, 0]))))
+        assert abs(np.degrees(np.angle(np.exp(1j * (heading - azimuth))))) < 2.5
 
 
 def test_meanders_belong_to_the_river_not_to_where_it_is_drawn_from() -> None:
@@ -1755,7 +1816,7 @@ def test_tiles_hold_a_lake_under_young_relief_at_its_level(parent: PlanetResult)
     # lake: windows draw it back on top of the tiles.
     planet = RegionalParent.from_result(parent)
     hollow = replace(planet, wonder_m=np.where(parent.land, -400.0, 0.0))
-    region = regional_mesh(lon, lat, 400, 40, parent.mesh.radius_m, 1)
+    region = world_patch(lon, lat, 400, 40, parent.mesh.radius_m, 1)
     result = enrich(hollow, region, process_area_km2=3_000, iterations=0, seed=1)
     cover, level, _ = hollow.lakes_at(region.mesh.xyz, level_finest_m(region.spacing_m))
     held = result.land & (cover > LAKE_CORE_COVER)
@@ -2038,7 +2099,7 @@ def test_tiles_hold_a_basin_plain_that_a_big_inherited_river_crosses(
     node = int(np.flatnonzero(plain)[np.argmax(planet.area_m2[plain])])
     x, y, z = mesh.xyz[node]
     lon, lat = float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arcsin(z)))
-    region = regional_mesh(lon, lat, 400, 20, mesh.radius_m, 1)
+    region = world_patch(lon, lat, 400, 20, mesh.radius_m, 1)
     result = enrich(planet, region, process_area_km2=2_000, iterations=1, seed=1)
     detail = level_finest_m(region.spacing_m)
     lake = planet.lakes_at(region.mesh.xyz, detail)[0] > LAKE_CORE_COVER
@@ -2072,7 +2133,7 @@ def test_parent_rivers_keep_connected_channels_that_leave_where_they_leave(
 
     planet = RegionalParent.from_result(parent)
     lon, lat = _land_centre(parent)
-    region = regional_mesh(lon, lat, 600, 20, parent.mesh.radius_m, 1)
+    region = world_patch(lon, lat, 600, 20, parent.mesh.radius_m, 1)
     mesh = region.mesh
     inflow = parent_inflows(planet, region)
     entry = int(np.argmax(inflow))
@@ -2111,7 +2172,7 @@ def test_channel_beds_fall_along_the_planet_river_through_a_gap_between_hills(
     raised = np.where(np.isin(np.arange(mesh.size), hills), 1000.0, 0.0)
     hilly = replace(planet, surface_m=planet.surface_m + raised)
     middle = _lonlat(mesh.xyz[node] + mesh.xyz[receiver])
-    region = regional_mesh(*middle, 150, 10, mesh.radius_m, 1)
+    region = world_patch(*middle, 150, 10, mesh.radius_m, 1)
     channels = parent_channels(hilly, region, 2_000e6)
     target = hilly.smooth_sampler(region.mesh.xyz)(hilly.surface_m - hilly.young_m())
     # The channel along the link, away from its ends.

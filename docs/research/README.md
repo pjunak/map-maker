@@ -19,6 +19,12 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Regional tiles on world-fixed nodes — 2026-10-26](2026-10-26-world-fixed-tile-nodes.md)
+  builds every tile of a level on the cubed sphere's nodes, so overlapping tiles
+  erode the same nodes from the same ground. Their spread falls about sixfold at
+  level 1, plains and river channels coincide, and what remains is each tile's own
+  uplift correction.
+
 - [Nested regional levels — 2026-10-19](2026-10-19-nested-regional-levels.md) gathers the
   2026-10-18/19 work that made region, province and local maps agree: rivers lost at
   window rims, dissected basin fronts, meanders, overshooting cubics, tone and temperature

@@ -12,6 +12,8 @@
 - Refined by [ADR-0112](0112-regional-waters-on-sphere-cells.md): rivers,
   lakes and ponds are worked out on cells fixed to the sphere, not on each window's
   pixels.
+- Refined by [ADR-0113](0113-regional-tiles-on-world-fixed-nodes.md): tiles and
+  level parents stand on world-fixed nodes; seeds belong to levels, not tiles.
 
 ## Context
 

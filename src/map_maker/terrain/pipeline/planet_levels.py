@@ -27,7 +27,7 @@ from numpy.typing import NDArray
 from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m
 from map_maker.terrain.pipeline.planet_evolution import route
 from map_maker.terrain.pipeline.planet_mesh import nearest_nodes
-from map_maker.terrain.pipeline.planet_patch import regional_mesh
+from map_maker.terrain.pipeline.planet_patch import world_patch
 from map_maker.terrain.pipeline.planet_regional import (
     MIN_RUNOFF_WEIGHT,
     RegionalParent,
@@ -64,17 +64,17 @@ def level_parent(
     centre: tuple[float, float],
     radius_m: float,
     spacing_km: float,
-    seed: int,
     relief: ReliefWarp,
 ) -> RegionalParent:
     """A parent for detail within ``radius_m`` of ``centre``, built from coarser tiles.
 
     ``relief`` is where the coarser tiles' blend is sampled
-    (``ReliefWarp.for_parent``).
+    (``ReliefWarp.for_parent``). The patch holds the world-fixed nodes of the
+    coarser level, so overlapping parents give tiles the same targets.
     """
-    region = regional_mesh(
+    region = world_patch(
         centre[0], centre[1], level_parent_radius(planet, radius_m, spacing_km) / 1e3,
-        spacing_km, planet.mesh.radius_m, seed,
+        spacing_km, planet.mesh.radius_m, planet.settings.seed,
     )
     mesh = region.mesh
     xyz = mesh.xyz

@@ -42,7 +42,9 @@ See the [plan](docs/strategy/README.md) for states and evidence.
 - [ ] **M6 regional and local zoom:**
   - [ ] Check drainage realism at fine levels: rock texture now follows each level's
     spacing and level-3 tiles branch; compare against reference terrain.
-  - [ ] Tile boundary exchange (domain decomposition); regional lakes and climate.
+  - [ ] Tile boundary exchange (domain decomposition): overlapping tiles share nodes
+    and targets, but each fits its own uplift correction ([world-fixed tile nodes](docs/research/2026-10-26-world-fixed-tile-nodes.md#what-still-differs)).
+  - [ ] Regional lakes and climate.
   - [ ] Sample basin depth, lakes and planet forcing at each level's `planet_points`,
     so basin fronts and lake shores stay put between levels (they shift by the
     relief warps' few kilometres).

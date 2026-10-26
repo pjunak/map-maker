@@ -107,6 +107,11 @@ backlog, and [status](../research/status.md) records what works now.
      overlapping maps draw the same waters, and rivers follow slopes in every
      direction instead of eight. Bends are fixed to the place (ADR-0112,
      `planet-blended-tiles-v19`).
+   - Tiles stand on the sphere's own nodes. Every tile of a level erodes the
+     cubed sphere's world-fixed nodes from ground and rock seeded per level, so
+     overlapping tiles agree several times more closely and carve plains and
+     channels alike. Each tile still fits its own uplift correction, which
+     level-2 mountain tiles never settle (ADR-0113, `planet-blended-tiles-v20`).
    - **Next:** basin depth, lakes and planet forcing sampled where the relief
      warps carry each level's points, so basin fronts and lake shores stay put
      between levels.

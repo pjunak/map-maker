@@ -11,6 +11,8 @@
 - Refined by [ADR-0112](0112-regional-waters-on-sphere-cells.md):
   windows work out rivers, lakes and ponds on the tiles' blend over cells fixed to
   the sphere.
+- Refined by [ADR-0113](0113-regional-tiles-on-world-fixed-nodes.md): tiles are
+  built on world-fixed nodes, with texture and roughness seeded per level.
 
 ## Context
 

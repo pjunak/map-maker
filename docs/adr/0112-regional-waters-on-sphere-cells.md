@@ -5,6 +5,8 @@
 - Refines: [ADR-0086](0086-regional-planet-detail-from-blended-tiles.md) (how windows
   draw rivers, lakes and ponds) and [ADR-0088](0088-nested-regional-detail-levels.md)
   (the window dependence that remained).
+- Its cells also give regional tiles their nodes
+  ([ADR-0113](0113-regional-tiles-on-world-fixed-nodes.md)).
 
 ## Context
 

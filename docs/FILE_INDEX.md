@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**265 Markdown files + 1 legal notice = 266 documentation files.**
+**267 Markdown files + 1 legal notice = 268 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -98,7 +98,7 @@ Subsystem, fixture, schema, test and benchmark guidance.
 | [src/map_maker/terrain/pipeline/README.md](../src/map_maker/terrain/pipeline/README.md) | Numeric generation and inspection responsibilities. |
 | [tests/README.md](../tests/README.md) | Test organization, commands and verification expectations. |
 
-## Architecture decision records (112)
+## Architecture decision records (113)
 
 Accepted historical decisions. Preserve their original context; consult the current status and implementation for later changes. The ADR index is listed among active indexes.
 
@@ -216,8 +216,9 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0110-spinning-globes-as-animated-webp.md](adr/0110-spinning-globes-as-animated-webp.md) | A globe or polar view turning once eastward, saved as a looping animated WebP (120 frames, 6 s, 720 px by default) by `world spin` and the Explore step. |
 | [docs/adr/0111-regional-maps-in-globe-models.md](adr/0111-regional-maps-in-globe-models.md) | Globe models saved from the app carry the opened regional maps as opaque polar-grid surfaces lifted 0.2 mm per level, their rim fade drawn in against what lies below. |
 | [docs/adr/0112-regional-waters-on-sphere-cells.md](adr/0112-regional-waters-on-sphere-cells.md) | Regional windows work out rivers, lakes and ponds on jittered, triangulated cells of a cubed sphere and draw them into their pixels, with main stems and meander bends fixed to the place, so windows sharing a cell size draw the same waters. |
+| [docs/adr/0113-regional-tiles-on-world-fixed-nodes.md](adr/0113-regional-tiles-on-world-fixed-nodes.md) | Regional tiles and level parents are built on the cubed sphere's world-fixed nodes at each level's spacing, with texture and roughness seeded per level, so overlapping tiles erode the same nodes from the same ground (`planet-blended-tiles-v20`). |
 
-## Dated research reports (104)
+## Dated research reports (105)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
@@ -225,6 +226,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
 | [docs/research/2026-10-26-sphere-routing-grid.md](research/2026-10-26-sphere-routing-grid.md) | A routing grid on the sphere for regional waters: candidate grids, cell geometry, cost, direction bias against pixels, window independence, and Aethelara checks. |
+| [docs/research/2026-10-26-world-fixed-tile-nodes.md](research/2026-10-26-world-fixed-tile-nodes.md) | Regional tiles on world-fixed nodes: node jitter and direction bias, overlapping tiles' spread, blend hollows, river agreement, calibration and courses on the synthetic planet and Aethelara, HEAD against the change, and what still differs. |
 | [docs/research/2026-10-19-planet-build-speed.md](research/2026-10-19-planet-build-speed.md) | Planet build speed: stage times and peak memory at 200k, 800k and 3.2M nodes, where the time goes, estimates for finer meshes, what a Rust port would change and a server-hosting estimate. |
 | [docs/research/2026-10-19-curved-interpolation.md](research/2026-10-19-curved-interpolation.md) | Straight against curved interpolation of planet relief: Clough-Tocher cubics and a planar twist rebuilding Earth (ETOPO 2022) and a synthetic build from coarse nodes; pass rules, results and the rejected trial (T22). |
 | [docs/research/2026-10-19-nested-regional-levels.md](research/2026-10-19-nested-regional-levels.md) | Nested regional levels: rivers lost at window rims, dissected basin fronts, wide-river meanders, overshooting cubics, tone and temperature across levels, held basin plains, calibration, blend hollows and one river course, with figures and open follow-ups (2026-10-18/19). |
