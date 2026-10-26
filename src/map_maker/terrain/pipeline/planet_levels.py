@@ -23,10 +23,10 @@ from functools import partial
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.spatial import KDTree
 
 from map_maker.terrain.pipeline.planet_coast import coastline, level_finest_m
 from map_maker.terrain.pipeline.planet_evolution import route
+from map_maker.terrain.pipeline.planet_mesh import nearest_nodes
 from map_maker.terrain.pipeline.planet_patch import regional_mesh
 from map_maker.terrain.pipeline.planet_regional import (
     MIN_RUNOFF_WEIGHT,
@@ -106,7 +106,7 @@ def level_parent(
         mesh, relief_m, ~land | (region.boundary & ~walls), runoff,
         parent_inflows(planet, region, planet_points),
     )
-    nearest = np.asarray(KDTree(planet.mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)
+    nearest = nearest_nodes(planet.mesh, xyz)
     # A parent's temperatures hold at its own surface, so the planet's are
     # lapse-corrected to the coarser tiles' relief. Sampled unchanged, they made a
     # province 6.5 C too warm on level-1 mountains 1 km above the planet surface.

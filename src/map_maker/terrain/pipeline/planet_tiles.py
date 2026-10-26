@@ -22,8 +22,7 @@ from map_maker.terrain.domain.planet import RegionalSettings, tile_stage_prefix
 from map_maker.terrain.domain.seeds import stage_seed
 from map_maker.terrain.pipeline.control import CancellationToken
 from map_maker.terrain.pipeline.planet_coast import level_finest_m, swirl
-from map_maker.terrain.pipeline.planet_kernels import interpolate_to_lonlat
-from map_maker.terrain.pipeline.planet_mesh import SphereMesh, fibonacci_nodes, vertex_triangles
+from map_maker.terrain.pipeline.planet_mesh import SphereMesh, fibonacci_nodes, sample_field
 from map_maker.terrain.pipeline.planet_patch import regional_mesh
 from map_maker.terrain.pipeline.planet_regional import (
     RegionalParent,
@@ -62,20 +61,25 @@ class TileGrid:
         return float(np.degrees(np.arctan2(y, x))), float(np.degrees(np.arcsin(z)))
 
     def weights(self, points: F64) -> tuple[I64, F64]:
-        """Covering tiles per point and their normalised Wendland C2 weights."""
+        """Covering tiles per point and their normalised Wendland C2 weights.
+
+        Each row lists its tiles in ascending order, padded with -1 and weight 0.
+        """
         chord = 2 * np.sin(self.support_m / self.radius_m / 2)
-        lists = KDTree(self.centres).query_ball_point(points, chord)
-        width = max(1, max(len(item) for item in lists))
-        tiles = np.full((len(points), width), -1, dtype=np.int64)
-        w = np.zeros((len(points), width))
-        for row, item in enumerate(lists):
-            if not item:
-                continue
-            ids = np.asarray(item, dtype=np.int64)
-            d = self.radius_m * np.arccos(np.clip(self.centres[ids] @ points[row], -1, 1))
-            q = np.clip(d / self.support_m, 0, 1)
-            tiles[row, : len(ids)] = ids
-            w[row, : len(ids)] = (1 - q) ** 4 * (4 * q + 1)
+        tree = KDTree(self.centres)
+        count = np.asarray(tree.query_ball_point(points, chord, workers=-1, return_length=True))
+        width = max(1, int(count.max(initial=0)))
+        found = np.asarray(
+            tree.query(points, k=width, distance_upper_bound=chord * (1 + 1e-12), workers=-1)[1],
+            dtype=np.int64,
+        ).reshape(len(points), width)
+        # Missing neighbours come back as the number of tiles, which sorts last.
+        found.sort(axis=1)
+        valid = found < len(self.centres)
+        tiles = np.where(valid, found, -1)
+        cos = np.einsum("ijk,ik->ij", self.centres[np.where(valid, found, 0)], points)
+        q = np.clip(self.radius_m * np.arccos(np.clip(cos, -1, 1)) / self.support_m, 0, 1)
+        w = np.where(valid, (1 - q) ** 4 * (4 * q + 1), 0.0)
         total = w.sum(axis=1, keepdims=True)
         return tiles, np.divide(w, total, out=np.zeros_like(w), where=total > 0)
 
@@ -129,13 +133,7 @@ class TileSurface:
         return cls(result.region.mesh, np.where(result.land, result.elevation_m, 0.0))
 
     def sample(self, points: F64) -> F64:
-        mesh = self.mesh
-        nearest = np.asarray(KDTree(mesh.xyz).query(points, workers=-1)[1], dtype=np.int64)
-        vt_ptr, vt_idx = vertex_triangles(mesh)
-        return interpolate_to_lonlat(
-            np.ascontiguousarray(self.elevation_m), mesh.xyz, mesh.triangles, vt_ptr, vt_idx,
-            mesh.ptr, mesh.nbr, nearest, np.ascontiguousarray(points),
-        )
+        return sample_field(self.mesh, points, self.elevation_m)
 
 
 @dataclass(frozen=True)

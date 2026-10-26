@@ -6,6 +6,7 @@ A whole-planet grid without poles, seams or eight preferred flow directions.
 The convex hull of points on a sphere is their spherical Delaunay triangulation.
 """
 
+import weakref
 from dataclasses import dataclass
 from math import pi, sqrt
 
@@ -136,10 +137,38 @@ def vertex_triangles(mesh: SphereMesh) -> tuple[I64, I64]:
     return np.cumsum(ptr), owner[order]
 
 
+_searches: dict[int, tuple[weakref.ref[F64], I64, KDTree, I64, I64]] = {}
+
+
+def mesh_search(mesh: SphereMesh) -> tuple[KDTree, I64, I64]:
+    """The KD-tree of ``mesh``'s nodes and its node-to-triangle map, built once per mesh.
+
+    Sampling fields of a 3.2M-node planet rebuilt both for every field, about
+    1.2 s a field and three quarters of the time a regional window took. They
+    are kept while the mesh's node array lives.
+    """
+    key = id(mesh.xyz)
+    found = _searches.get(key)
+    if found is not None and found[0]() is mesh.xyz and found[1] is mesh.triangles:
+        return found[2], found[3], found[4]
+    # The tree indexes a copy: it would otherwise keep the node array alive.
+    tree = KDTree(mesh.xyz.copy())
+    vt_ptr, vt_idx = vertex_triangles(mesh)
+    alive = weakref.ref(mesh.xyz, lambda _: _searches.pop(key, None))
+    _searches[key] = (alive, mesh.triangles, tree, vt_ptr, vt_idx)
+    return tree, vt_ptr, vt_idx
+
+
+def nearest_nodes(mesh: SphereMesh, xyz: F64) -> I64:
+    """The mesh node nearest each unit vector."""
+    tree = mesh_search(mesh)[0]
+    return np.asarray(tree.query(xyz, workers=-1)[1], dtype=np.int64)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+
+
 def sample_field(mesh: SphereMesh, xyz: F64, values: F64) -> F64:
     """Triangle-linear interpolation of a node field at unit vectors ``xyz``."""
-    nearest = np.asarray(KDTree(mesh.xyz).query(xyz, workers=-1)[1], dtype=np.int64)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
-    vt_ptr, vt_idx = vertex_triangles(mesh)
+    _, vt_ptr, vt_idx = mesh_search(mesh)
+    nearest = nearest_nodes(mesh, xyz)
     return interpolate_to_lonlat(
         np.ascontiguousarray(values, dtype=np.float64), mesh.xyz, mesh.triangles, vt_ptr, vt_idx,
         mesh.ptr, mesh.nbr, nearest, np.ascontiguousarray(xyz),
