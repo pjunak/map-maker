@@ -242,8 +242,9 @@ def _route(
 @njit(cache=True)
 def _graph_route(
     h: F64, fixed: B, ptr: I64, nbr: I64, step: F64, rank: I64, source: F64
-) -> tuple[F64, I64, F64]:
-    """``_route`` on any graph of cells: filled surface, receivers and accumulation.
+) -> tuple[F64, I64, int, I64, F64, F64]:
+    """``_route`` on any graph of cells: filled surface, cells in downstream-first
+    order (and their count), receivers, receiver distances and accumulation.
 
     Ties, in the flood and between equally steep neighbours, break by ``rank``
     (lowest first, as a raster's row-major order does), so cells that two graphs
@@ -281,10 +282,12 @@ def _graph_route(
                 filled[j] = filled[i] + 1e-3
             heapq.heappush(heap, (max(h[j], level), h[j], rank[j], np.int64(j)))
     receiver = np.full(n, -1, np.int64)
+    distance = np.ones(n)
     for idx in range(count):
         i = order[idx]
         if filled[i] > h[i]:
             receiver[i] = parent[i]
+            distance[i] = parent_step[i]
             continue
         best = 0.0
         for k in range(ptr[i], ptr[i + 1]):
@@ -293,13 +296,14 @@ def _graph_route(
             if slope > best or (slope == best and slope > 0 and rank[j] < rank[receiver[i]]):
                 best = slope
                 receiver[i] = j
+                distance[i] = step[k]
     area = source.copy()
     for idx in range(count - 1, -1, -1):
         i = order[idx]
         j = receiver[i]
         if j >= 0 and not fixed[j]:
             area[j] += area[i]
-    return filled, receiver, area
+    return filled, order, count, receiver, distance, area
 
 
 def grid_flow(
@@ -332,7 +336,7 @@ def graph_flow(
     area (each cell's ``area_m2`` plus ``inflow_m2``, and everything upstream)
     and the filled surface. ``step_m`` is the distance to each neighbour.
     """
-    filled, receiver, area = _graph_route(
+    filled, _, _, receiver, _, area = _graph_route(
         np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet),
         np.ascontiguousarray(ptr), np.ascontiguousarray(nbr),
         np.ascontiguousarray(step_m, dtype=np.float64), np.ascontiguousarray(rank),
@@ -360,6 +364,47 @@ def _carve(h: F64, fixed: B, dy: float, dx: F64, k: float, m: float, steps: int,
             filled[ri, ci] = (filled[ri, ci] + f * filled[j // columns, j % columns]) / (1 + f)
         h = filled
     return h
+
+
+@njit(cache=True)
+def _graph_carve(
+    h: F64, fixed: B, ptr: I64, nbr: I64, step: F64, rank: I64, cell_area: F64, k: float,
+    m: float, steps: int,
+) -> F64:
+    for _ in range(steps):
+        filled, order, count, receiver, distance, area = _graph_route(
+            h, fixed, ptr, nbr, step, rank, cell_area
+        )
+        # Implicit stream power (Braun and Willett 2013, n = 1), downstream first.
+        for idx in range(count):
+            i = order[idx]
+            j = receiver[i]
+            if j < 0:
+                continue
+            f = k * area[i] ** m / distance[i]
+            filled[i] = (filled[i] + f * filled[j]) / (1 + f)
+        h = filled
+    return h
+
+
+def graph_carve(
+    ptr: I64, nbr: I64, step_m: F64, rank: I64, area_m2: F64, z: F64, outlet: B,
+    erodibility: float, area_exponent: float, steps: int,
+) -> F64:
+    """``carve_valleys`` on a graph of cells (CSR neighbours ``ptr``/``nbr``).
+
+    On jittered, triangulated cells steepest descent has no preferred directions,
+    where on a pixel grid it steps in eight and cuts straight grooves at 0, 45 and
+    90 degrees down smooth slopes. ``step_m`` is the distance to each neighbour,
+    ``area_m2`` each cell's area and ``rank`` breaks ties (``graph_flow``).
+    """
+    return _graph_carve(
+        np.ascontiguousarray(z, dtype=np.float64), np.ascontiguousarray(outlet),
+        np.ascontiguousarray(ptr), np.ascontiguousarray(nbr),
+        np.ascontiguousarray(step_m, dtype=np.float64), np.ascontiguousarray(rank),
+        np.ascontiguousarray(area_m2, dtype=np.float64), float(erodibility),
+        float(area_exponent), int(steps),
+    )
 
 
 def carve_valleys(

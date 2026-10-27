@@ -63,7 +63,7 @@ from map_maker.terrain.pipeline.planet_coast import (
     level_finest_m,
     window_finest_m,
 )
-from map_maker.terrain.pipeline.planet_detail import carve_valleys, eroded_fbm, graph_flow
+from map_maker.terrain.pipeline.planet_detail import eroded_fbm, graph_carve, graph_flow
 from map_maker.terrain.pipeline.planet_grid import GridCells, WorldGrid, cell_marks
 from map_maker.terrain.pipeline.planet_mesh import fibonacci_nodes, mesh_from_triangles
 from map_maker.terrain.pipeline.planet_patch import forward_aeqd, inverse_aeqd
@@ -209,6 +209,7 @@ class RegionWindow:
     basalt: F64  # 0..1 flood-basalt cover
     wind: F64 | None  # (pixels, pixels, 2) annual mean wind (east, north) in m/s
     playa: B  # dry closed basins of the regional relief (ephemeral lakes)
+    valleys_m: F64  # how deep display valleys cut the rough relief (``display_valleys``)
     detail_spacing_m: float = 5000.0  # node spacing of the detail level shown
     seed: int = 0  # planet master seed: display detail belongs to the world
     cover: WonderCover | None = None  # lava, ash and glow of the wonders
@@ -295,6 +296,13 @@ def compose_window(
         lakes, salt, playa = lakes & ~iced, salt & ~iced, playa & ~iced
         coverage = np.where(iced, 0.0, coverage)
     coverage = np.where(land & ~lakes, coverage, 0.0)
+    # Display valleys are carved on the routing cells, once per window.
+    valleys = np.zeros((pixels, pixels))
+    if land.any():
+        rough = display_rough(
+            elevation, land, points, pixel_m, spacing_m, parent.settings.seed, planet_m
+        ).rough
+        valleys = display_valleys(rough, land, hydrology.cells, centre, radius_m, pixel_m)
     return RegionWindow(
         centre,
         radius_m,
@@ -325,6 +333,7 @@ def compose_window(
             ).reshape(pixels, pixels, 2)
         ),
         playa,
+        valleys,
         spacing_m,
         parent.settings.seed,
         cover,
@@ -1093,24 +1102,28 @@ def detail_offset(seed: int, frequency: float, ridged: F64) -> F64:
     return plain + (full - plain) * ridged
 
 
-def display_relief(window: RegionWindow) -> F64:
-    """Elevation plus sub-tile ridges and valleys for shading only (never exported).
+@dataclass(frozen=True)
+class DisplayRough:
+    """A window's relief roughened below its mesh, before valleys are carved into it."""
+
+    rough: F64  # beyond the window's disc, held at the nearest height inside it
+    amplitude: F64  # the detail's height, which caps valley incision
+    tile_slope: F64  # slope of the relief without detail, smoothed over a few pixels
+
+
+def display_rough(
+    elevation_m: F64, land: B, points: F64, pixel_m: float, spacing_m: float, seed: int,
+    planet_m: float,
+) -> DisplayRough:
+    """Window relief (NaN beyond its disc) plus ridged sub-tile detail, for display only.
 
     The 5 km tile mesh cannot resolve hillslopes, so mountains would shade as
-    smooth domes. Ridged, slope-damped noise scaled with height adds roughness,
-    and a few stream-power steps routed over that rough surface carve it into a
-    connected, branching valley network. Carving depth is capped at the local
-    detail amplitude, so the tile relief keeps its shape.
+    smooth domes. Ridged, slope-damped noise scaled with height adds roughness.
     """
-    z = np.nan_to_num(window.elevation_m, nan=-200.0)
-    land = window.land
-    if not land.any():
-        return z
+    z = np.nan_to_num(elevation_m, nan=-200.0)
     base = np.where(land, z, 0.0)
-    inside = np.isfinite(window.elevation_m)
-    tile_slope = gaussian_filter(
-        np.hypot(*np.gradient(np.where(inside, z, 0.0), window.pixel_m)), 3.0
-    )
+    inside = np.isfinite(elevation_m)
+    tile_slope = gaussian_filter(np.hypot(*np.gradient(np.where(inside, z, 0.0), pixel_m)), 3.0)
     # Flat plains and plateau tops stay smooth; slopes get ridges and gullies.
     # Ridged noise creases into sharp lines, so it too needs relief, not height.
     ruggedness = 0.15 + 0.85 * np.clip((tile_slope - 0.002) / 0.018, 0, 1)
@@ -1119,40 +1132,86 @@ def display_relief(window: RegionWindow) -> F64:
     # wavelength follows the mesh spacing and its height shrinks with it. It is
     # anchored to the world (planet seed, world positions, a fixed zero), so
     # overlapping windows draw the same hills.
-    level = window.detail_spacing_m / REGION_DETAIL_SPACING_M
+    level = spacing_m / REGION_DETAIL_SPACING_M
     wavelength = REGION_DETAIL_WAVELENGTH_M * level
-    seed = window.seed + REGION_DETAIL_SEED
-    detail = eroded_fbm(
-        window.points, ridged, seed, 5, window.planet_m / wavelength, 0.5, 0.1
-    ).reshape(z.shape)
-    detail -= detail_offset(seed, window.planet_m / wavelength, ridged).reshape(z.shape)
+    noise_seed = seed + REGION_DETAIL_SEED
+    detail = eroded_fbm(points, ridged, noise_seed, 5, planet_m / wavelength, 0.5, 0.1).reshape(
+        z.shape
+    )
+    detail -= detail_offset(noise_seed, planet_m / wavelength, ridged).reshape(z.shape)
     amplitude = (
         (REGION_DETAIL_FLOOR_M + REGION_DETAIL_SHARE * base)
         * ruggedness
         * level**REGION_DETAIL_EXPONENT
     )
     rough = np.where(land, z + amplitude * detail, z)
-    # Outside the window circle, hold each cell at the nearest inside height so
+    # Outside the window circle, hold each pixel at the nearest inside height so
     # the rim is not a base level that every border valley would cut down to.
     nearest = cast(
         NDArray[np.intp],
         distance_transform_edt(~inside, return_distances=False, return_indices=True),
     )
-    rough = rough[nearest[0], nearest[1]]
-    carved = carve_valleys(
-        rough,
-        ~land,
-        window.pixel_m,
-        np.full(z.shape[0], window.pixel_m),
-        REGION_CARVE_ERODIBILITY,
-        0.5,
-        REGION_CARVE_STEPS,
+    return DisplayRough(rough[nearest[0], nearest[1]], amplitude, tile_slope)
+
+
+def display_valleys(
+    rough: F64, land: B, cells: GridCells, centre: tuple[float, float], radius_m: float,
+    pixel_m: float,
+) -> F64:
+    """How deep valleys cut a window's rough relief at each pixel (display only).
+
+    A few stream-power steps routed over the rough relief carve it into a
+    connected, branching valley network. Routed over the window's pixels,
+    steepest descent stepped in eight directions and cut straight grooves at 0,
+    45 and 90 degrees down smooth slopes; on the world's routing ``cells`` it
+    has no preferred directions. The relief is sampled at the cells, sea and the
+    ground beyond the disc hold their height, and the incision comes back to the
+    pixels from the four nearest cells.
+    """
+    x, y = forward_aeqd(cells.xyz, *centre, cells.planet_m).T
+    row = (radius_m - y) / pixel_m - 0.5
+    column = (x + radius_m) / pixel_m - 0.5
+    z = map_coordinates(rough, (row, column), order=1, mode="nearest")
+    sea = map_coordinates(land.astype(np.float64), (row, column), order=1, mode="nearest") < 0.5
+    held = sea | (np.hypot(x, y) > radius_m)
+    carved = graph_carve(
+        cells.ptr, cells.nbr, cells.step_m, cells.rank, cells.area_m2, z, held,
+        REGION_CARVE_ERODIBILITY, 0.5, REGION_CARVE_STEPS,
     )
-    # Flats and plateaus carve into straight grid-aligned grooves, and real ones
-    # stay smooth at this scale, so incision follows the tile relief's slope.
+    incision = np.maximum(z - carved, 0.0)
+    pixels = rough.shape[0]
+    centres = (np.arange(pixels) + 0.5) * pixel_m - radius_m
+    gx, gy = np.meshgrid(centres, -centres)
+    distance, nearest = KDTree(np.stack((x, y), axis=1)).query(
+        np.stack((gx.ravel(), gy.ravel()), axis=1), k=4, workers=-1
+    )
+    weight = 1.0 / np.maximum(distance, 1e-3 * pixel_m) ** 2
+    return (np.sum(weight * incision[nearest], axis=1) / np.sum(weight, axis=1)).reshape(
+        rough.shape
+    )
+
+
+def display_relief(window: RegionWindow) -> F64:
+    """Elevation plus sub-tile ridges and valleys for shading only (never exported).
+
+    The roughened relief (``display_rough``) is cut by the valleys the window
+    carved on its routing cells (``display_valleys``), at most as deep as the
+    local detail amplitude, so the tile relief keeps its shape.
+    """
+    z = np.nan_to_num(window.elevation_m, nan=-200.0)
+    land = window.land
+    if not land.any():
+        return z
+    found = display_rough(
+        window.elevation_m, land, window.points, window.pixel_m, window.detail_spacing_m,
+        window.seed, window.planet_m,
+    )
+    rough, tile_slope = found.rough, found.tile_slope
+    # Flats and plateaus stay smooth at this scale, so incision follows the tile
+    # relief's slope.
     steep = np.clip((tile_slope - 0.006) / 0.024, 0, 1)
-    # Blurring the incision widens one-pixel D8 channels into valleys.
-    depth = gaussian_filter(np.clip(rough - carved, 0, amplitude) * steep, 1.3)
+    # Blurring the incision widens one-cell channels into valleys.
+    depth = gaussian_filter(np.clip(window.valleys_m, 0, found.amplitude) * steep, 1.3)
     relief = gaussian_filter(rough - depth, 0.5)
     # Linear (seif) dunes run along the resultant wind in sand seas, ~2 km apart
     # and tens of metres high; they break up and wander along their length.
@@ -1163,7 +1222,8 @@ def display_relief(window: RegionWindow) -> F64:
             erg_cover(
                 window.points, window.planet_m, climate,
                 tile_slope * slope_factor(window.detail_spacing_m),
-                window_position(relief, window.pixel_m, inside), REGION_SLOPE_SCALE,
+                window_position(relief, window.pixel_m, np.isfinite(window.elevation_m)),
+                REGION_SLOPE_SCALE,
             ),
             0.0,
         )

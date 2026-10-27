@@ -7,6 +7,8 @@
   (the window dependence that remained).
 - Its cells also give regional tiles their nodes
   ([ADR-0113](0113-regional-tiles-on-world-fixed-nodes.md)).
+- Revised 2026-10-27: display valleys are carved on the cells too
+  ([revision](#revision-2026-10-27-display-valleys-on-the-cells)).
 
 ## Context
 
@@ -138,3 +140,23 @@ Waters are worked out on the sphere and only drawn flat
 - Lake and pond shores are drawn from cells about a pixel apart: a shore follows
   the pixel relief, but where the cells see no water a pixel can be dry ground a
   little below a lake's level.
+
+## Revision (2026-10-27): display valleys on the cells
+
+Display carving stayed on the window's pixels (decision 5). It cut the roughened
+relief with four implicit stream-power steps routed D8 over them, and on smooth
+slopes drew straight grooves at 0°, 45° and 90°: plainly in a 20 km province map
+and a 30 km region map of Aethelara.
+
+At composition a window now samples its roughened relief at the routing cells its
+hydrology has built, carves it there with the same steps (`graph_carve`, which
+equals the pixel kernel on a raster's own pixels), and keeps the incision per
+pixel (`RegionWindow.valleys_m`) from the four nearest cells. Shading cuts it into
+the roughened relief as before: capped at the detail amplitude, faded on flats,
+blurred. The grooves become branching gullies; at the usual scales maps look as
+before. Carving moves from every render to composition: a window and its first
+map take about as long as before (cached windows compose 1.3–3.2 s slower), and
+each later theme renders 0.5–3.5 s faster
+([report](../research/2026-10-27-display-valleys-on-cells.md)). The world map's
+longitude–latitude raster keeps pixel carving: at its 9 km pixels no grooves show.
+Tiles and exports are unchanged.

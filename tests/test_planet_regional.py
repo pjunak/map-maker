@@ -466,6 +466,29 @@ def test_display_valley_carving_only_lowers_land_and_keeps_outlets() -> None:
     assert np.mean(carved[~outlet] < z[~outlet]) > 0.5
 
 
+def test_graph_carving_equals_pixel_carving_on_a_raster() -> None:
+    from map_maker.terrain.pipeline.planet_detail import carve_valleys, graph_carve
+
+    # Windows carve display valleys on the routing cells (``display_valleys``),
+    # whose steepest descent has no preferred directions; on a raster's own
+    # pixels the graph kernel is the pixel kernel exactly.
+    rows = columns = 40
+    rng = np.random.default_rng(3)
+    _, x = np.mgrid[0:rows, 0:columns]
+    z = 20.0 * x + 150.0 * rng.random((rows, columns))
+    outlet = np.zeros((rows, columns), dtype=bool)
+    outlet[:, 0] = True
+    z[outlet] = 0.0
+    cells = GridCells.raster(z.shape, 500.0)
+    on_cells = graph_carve(
+        cells.ptr, cells.nbr, cells.step_m, cells.rank, cells.area_m2, z.ravel(),
+        outlet.ravel(), 0.4, 0.5, 3,
+    )
+    on_pixels = carve_valleys(z, outlet, 500.0, np.full(rows, 500.0), 0.4, 0.5, 3)
+    np.testing.assert_allclose(on_cells.reshape(z.shape), on_pixels, rtol=0, atol=1e-9)
+    assert np.mean(on_pixels[~outlet] < z[~outlet]) > 0.5
+
+
 def test_grid_carving_matches_the_mesh_kernels_and_wraps_longitude() -> None:
     from map_maker.terrain.pipeline.planet_detail import carve_valleys
     from map_maker.terrain.pipeline.planet_kernels import (

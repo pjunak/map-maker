@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Display valleys on world cells, and shared tile corrections — 2026-10-27](2026-10-27-display-valleys-on-cells.md)
+  carves the maps' shading valleys on the routing cells, which removes straight
+  grid grooves from zoomed maps, and finds that sharing uplift corrections or a
+  larger halo does not make overlapping tiles agree.
+
 - [Regional tiles on world-fixed nodes — 2026-10-26](2026-10-26-world-fixed-tile-nodes.md)
   builds every tile of a level on the cubed sphere's nodes, so overlapping tiles
   erode the same nodes from the same ground. Their spread falls about sixfold at

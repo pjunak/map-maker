@@ -1,6 +1,6 @@
 # Terrain method decisions and failed experiments
 
-Updated 2026-10-19 through T23 one river course through regional levels.
+Updated 2026-10-27 through T24 shared uplift corrections between regional tiles.
 This is the living record of
 material generation approaches that were rejected, constrained or retained only
 as references. A failed method does not remove its desired feature from the plan.
@@ -720,6 +720,39 @@ the warps carry them
 nodes' own places (T21), stepping towards the receiver, and routing level parents
 in the channels. Rivers the planet does not resolve still take each tile's own
 course; revisit with tile boundary exchange.
+
+## T24 - Share uplift corrections between overlapping regional tiles
+
+**Hypothesis.** On world-fixed nodes (ADR-0113) overlapping tiles get the same
+targets but fit their own uplift corrections, which differ by 4-16 % and track
+their remaining height differences. If every tile eroded once more with one
+correction field, the covering tiles' corrections blended as the relief is,
+overlapping tiles would agree.
+
+**Control and inputs.** `planet-blended-tiles-v20` tiles. The synthetic test
+planet's four level-1 tiles around its land centre (three calibration iterations),
+with pass-1 corrections of all 17 tiles covering them. Aethelara province tiles
+7810, 7954, 7865 and 8098, with pass-1 corrections of their 18 covering tiles.
+Heights compared at shared nodes where both tiles weigh a quarter or more.
+
+**Outcome.**
+- Synthetic pairs went 8.0 → 0.8 m, 27.4 → 8.9 m and 25.9 → 18.9 m, but 20.6 →
+  37.0 m and 12.6 → 23.5 m. Calibration error went from 18-31 m to 30-39 m RMS.
+- The worst Aethelara province pair went from 521 to 259 m on average (1,643 to
+  879 m at most), another from 287 to 312 m. Two tiles' calibration worsened
+  (136 → 218 and 156 → 182 m RMS, bias up to 48 m).
+- Doubling or tripling the halo (200 → 400 → 600 km on the synthetic tiles) brought
+  the pooled difference from 18.0 to 15.9 and 15.3 m for 1.3-1.6 times the nodes,
+  and left the worst pair at 28-30 m.
+
+**Diagnosed cause.** A tile's own correction partly makes up for its own drainage
+and domain; borrowed, it calibrates worse and moves the disagreement. Catchments
+cut at rings explain little of it. What remains is the sensitivity of erosion and
+calibration, which no shared input removes.
+
+**Disposition.** Not adopted; it would also need tiles built in two phases
+([report](2026-10-27-display-valleys-on-cells.md#shared-uplift-corrections)).
+Revisit only with a joint solve or iterated exchange between neighbouring tiles.
 
 ## What the failures change
 

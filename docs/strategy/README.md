@@ -112,6 +112,11 @@ backlog, and [status](../research/status.md) records what works now.
      overlapping tiles agree several times more closely and carve plains and
      channels alike. Each tile still fits its own uplift correction, which
      level-2 mountain tiles never settle (ADR-0113, `planet-blended-tiles-v20`).
+     Sharing corrections between tiles moved the disagreement rather than
+     removing it (T24).
+   - Display valleys are carved on the routing cells, so zoomed maps shade
+     branching gullies instead of straight grooves along the pixel grid
+     (ADR-0112 revision).
    - **Next:** basin depth, lakes and planet forcing sampled where the relief
      warps carry each level's points, so basin fronts and lake shores stay put
      between levels.
