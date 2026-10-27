@@ -164,6 +164,14 @@ class RegionalParent:
     river_area_m2: F64 | None = None
     planet_points: Callable[[F64], F64] | None = None
 
+    def on_planet(self, xyz: F64) -> F64:
+        """Where unit vectors ``xyz`` of this parent's relief lie in the planet's relief.
+
+        A level parent's relief is the coarser level's, sampled through the
+        relief warps (``planet_points``); the planet's own relief is in place.
+        """
+        return xyz if self.planet_points is None else self.planet_points(xyz)
+
     def young_m(self) -> F64:
         """Height that volcanoes and wonders added on land after erosion and climate."""
         young = np.zeros(self.mesh.size)
@@ -235,13 +243,17 @@ class RegionalParent:
         The cover is linear inside each lake-mesh triangle, so its contours are
         straight; it is sampled at points displaced by noise down to ``detail_m``,
         which refines lake outlines below the mesh spacing as coasts are. Every
-        level samples the planet's lakes, so finer levels only add detail.
+        level samples the planet's lakes, so finer levels only add detail, where
+        its relief holds them (``on_planet``): sampled in place, a level parent's
+        lakes lay off the coarser relief's lake basins by the warps' displacement.
         """
         if self.lake is None or self.lake_level_m is None or not np.any(self.lake >= 0):
             n = len(xyz)
             return np.zeros(n), np.full(n, -np.inf), np.zeros(n, dtype=bool)
         mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
-        cover, ids = refined_lake_cover(mesh, self.lake, self.settings.seed, xyz, detail_m)
+        cover, ids = refined_lake_cover(
+            mesh, self.lake, self.settings.seed, self.on_planet(xyz), detail_m
+        )
         closed = (
             np.zeros(len(xyz), dtype=bool)
             if self.lake_endorheic is None
@@ -282,14 +294,17 @@ class RegionalParent:
         mountains along a dissected front, with re-entrants up the valleys and
         spurs out into the plain, instead of along a contour that is straight
         within each planet triangle. Every level samples the same octaves down
-        to its own detail, so finer levels only add detail. None without basins.
+        to its own detail, so finer levels only add detail, where its relief
+        holds the basin (``on_planet``): sampled in place, a finer level's plain
+        met the mountains off the coarser level's front by the warps'
+        displacement. None without basins.
         """
         if self.basin_depth_m is None:
             return None
         mesh = self.mesh if self.planet_mesh is None else self.planet_mesh
         spacing = mesh.spacing_m
         moved = displace(
-            xyz, mesh.radius_m,
+            self.on_planet(xyz), mesh.radius_m,
             noise_octaves(
                 BASIN_TOP_SPACINGS * spacing, BASIN_AMPLITUDE_SPACINGS * spacing, detail_m
             ),
@@ -311,8 +326,7 @@ class RegionalParent:
         if self.plain_m is None:
             return None
         assert self.planet_mesh is not None
-        at = xyz if self.planet_points is None else self.planet_points(xyz)
-        return np.maximum(smooth_sampler(self.planet_mesh, at)(self.plain_m), 0.0)
+        return np.maximum(smooth_sampler(self.planet_mesh, self.on_planet(xyz))(self.plain_m), 0.0)
 
     def river_links(self) -> tuple[SphereMesh, I64, F64, F64]:
         """The planet's mesh, river receivers (-1 off land), drainage areas and plain."""

@@ -47,9 +47,6 @@ See the [plan](docs/strategy/README.md) for states and evidence.
     A one-shot shared correction and a larger halo did not help (T24); only a joint
     solve or iterated exchange would.
   - [ ] Regional lakes and climate.
-  - [ ] Sample basin depth, lakes and planet forcing at each level's `planet_points`,
-    so basin fronts and lake shores stay put between levels (they shift by the
-    relief warps' few kilometres).
   - [ ] A minimum pond size, so cells that sample winding valley floors off their
     floor leave no one-cell ponds ([nested levels](docs/research/2026-10-19-nested-regional-levels.md#open-after-3443ff2)).
 - [ ] **Map views (ADR-0087):** political and civilization views from authored

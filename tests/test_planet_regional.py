@@ -935,16 +935,25 @@ def test_level_parent_carries_the_coarser_relief_and_drains(
     assert np.all(patch.area_m2[land & (patch.receiver >= 0)] > 0)
     # Forcing comes onto the patch smoothly, as level 1 takes it: triangle-linear
     # sampling carried the planet's triangles down every level as straight creases.
-    t = np.linspace(-3, 3, 1201) * parent.mesh.spacing_m
-    line = inverse_aeqd(t, 0.3 * t, *centre, parent.mesh.radius_m)
-    on_patch = patch.sample(line, patch.steady_uplift)
-    linear = forced.sample(line, forced.steady_uplift)
-    assert np.abs(on_patch - uplift(line)).mean() < 0.5 * np.abs(linear - uplift(line)).mean()
-    # Basins stay on the planet mesh, so every level refines the same margins.
+    # The patch holds the coarser relief where the warps carry its nodes, and it
+    # takes the forcing there too.
     points = patch.mesh.xyz[land]
-    on_patch, on_planet = patch.basin_at(points, 20e3), planet.basin_at(points, 20e3)
+    moved = patch.on_planet(points)
+    assert np.median(np.linalg.norm(moved - points, axis=1)) * parent.mesh.radius_m > 1e3
+    smooth = np.abs(patch.steady_uplift[land] - uplift(moved)).mean()
+    linear = np.abs(forced.sample(moved, forced.steady_uplift) - uplift(moved)).mean()
+    assert smooth < 0.5 * linear
+    # Basins and lakes stay on the planet mesh, so every level refines the same
+    # margins and outlines, found where the patch's relief holds them: found at
+    # its own nodes, they lay off the coarser relief's basins and lake basins.
+    on_patch = patch.basin_at(points, 20e3)
+    on_planet = planet.basin_at(moved, 20e3)
     assert on_patch is not None and on_planet is not None
     assert np.array_equal(on_patch, on_planet)
+    for found, expected in zip(
+        patch.lakes_at(points, 20e3), planet.lakes_at(moved, 20e3), strict=True
+    ):
+        assert np.array_equal(found, expected)
 
 
 def test_level_parents_are_as_warm_as_the_planet_at_every_height(

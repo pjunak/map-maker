@@ -75,6 +75,21 @@ tie-break to matter ([report](../research/2026-10-12-straight-display-lines.md#s
 - **Octaves below the level spacing** (down to 2.5 km at level 1): fewer
   straight runs (0.053), but rivers wiggled at pixel scale.
 
+## Revision (2026-10-27): fields follow the warp
+
+A level's relief at a point x is the coarser relief, so the planet's, at the point
+the warps carry x to (`ReliefWarp.planet_points`). Channels and the held basin
+plain were sampled there since 2026-10-19, but basin depth, lakes and the planet's
+uplift, erodibility and runoff were sampled at x itself, so a finer level held its
+lakes and stopped uplift on its basins a warp displacement away from the coarser
+relief's lake basins and plains. Every level now takes them where its relief holds
+them (`RegionalParent.on_planet`), and windows find lake cores where their own warp
+shows each cell. Climate, coast, volcanoes and wonders stay in place. On Aethelara,
+lake shores moved 487 m on average from the region to the province map instead of
+724 m, and 100 m instead of 187 m from the province to the local map
+([report](../research/2026-10-27-fronts-and-shores-between-levels.md)). The
+regional algorithm becomes `planet-blended-tiles-v21`.
+
 ## Consequences
 
 - In the Aethelara level-1 window, the share of river cells (over 2,000 km²) in

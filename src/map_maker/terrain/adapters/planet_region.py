@@ -440,14 +440,20 @@ def window_waters(
     river_km2: float,
     spacing_m: float,
     climate: PixelClimate | None,
+    relief_points: F64,
 ) -> WindowWaters:
-    """Drainage, lakes and ponds on ``cells`` within ``reach_m`` of ``centre`` (``inside``)."""
+    """Drainage, lakes and ponds on ``cells`` within ``reach_m`` of ``centre`` (``inside``).
+
+    ``relief_points`` are where the window's relief shows each cell (its
+    ``ReliefWarp``): the planet's lakes are found there, where the tiles hold
+    them, not at the cells themselves.
+    """
     land = ground.land
     flow = window_flow(parent, centre, reach_m, cells, ground.elevation, land, inside, river_km2)
     # Lakes fill the regional relief up to the parent lake level, so shores
     # follow the fine terrain (and a crater's sharp trough) instead of the
     # coarse parent mesh.
-    cover, level, closed = parent.lakes_at(cells.xyz, level_finest_m(spacing_m))
+    cover, level, closed = parent.lakes_at(relief_points, level_finest_m(spacing_m))
     lakes = lake_water(cells, flow.z, land & inside, flow.filled, cover > LAKE_CORE_COVER, level)
     salt = lakes & closed
     # Hollows of the tiles' blend are filled plains; only the relief drawn on
@@ -550,7 +556,8 @@ def window_hydrology(
             unused = np.zeros(cells.size)
             climate = PixelClimate(unused, unused, precipitation, pet)
     waters = window_waters(
-        parent, centre, reach_m, cells, ground, inside, river_km2, spacing_m, climate
+        parent, centre, reach_m, cells, ground, inside, river_km2, spacing_m, climate,
+        relief(cells.xyz, planet_m),
     )
     flow, depth = waters.flow, waters.depth
     # Closed ponds hold lakes where it is wet enough and playas where it is dry.

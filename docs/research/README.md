@@ -19,6 +19,11 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Plain edges and lake shores between levels — 2026-10-27](2026-10-27-fronts-and-shores-between-levels.md)
+  samples the planet's basins, lakes and forcing where the relief warps carry each
+  level's points: lake shores on Aethelara move 487 m between region and province
+  maps instead of 724 m, and 100 m instead of 187 m to the local map.
+
 - [Display valleys on world cells, and shared tile corrections — 2026-10-27](2026-10-27-display-valleys-on-cells.md)
   carves the maps' shading valleys on the routing cells, which removes straight
   grid grooves from zoomed maps, and finds that sharing uplift corrections or a

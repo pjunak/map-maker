@@ -5,7 +5,7 @@ plus the vendored license notice. Generated builds, caches, dependency
 documentation and private campaign files are excluded. Public JSON schemas and the
 reference dependency lock are listed separately as supporting contracts.
 
-**268 Markdown files + 1 legal notice = 269 documentation files.**
+**269 Markdown files + 1 legal notice = 270 documentation files.**
 Each file appears once below, including this inventory. Document titles describe
 their subject; the group description identifies their role and authority.
 
@@ -17,11 +17,11 @@ The [reading guide](README.md) is the entry point; this page is the complete lis
 | Active plans and indexes | 13 |
 | User guides and current contracts | 21 |
 | Developer and reference guides | 9 |
-| Architecture decision records | 112 |
-| Dated research reports | 104 |
+| Architecture decision records | 113 |
+| Dated research reports | 107 |
 | Maintenance reports | 2 |
 | Legal notice | 1 |
-| **Total** | **266** |
+| **Total** | **270** |
 
 ## Project entry and guidance (4)
 
@@ -218,7 +218,7 @@ Accepted historical decisions. Preserve their original context; consult the curr
 | [docs/adr/0112-regional-waters-on-sphere-cells.md](adr/0112-regional-waters-on-sphere-cells.md) | Regional windows work out rivers, lakes and ponds on jittered, triangulated cells of a cubed sphere and draw them into their pixels, with main stems and meander bends fixed to the place, so windows sharing a cell size draw the same waters. |
 | [docs/adr/0113-regional-tiles-on-world-fixed-nodes.md](adr/0113-regional-tiles-on-world-fixed-nodes.md) | Regional tiles and level parents are built on the cubed sphere's world-fixed nodes at each level's spacing, with texture and roughness seeded per level, so overlapping tiles erode the same nodes from the same ground (`planet-blended-tiles-v20`). |
 
-## Dated research reports (106)
+## Dated research reports (107)
 
 Primary-source reviews, experiments and implementation evidence at their recorded date/revision. A title or citation is not evidence that a tool was adopted. Current status is listed above.
 
@@ -226,6 +226,7 @@ Primary-source reviews, experiments and implementation evidence at their recorde
 |---|---|
 | [docs/research/2026-10-08-continentality-and-koppen.md](research/2026-10-08-continentality-and-koppen.md) | Wind-driven continentality, seasonal rainfall, Köppen–Geiger classes, outputs and limits. |
 | [docs/research/2026-10-26-sphere-routing-grid.md](research/2026-10-26-sphere-routing-grid.md) | A routing grid on the sphere for regional waters: candidate grids, cell geometry, cost, direction bias against pixels, window independence, and Aethelara checks. |
+| [docs/research/2026-10-27-fronts-and-shores-between-levels.md](research/2026-10-27-fronts-and-shores-between-levels.md) | Plain edges and lake shores between nested levels: basins, lakes and forcing sampled where the relief warps carry each level's points, with Aethelara measurements. |
 | [docs/research/2026-10-27-display-valleys-on-cells.md](research/2026-10-27-display-valleys-on-cells.md) | Display valleys carved on the routing cells instead of window pixels (look, cost), and trials of shared uplift corrections and a larger halo for overlapping regional tiles (T24). |
 | [docs/research/2026-10-26-world-fixed-tile-nodes.md](research/2026-10-26-world-fixed-tile-nodes.md) | Regional tiles on world-fixed nodes: node jitter and direction bias, overlapping tiles' spread, blend hollows, river agreement, calibration and courses on the synthetic planet and Aethelara, HEAD against the change, and what still differs. |
 | [docs/research/2026-10-19-planet-build-speed.md](research/2026-10-19-planet-build-speed.md) | Planet build speed: stage times and peak memory at 200k, 800k and 3.2M nodes, where the time goes, estimates for finer meshes, what a Rust port would change and a server-hosting estimate. |

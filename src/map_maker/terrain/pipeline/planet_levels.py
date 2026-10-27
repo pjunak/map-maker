@@ -87,10 +87,14 @@ def level_parent(
     def sample(values: F64 | None) -> F64 | None:
         return None if values is None else planet.sample(xyz, values)
 
-    # Fields that seed the finer level's relief come smoothly from the planet, as
-    # level 1 takes them (``enrich``): triangle-linear ones carried the planet's
-    # triangles down every level as straight creases.
-    smoothly = planet.smooth_sampler(xyz)
+    # The patch holds the coarser relief where the warps carry its nodes, so it
+    # takes the planet's forcing there too, as its plain, channels, lakes and
+    # basins are (``planet_points``). Fields that seed the finer level's relief
+    # come smoothly from the planet, as level 1 takes them (``enrich``):
+    # triangle-linear ones carried the planet's triangles down every level as
+    # straight creases.
+    planet_points = partial(relief.planet_points, radius_m=planet.mesh.radius_m)
+    smoothly = planet.smooth_sampler(planet_points(xyz))
     runoff = (
         None if planet.runoff_weight is None
         else np.maximum(smoothly(planet.runoff_weight), MIN_RUNOFF_WEIGHT)
@@ -100,7 +104,6 @@ def level_parent(
     # do, rivers the patch resolves (its spacing squared, 24 times, as tiles'
     # process areas are). They cross the rim where the coarser relief carries
     # them, which the warps have moved off their planet links.
-    planet_points = partial(relief.planet_points, radius_m=planet.mesh.radius_m)
     walls = entry_walls(planet, region, 24 * region.spacing_m**2, planet_points)
     flow = route(
         mesh, relief_m, ~land | (region.boundary & ~walls), runoff,
