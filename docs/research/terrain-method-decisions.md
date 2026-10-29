@@ -1,6 +1,6 @@
 # Terrain method decisions and failed experiments
 
-Updated 2026-10-27 through T24 shared uplift corrections between regional tiles.
+Updated 2026-10-29 through T25 hillslope caps and calibration in threshold terrain.
 This is the living record of
 material generation approaches that were rejected, constrained or retained only
 as references. A failed method does not remove its desired feature from the plan.
@@ -753,6 +753,43 @@ calibration, which no shared input removes.
 **Disposition.** Not adopted; it would also need tiles built in two phases
 ([report](2026-10-27-display-valleys-on-cells.md#shared-uplift-corrections)).
 Revisit only with a joint solve or iterated exchange between neighbouring tiles.
+
+## T25 - Cap hillslopes per receiver, and settle threshold tiles by their calibration model
+
+**Hypothesis.** Regional tiles stand steeper than Earth's threshold hillslopes
+(ADR-0114). Capping each node's height above its receiver at tan 35° in the
+implicit stream-power sweep would bound slopes. Once slopes were bounded,
+capping each step in the calibration model the same way, damping its updates or
+iterating longer would let threshold tiles keep their parent's height.
+
+**Control and inputs.** Aethelara `planet-3200k-v31`, `planet-blended-tiles-v21`
+tiles. A synthetic 20 km tile raised fast in hard rock for the cap. For the
+calibration, the level-3 summit tile (405399) of the steepest range at
+129.966° W 1.862° S, rebuilt alone, and the 20 km local and province windows there.
+
+**Outcome.**
+- The receiver cap left slopes of 0.90 (42°) on the synthetic tile against a
+  limit of 0.70: receivers change from step to step.
+- In the calibration model 92 % of the summit tile's nodes were capped, and it
+  predicted the smoothed relief's change worse than the uncapped model
+  (correlation 0.68, 0.29 and 0.65 over three updates against 0.79, 0.47 and 0.74).
+  With either model the local window stood 225-237 m above its province in 5 km
+  means.
+- After three iterations the tile ended 420 m RMS off its parent (HEAD 284 m).
+  Halving each update gave 353 m (+159 m mean), halving the last 312 m (+96 m),
+  dividing by the measured gain 348 m (+83 m), six iterations 315 m (−15 m), with
+  ring errors still changing sign by ±200 m between iterations.
+
+**Diagnosed cause.** The cap needs every neighbour, not the receiver alone: the
+exact limit (`limit_slopes`) holds it. Calibration in threshold terrain is not
+explained: within 10 km of the summit the tile's error alternates by 250-600 m
+from one iteration to the next under every update rule tried.
+
+**Disposition.** The exact limit is adopted with the uncapped calibration model
+([report](2026-10-29-fine-level-drainage-against-reference-terrain.md#what-remains)).
+The receiver cap, the capped model and the update rules are not adopted. Revisit
+calibration in threshold terrain with a response measured per tile rather than
+modelled, or a joint solve with neighbouring tiles.
 
 ## What the failures change
 

@@ -127,7 +127,10 @@ altitude zones and rivers. From a region, **Zoom to province** builds 1 km detai
 (6–60 km radius). Each level is enriched from the one above
 ([ADR-0088](adr/0088-nested-regional-detail-levels.md)), in overlapping pieces
 eroded on points fixed to the planet, so neighbouring pieces carve the same valleys
-([ADR-0113](adr/0113-regional-tiles-on-world-fixed-nodes.md)). A river entering a map
+([ADR-0113](adr/0113-regional-tiles-on-world-fixed-nodes.md)). Hillslopes stand no
+steeper than about 35°, as landslides keep Earth's fast-rising ranges, so local maps
+of the steepest mountains are about as steep as the Himalaya
+([ADR-0114](adr/0114-regional-hillslopes-at-a-threshold-slope.md)). A river entering a map
 from beyond its edge brings the drainage of the level above, so big rivers
 continue through every level. Rivers are drawn at least
 as wide as their channel, about 4.8 √Q metres for a discharge of Q m³/s, so a large

@@ -134,6 +134,54 @@ def test_regional_relief_keeps_the_parent_height_on_its_peaks(parent: PlanetResu
     assert abs(np.mean((relief - target)[high])) < 0.5 * lowered
 
 
+def test_hillslopes_stand_no_steeper_than_their_threshold() -> None:
+    from map_maker.terrain.pipeline.planet_evolution import evolve
+    from map_maker.terrain.pipeline.planet_forcing import Forcing
+    from map_maker.terrain.pipeline.planet_regional import THRESHOLD_SLOPE
+
+    # A fast-rising, hard-rock tile: stream power alone builds valley sides far
+    # steeper than any that stand on Earth.
+    region = world_patch(20.0, 10.0, 30, 0.5, 6.0e6, 3)
+    mesh = region.mesh
+    water = region.boundary
+    forcing = Forcing(
+        np.full(mesh.size, 1e-2), np.zeros(mesh.size), np.full(mesh.size, 1e-6), water
+    )
+
+    def steepest(max_slope: float) -> float:
+        run = evolve(
+            mesh, water, forcing, np.ones(mesh.size), steps=40, step_yr=1e4,
+            area_exponent=0.5, process_area_m2=1e6, max_slope=max_slope,
+        )
+        flow = run.flow
+        drains = ~water & (flow.receiver >= 0)
+        rise = run.elevation[drains] - run.elevation[flow.receiver[drains]]
+        return float(np.max(rise / flow.distance_m[drains]))
+
+    assert steepest(np.inf) > 2 * THRESHOLD_SLOPE
+    assert steepest(THRESHOLD_SLOPE) <= THRESHOLD_SLOPE * (1 + 1e-9)
+
+
+def test_slope_limit_is_the_highest_surface_no_steeper_than_it() -> None:
+    from map_maker.terrain.pipeline.planet_kernels import limit_slopes, multi_source_distance
+
+    mesh = world_patch(20.0, 10.0, 30, 0.5, 6.0e6, 3).mesh
+    h = np.random.default_rng(4).uniform(0.0, 3000.0, mesh.size)
+    edges = (mesh.ptr, mesh.nbr, mesh.length_m)
+    free = limit_slopes(h, np.zeros(mesh.size, dtype=bool), *edges, 0.7, -np.inf, np.zeros(0))
+    # Each node stands 0.7 m per metre of graph distance above the node that holds it
+    # lowest, itself included.
+    every = np.arange(mesh.size)
+    assert np.allclose(free, 0.7 * multi_source_distance(every, h / 0.7, *edges))
+
+    fixed = h < 300.0
+    deposit = np.where(h > 2700.0, 2000.0, -np.inf)
+    held = limit_slopes(h, fixed, *edges, 0.7, -np.inf, deposit)
+    assert np.array_equal(held[fixed], h[fixed])
+    assert np.all(held <= h) and np.all(held[h > 2700.0] >= 2000.0)
+    assert np.all(held >= free - 1e-9)
+
+
 def test_downstream_sums_follow_each_drainage_path_and_hold_at_floors() -> None:
     from map_maker.terrain.pipeline.planet_kernels import downstream_order, downstream_sum
 

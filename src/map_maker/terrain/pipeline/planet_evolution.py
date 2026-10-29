@@ -25,6 +25,7 @@ from map_maker.terrain.pipeline.planet_kernels import (
     downstream_order,
     draining_to,
     erosion_step,
+    limit_slopes,
     priority_flood,
     steepest_receivers,
 )
@@ -103,6 +104,7 @@ def evolve(
     inflow_m2: F64 | None = None,
     snowline_m: F64 | None = None,
     floor_m: F64 | None = None,
+    max_slope: float = np.inf,
     cancellation: CancellationToken | None = None,
     on_step: StepCallback | None = None,
 ) -> EvolutionRun:
@@ -112,6 +114,8 @@ def evolve(
     boundaries), at the nodes where those rivers enter. ``snowline_m`` enables
     glacial erosion above the equilibrium-line altitude. Land never erodes below
     ``floor_m`` (-inf where it may), a plain that sediment keeps at its level.
+    No land stands more than ``max_slope`` per metre above a neighbour (inf: no
+    limit); steeper ground slides down after each step.
     """
     base = np.zeros(mesh.size) if fixed_level is None else fixed_level
     deposit = np.zeros(0) if floor_m is None else np.ascontiguousarray(floor_m)
@@ -131,6 +135,10 @@ def evolve(
             glaciers, (GLACIAL_BOOST, GLACIAL_SCALE_M, GLACIAL_CAP), base, LAND_FLOOR_M,
             deposit,
         )
+        if np.isfinite(max_slope):
+            h = limit_slopes(
+                h, water, mesh.ptr, mesh.nbr, mesh.length_m, max_slope, LAND_FLOOR_M, deposit
+            )
         if step == steps - 1:
             change = float(np.mean(np.abs(h[~water] - before[~water]))) / step_yr
         if on_step is not None:

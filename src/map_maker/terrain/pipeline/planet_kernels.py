@@ -593,3 +593,49 @@ def erosion_step(
         elif out[i] < floor:
             out[i] = floor
     return out
+
+
+@njit(cache=True)
+def limit_slopes(
+    h: F64,
+    water: B,
+    ptr: I64,
+    nbr: I64,
+    length: F64,
+    max_slope: float,
+    floor: float,
+    deposit: F64,
+) -> F64:
+    """The highest surface at or below ``h`` no steeper than ``max_slope`` per metre.
+
+    Each land node falls to at most ``max_slope`` times its graph distance above
+    any other node: a multi-source Dijkstra from the nodes standing below a
+    too-steep neighbour. Fixed (water) nodes keep their height; land stays at
+    least ``floor`` and ``deposit`` (empty to disable), so a plain's edge may
+    keep a steeper step.
+    """
+    out = h.copy()
+    held = deposit.size > 0
+    heap = [(0.0, np.int64(0))]
+    heap.pop()
+    for i in range(h.size):
+        for k in range(ptr[i], ptr[i + 1]):
+            j = nbr[k]
+            if not water[j] and h[j] > h[i] + max_slope * length[k]:
+                heapq.heappush(heap, (h[i], np.int64(i)))
+                break
+    while heap:
+        level, c = heapq.heappop(heap)
+        if level > out[c]:
+            continue
+        for k in range(ptr[c], ptr[c + 1]):
+            j = nbr[k]
+            if water[j]:
+                continue
+            lowered = max(level + max_slope * length[k], floor)
+            if held and lowered < deposit[j]:
+                lowered = deposit[j]
+            if lowered < out[j]:
+                out[j] = lowered
+                heapq.heappush(heap, (lowered, j))
+    return out

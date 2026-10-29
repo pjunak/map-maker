@@ -142,3 +142,4 @@ supersedes their legacy compatibility commitments during early development.
 - [ADR-0111: Carry opened regional maps into globe models as lifted, pre-faded surfaces](0111-regional-maps-in-globe-models.md)
 - [ADR-0112: Work out regional waters on cells fixed to the sphere](0112-regional-waters-on-sphere-cells.md)
 - [ADR-0113: Build regional tiles on world-fixed nodes](0113-regional-tiles-on-world-fixed-nodes.md)
+- [ADR-0114: Hold regional hillslopes at a threshold slope](0114-regional-hillslopes-at-a-threshold-slope.md)

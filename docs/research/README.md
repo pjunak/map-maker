@@ -19,6 +19,10 @@ in the current status or a new dated report.
 
 ## Current reassessment
 
+- [Fine-level drainage against reference terrain — 2026-10-29](2026-10-29-fine-level-drainage-against-reference-terrain.md)
+  measures province and local maps against Copernicus DEM ranges: networks are
+  shaped like Earth's, but the steepest local map stood at a median 48.7° where the
+  Annapurna stands at 33.9°. Threshold hillslopes bring it to 36.6°.
 - [Plain edges and lake shores between levels — 2026-10-27](2026-10-27-fronts-and-shores-between-levels.md)
   samples the planet's basins, lakes and forcing where the relief warps carry each
   level's points: lake shores on Aethelara move 487 m between region and province

@@ -95,6 +95,11 @@ LAKE_CORE_COVER = 0.5  # parent lake cover above which regional ground is lake w
 # parallel gullies down every slope instead of branching networks.
 FINE_TEXTURE_SPACINGS = 8.0
 MIN_RUNOFF_WEIGHT = 0.05
+# Hillslopes steeper than about 35 degrees fail: landslides hold steep ranges'
+# slopes near that threshold however fast they rise (Burbank et al. 1996,
+# Montgomery and Brandon 2002). Stream power alone has no such limit: a local map
+# of a 6 km range stood at a median 49 degrees, the Annapurna range at 34.
+THRESHOLD_SLOPE = float(np.tan(np.radians(35.0)))
 # Bankfull channel depth 0.27 Q^0.39 m for discharge Q in m^3/s (Moody and
 # Troutman 2002), with Q from CHANNEL_RUNOFF_M_YR of runoff over the drainage area.
 CHANNEL_DEPTH_COEFFICIENT = 0.27
@@ -846,7 +851,7 @@ def enrich(
             mesh, fixed, forcing, initial, steps=settings.steps, step_yr=settings.step_kyr * 1e3,
             area_exponent=settings.area_exponent, process_area_m2=process_area_m2,
             runoff=runoff, fixed_level=level, inflow_m2=inflow, floor_m=floor,
-            cancellation=cancellation,
+            max_slope=THRESHOLD_SLOPE, cancellation=cancellation,
         )
         relief = smooth(np.where(land, run.elevation, 0.0))
         error = (relief - calibration.wanted)[interior] if interior.any() else np.zeros(1)

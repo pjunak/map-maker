@@ -40,8 +40,11 @@ See the [plan](docs/strategy/README.md) for states and evidence.
   - [ ] Port the stable kernels to a native core.
   - [ ] Decide what replaces the local composed generator.
 - [ ] **M6 regional and local zoom:**
-  - [ ] Check drainage realism at fine levels: rock texture now follows each level's
-    spacing and level-3 tiles branch; compare against reference terrain.
+  - [ ] Calibrate level-3 tiles in threshold terrain: on Aethelara's steepest range a
+    summit tile's error alternates by hundreds of metres between iterations, and the
+    local map stands 225 m above its province in 5 km means ([reference terrain](docs/research/2026-10-29-fine-level-drainage-against-reference-terrain.md#what-remains), T25).
+  - [ ] Province maps of the steepest ranges are gentler than the Annapurna's: 24.6°
+    against 30.0° drawn on ground with more than 1.6 km of relief.
   - [ ] Tile boundary exchange (domain decomposition): overlapping tiles share nodes
     and targets, but each fits its own uplift correction ([world-fixed tile nodes](docs/research/2026-10-26-world-fixed-tile-nodes.md#what-still-differs)).
     A one-shot shared correction and a larger halo did not help (T24); only a joint
